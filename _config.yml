@@ -1,0 +1,35 @@
+# =============================================================================
+# _config.yml - settings for the GitHub Pages build of the live website
+# -----------------------------------------------------------------------------
+# GitHub Pages publishes this repository's root with a tool called Jekyll
+# (github-pages v232 / Jekyll 3.10.0 at the time of writing). This file only
+# tells Jekyll which folders to leave out. It does not change the Pages
+# settings, the homepage (index.html) or the custom domain.
+#
+# WHY IT EXISTS
+# The Astro project in web/ contains .astro files that begin with "---".
+# Jekyll mistakes that for its own settings block, cannot read it, and stops
+# the whole build ("Invalid YAML front matter"). Excluding web/ prevents that.
+#
+# WHY THE LIST IS SO LONG
+# Writing "exclude" here REPLACES the list GitHub Pages would otherwise use;
+# it does not add to it. So the first eight entries repeat those defaults
+# exactly (Jekyll 3.10's seven, plus CNAME from GitHub Pages), and only
+# "web" is new. Keep them when adding anything.
+# =============================================================================
+
+exclude:
+  # --- Jekyll 3.10 defaults (unchanged) ---
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
+  # --- GitHub Pages default (unchanged) ---
+  # The CNAME file stays in the repository; GitHub Pages leaves it out of the
+  # published files because the custom domain is set in Settings -> Pages.
+  - CNAME
+  # --- New: the Astro version of the site (not live until Phase 4) ---
+  - web
