@@ -1,0 +1,20 @@
+---
+/* Catalog.astro - "Products and prices": the search box, the category tabs
+   and the price list.
+
+   These are empty containers in Phase 1: quote-engine.js fills #tabs and
+   #list with the products when the page loads, exactly as the original site
+   did. (Writing the product rows into the HTML itself, so search engines can
+   read them without running scripts, is planned for Phase 2.)
+   The IDs #q, #tabs and #list are used by quote-engine.js and the tests. */
+---
+<div id="catalog">
+<h2 class="st">Products and prices</h2>
+<p class="lead">Add what you need to build your estimate. Prices are per unit, in Ghana cedis.</p>
+<div class="tools">
+<input type="search" id="q" placeholder="Search materials" aria-label="Search materials">
+<div class="tabs" id="tabs"></div>
+<p class="hint">Swipe left or right to switch category.</p>
+</div>
+<div id="list"></div>
+</div>

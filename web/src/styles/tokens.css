@@ -1,0 +1,14 @@
+/* ==========================================================================
+   tokens.css - The Cement People brand settings
+   --------------------------------------------------------------------------
+   The colours every other stylesheet uses. Change a colour here and it
+   changes everywhere on the site. Loaded first, before site.css.
+
+   --ink   text and dark surfaces (near-black)
+   --bg    page background (light concrete grey)
+   --card  panels and cards (white)
+   --line  thin borders and dividers
+   --mute  secondary text
+   --y     brand yellow (logo brick, buttons, highlights)
+   ========================================================================== */
+:root{--ink:#111;--bg:#ececea;--card:#fff;--line:#cfcfcb;--mute:#5d5d59;--y:#f2c300;}

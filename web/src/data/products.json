@@ -1,0 +1,122 @@
+[
+  {
+    "id": "c1",
+    "category": "Cement",
+    "name": "Supacem 32.5",
+    "unit": "50 kg bag",
+    "price": 75
+  },
+  {
+    "id": "c2",
+    "category": "Cement",
+    "name": "Supacem 42.5",
+    "unit": "50 kg bag",
+    "price": 100
+  },
+  {
+    "id": "c3",
+    "category": "Cement",
+    "name": "Dzata 42.5",
+    "unit": "50 kg bag",
+    "price": 110
+  },
+  {
+    "id": "c4",
+    "category": "Cement",
+    "name": "Ghacem Waterproof 42.5",
+    "unit": "50 kg bag",
+    "price": 120
+  },
+  {
+    "id": "i1",
+    "category": "Iron Rods (Single Piece)",
+    "name": "Iron rod 16 mm",
+    "unit": "30 ft rod",
+    "price": 102
+  },
+  {
+    "id": "i2",
+    "category": "Iron Rods (Single Piece)",
+    "name": "Iron rod 14 mm",
+    "unit": "30 ft rod",
+    "price": 75
+  },
+  {
+    "id": "i3",
+    "category": "Iron Rods (Single Piece)",
+    "name": "Iron rod 12 mm",
+    "unit": "30 ft rod",
+    "price": 58
+  },
+  {
+    "id": "i4",
+    "category": "Iron Rods (Single Piece)",
+    "name": "Iron rod 11.5 mm",
+    "unit": "30 ft rod",
+    "price": 48
+  },
+  {
+    "id": "i5",
+    "category": "Iron Rods (Single Piece)",
+    "name": "Iron rod 10 mm",
+    "unit": "30 ft rod",
+    "price": 40
+  },
+  {
+    "id": "i6",
+    "category": "Iron Rods (Single Piece)",
+    "name": "Iron rod 8 mm",
+    "unit": "30 ft rod",
+    "price": 25
+  },
+  {
+    "id": "j1",
+    "category": "Iron Rods (Per Ton)",
+    "name": "Iron rod 16 mm",
+    "unit": "ton",
+    "price": 7000
+  },
+  {
+    "id": "j2",
+    "category": "Iron Rods (Per Ton)",
+    "name": "Iron rod 14 mm",
+    "unit": "ton",
+    "price": 7000
+  },
+  {
+    "id": "j3",
+    "category": "Iron Rods (Per Ton)",
+    "name": "Iron rod 12 mm",
+    "unit": "ton",
+    "price": 7000
+  },
+  {
+    "id": "j4",
+    "category": "Iron Rods (Per Ton)",
+    "name": "Iron rod 11.5 mm",
+    "unit": "ton",
+    "price": 7000
+  },
+  {
+    "id": "j5",
+    "category": "Iron Rods (Per Ton)",
+    "name": "Iron rod 10 mm",
+    "unit": "ton",
+    "price": 7000
+  },
+  {
+    "id": "j6",
+    "category": "Iron Rods (Per Ton)",
+    "name": "Iron rod 8 mm",
+    "unit": "ton",
+    "price": 7000
+  },
+  {
+    "id": "i8",
+    "category": "Iron Rods (Single Piece)",
+    "subgroup": "Binding wire",
+    "name": "Binding wire",
+    "unit": "roll",
+    "price": 60
+  }
+]

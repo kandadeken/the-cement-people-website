@@ -1,0 +1,6 @@
+# robots.txt - tells search engines and AI crawlers what they may read.
+# Everything on this site is public, so all crawlers are welcome.
+User-agent: *
+Allow: /
+
+Sitemap: https://thecementpeople.com/sitemap.xml

@@ -1,0 +1,14 @@
+---
+/* QuotePieces.astro - two small pieces the quotation engine needs at the
+   bottom of the page:
+
+   #bar    the black "Estimate: GH₵… | View estimate" bar that appears on
+           phones once something has been added.
+   #quote  the hidden A4 quotation. quote-engine.js fills it in; print.css
+           makes it the ONLY thing that prints. It must stay a direct child
+           of <body> (the print rules and the tests depend on that), so this
+           component is placed straight inside <body> in index.astro. */
+---
+<div class="bar noprint" id="bar"><b id="barTxt"></b><button id="barBtn">View estimate</button></div>
+
+<section id="quote" aria-hidden="true"></section>

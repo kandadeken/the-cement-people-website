@@ -1,0 +1,78 @@
+---
+/* ===========================================================================
+   index.astro - the home page (thecementpeople.com/)
+   ---------------------------------------------------------------------------
+   Assembles the page from components, then hands the products and business
+   details to the quotation engine.
+
+   Page order (must match the original site):
+     Header · Hero · category tiles · Products + Estimate · About · Contact ·
+     Footer · mobile estimate bar · hidden A4 quotation ·
+     data block · quotation engine
+   =========================================================================== */
+import Base from "../layouts/Base.astro";
+import Header from "../components/Header.astro";
+import Hero from "../components/Hero.astro";
+import Catalog from "../components/Catalog.astro";
+import EstimatePanel from "../components/EstimatePanel.astro";
+import About from "../components/About.astro";
+import Contact from "../components/Contact.astro";
+import Footer from "../components/Footer.astro";
+import QuotePieces from "../components/QuotePieces.astro";
+
+import products from "../data/products.json";
+import { business } from "../config/business";
+
+// What the quotation engine reads, in the exact shape it has always used:
+// each product as {id, cat, sub?, name, unit, price}.
+const engineData = {
+  currency: business.currencySymbol,
+  taxRate: business.taxRate,
+  business: {
+    phone: business.phone,
+    whatsapp: business.whatsapp,
+    town: business.town,
+    website: business.website,
+  },
+  products: products.map((p) => ({
+    id: p.id,
+    cat: p.category,
+    ...("subgroup" in p ? { sub: p.subgroup } : {}),
+    name: p.name,
+    unit: p.unit,
+    price: p.price,
+  })),
+};
+// JSON placed inside <script> must never contain "<" (it could close the tag early).
+const engineJson = JSON.stringify(engineData).replace(/</g, "\\u003c");
+---
+<Base
+  title="The Cement People | Building materials and cost estimator"
+  description="Cement, iron rods and binding wire delivered to your site in Kasoa, Ghana. Check prices in Ghana cedis and build an estimate to send on WhatsApp."
+  path="/"
+>
+<Header />
+
+<Hero />
+
+<!-- Category tiles: filled in by quote-engine.js -->
+<section class="cats" id="cats" aria-label="Product categories"></section>
+
+<main id="products">
+<Catalog />
+
+<EstimatePanel />
+</main>
+
+<About />
+<Contact />
+
+<Footer />
+
+<QuotePieces />
+
+<!-- Products and business details for quote-engine.js (read as plain data, never run) -->
+<script is:inline type="application/json" id="tcp-data" set:html={engineJson}></script>
+<!-- The quotation engine, loaded as an ordinary script so its variables stay global -->
+<script is:inline src="/scripts/quote-engine.js"></script>
+</Base>

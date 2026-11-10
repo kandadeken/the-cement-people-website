@@ -1,0 +1,24 @@
+---
+/* EstimatePanel.astro - the "Estimate" panel beside the price list (on
+   phones it opens full-screen from the bar at the bottom).
+
+   quote-engine.js fills in: #ref and #date (reference and date), #lines
+   (one line per product added), #tot (totals) and the #send WhatsApp link.
+   The customer types their drop-off location into #loc.
+   "noprint" marks parts never shown on the printed quotation. */
+import WhatsAppIcon from "./WhatsAppIcon.astro";
+---
+<aside id="est" class="docket" aria-label="Your estimate">
+<button class="dclose noprint" id="dclose"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Back to products</button>
+<div class="dh"><b>Estimate</b><span id="ref"></span></div>
+<div class="dm" id="date"></div>
+<div id="lines"></div>
+<label class="dl">Drop-off location<input type="text" id="loc" placeholder="Town or site address" autocomplete="street-address"></label>
+<div id="tot" class="tot"></div>
+<div class="acts noprint">
+<a class="cta off" id="send" target="_blank" rel="noopener"><WhatsAppIcon />Send my estimate on WhatsApp</a>
+<button class="ghost" id="print">Print or save as PDF</button>
+<button class="ghost" id="clear">Clear estimate</button>
+</div>
+<p class="fine">Delivery cost depends on your order and drop-off location, and is agreed with us before delivery. Estimates are indicative; final prices and availability are confirmed with you.</p>
+</aside>

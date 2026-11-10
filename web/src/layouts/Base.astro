@@ -1,0 +1,59 @@
+---
+/* ===========================================================================
+   Base.astro - the shell every page sits inside
+   ---------------------------------------------------------------------------
+   Writes the <head>: page title, description, canonical address, link
+   previews for WhatsApp/Facebook/X, the Montserrat font and the stylesheets.
+   The page's own content goes where <slot /> is.
+
+   Props:
+     title        text for the browser tab and search results
+     description  one or two sentences for search results and link previews
+     path         this page's address on the site, e.g. "/" (for the canonical URL)
+   =========================================================================== */
+import { business } from "../config/business";
+
+// Stylesheets, in the order they must apply: brand colours, screen, print.
+import "../styles/tokens.css";
+import "../styles/site.css";
+import "../styles/print.css";
+
+interface Props {
+  title: string;
+  description: string;
+  path?: string;
+}
+const { title, description, path = "/" } = Astro.props;
+
+// The one official address for this page (avoids duplicates in search results).
+const canonical = new URL(path, business.siteUrl).href;
+// Picture shown when the link is shared on WhatsApp or social media.
+const previewImage = new URL("/images/hero-left.jpg", business.siteUrl).href;
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{title}</title>
+<meta name="description" content={description}>
+<link rel="canonical" href={canonical}>
+
+<!-- Link previews (WhatsApp, Facebook, X) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content={business.name}>
+<meta property="og:title" content={title}>
+<meta property="og:description" content={description}>
+<meta property="og:url" content={canonical}>
+<meta property="og:image" content={previewImage}>
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="sitemap" href="/sitemap.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<slot />
+</body>
+</html>
