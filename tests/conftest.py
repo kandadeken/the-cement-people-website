@@ -178,6 +178,18 @@ ROW = re.compile(
     + re.escape(SYMBOL) + r"([\d,]+\.\d{2})$", re.M)
 
 
+def tidy_pdf_text(text):
+    """Remove spacing differences that depend on which font the PDF was drawn with.
+
+    The cedi sign is not in every typeface. When the browser has to borrow it
+    from another font, the PDF's text comes out as "GH ₵ 44.00" instead of
+    "GH₵44.00". The printed page looks the same either way.
+    """
+    cedi = re.escape(SYMBOL[-1])
+    text = re.sub(r"GH\s*" + cedi + r"\s*", SYMBOL, text)
+    return re.sub(r"[ \t\u00a0]+", " ", text)
+
+
 def parse_rows(page_text):
     """Pull every table row out of one PDF page: (#, name, category, unit, qty, unit price, amount)."""
     return [(int(n), name, cat, unit, int(qty), price, amount)
@@ -209,7 +221,7 @@ def print_pdf(page, filename):
     page.emulate_media(media="screen")
 
     reader = PdfReader(str(path))
-    texts = [p.extract_text() for p in reader.pages]
+    texts = [tidy_pdf_text(p.extract_text()) for p in reader.pages]
     return SimpleNamespace(
         path=path,
         pages=texts,

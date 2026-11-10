@@ -79,7 +79,9 @@ change deliberate and visible in review.
 - **Fonts.** The site loads Montserrat from Google Fonts. On a machine without
   internet access the browser falls back to a system font; the tests ignore
   that one network error and do not depend on exact page counts for long
-  quotations.
+  quotations. The cedi sign (₵) is drawn from a fallback font when Montserrat is
+  loaded, which changes the spacing of the PDF's text ("GH ₵ 44.00"); the tests
+  normalise this, so results are the same with or without the web font.
 - **Prices in numbers.** The browser is set to US English number formatting
   (`1,392.00`). A visitor whose phone uses a different locale may see a
   different thousands separator.
