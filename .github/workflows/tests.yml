@@ -58,6 +58,43 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # Builds the root website exactly the way GitHub Pages does (same Jekyll
+  # builder, same version), then checks what WOULD be published. It never
+  # uploads, publishes or deploys anything, and does not touch Pages settings.
+  # Purpose: catch a change that would break the live site's publishing step
+  # before it is merged (see _config.yml for the problem this first caught).
+  pages-build-check:
+    name: GitHub Pages build check (root site, no deploy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Build the root site with GitHub Pages' own Jekyll builder
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./
+          destination: ./_site
+
+      - name: Check what would be published
+        run: |
+          set -e
+          # 1. The homepage must be the live index.html, byte for byte.
+          cmp index.html _site/index.html
+          echo "OK: _site/index.html is identical to the root index.html"
+          # 2. The Astro project in web/ must not be published.
+          if [ -e _site/web ]; then echo "FAIL: web/ appears in the output"; exit 1; fi
+          echo "OK: web/ is not in the output"
+          # 3. The repository's CNAME file is still there.
+          test -f CNAME && echo "OK: repository CNAME present: $(cat CNAME)"
+          # GitHub Pages leaves CNAME out of the output by default; the custom
+          # domain comes from Settings -> Pages. This keeps that behaviour.
+          if [ -e _site/CNAME ]; then echo "FAIL: CNAME now appears in the output (behaviour changed)"; exit 1; fi
+          echo "OK: CNAME left out of the output, as GitHub Pages does by default"
+          echo "--- Files that would be published:"
+          (cd _site && find . -type f | sort)
+
   # Phase 1: the same 41 tests, run against the Astro version in web/.
   # Builds web/ into web/dist/, serves it from a local web server on this
   # GitHub machine (Astro pages load files like /_astro/... and must be served,
