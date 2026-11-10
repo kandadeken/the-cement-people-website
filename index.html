@@ -210,6 +210,50 @@ input[type=search],#loc,select{border:1px solid var(--line);border-radius:6px;fo
 #list h3{font-size:14px;font-weight:700;color:var(--mute);margin:22px 0 2px}
 .tabs{align-items:stretch}
 .tabs button{flex:1 1 0;white-space:normal;line-height:1.25;text-align:center;padding:8px 6px}
+/* Printed quotation: hidden on screen, the only thing printed */
+#quote{display:none}
+@page{size:A4;margin:16mm 14mm 15mm;
+@bottom-left{content:"thecementpeople.com  ·  055 846 3468";font:7pt Montserrat,Arial,sans-serif;color:#777}
+@bottom-right{content:"Page " counter(page) " of " counter(pages);font:7pt Montserrat,Arial,sans-serif;color:#777}}
+@media print{
+html,body{background:#fff!important;overflow:visible!important;height:auto!important;padding:0!important}
+body::before,body>*:not(#quote){display:none!important}
+#quote{display:block!important;color:#111;font:9.5pt/1.45 Montserrat,Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.q-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8mm;padding-bottom:5mm;border-bottom:1.2mm solid #f2c300}
+.q-brand{display:flex;gap:3.5mm;align-items:center}
+.q-brand svg{width:15mm;flex:none}
+.q-brand b{display:block;font-size:15pt;font-weight:800;letter-spacing:-.01em;line-height:1.1}
+.q-brand span{display:block;font-size:8.5pt;color:#555;margin-top:1mm}
+.q-doc{text-align:right}
+.q-doc h1{margin:0;font-size:17pt;font-weight:800;letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.q-doc dl{display:grid;grid-template-columns:auto auto;gap:.6mm 4mm;margin:3mm 0 0;font-size:9pt}
+.q-doc dt{color:#555}.q-doc dd{margin:0;font-weight:700}
+.q-to{display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin:6mm 0 5mm}
+.q-to small{display:block;font-size:7.5pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555;margin-bottom:.8mm}
+.q-to p{margin:0;font-weight:600}
+#quote table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+#quote thead{display:table-header-group}
+#quote th{font-size:7.5pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;text-align:left;color:#fff;background:#111;padding:2.2mm 2.5mm}
+#quote td{padding:2.4mm 2.5mm;border-bottom:.25mm solid #d6d5d0;vertical-align:top}
+#quote tr{break-inside:avoid;page-break-inside:avoid}
+#quote .n{width:8mm;color:#555}
+#quote th.n{color:#fff}
+#quote .r{text-align:right;white-space:nowrap}
+#quote td small{display:block;color:#555;font-size:8pt}
+#quote .q-empty td{text-align:center;color:#555;padding:6mm}
+.q-close{display:grid;grid-template-columns:minmax(0,1fr) 84mm;gap:10mm;align-items:start;margin-top:5mm;break-inside:avoid;page-break-inside:avoid}
+.q-terms{font-size:8pt;color:#333}
+.q-terms h2{margin:0 0 1.5mm;font-size:7.5pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555}
+.q-terms h2+*{margin-top:0}
+.q-terms ul{margin:0 0 4mm;padding-left:3.5mm}
+.q-terms li{margin-bottom:1mm}
+.q-terms p{margin:0}
+.q-terms b{white-space:nowrap}
+.q-sum{font-variant-numeric:tabular-nums}
+.q-sum div{display:flex;justify-content:space-between;gap:4mm;padding:1.2mm 2.5mm}
+.q-sum span{white-space:nowrap}
+.q-sum .gt{margin-top:1.5mm;padding:2.6mm 2.5mm;background:#f2c300;font-size:11pt;font-weight:800}
+}
 </style>
 </head>
 <body>
@@ -265,6 +309,8 @@ input[type=search],#loc,select{border:1px solid var(--line);border-radius:6px;fo
 </div></footer>
 
 <div class="bar noprint" id="bar"><b id="barTxt"></b><button id="barBtn">View estimate</button></div>
+
+<section id="quote" aria-hidden="true"></section>
 
 <script>
 // Edit these to match your depot.
@@ -338,11 +384,39 @@ $("#tot").innerHTML=`<div><span>Materials</span><span>${money(sub)}</span></div>
 $("#bar").classList.toggle("on",rows.length>0);
 $("#barTxt").textContent=`Estimate: ${money(total)} (${rows.length} ${rows.length===1?"item":"items"})`;
 const loc=$("#loc").value.trim();
-const msg="Hello The Cement People, I would like a quote for:\n"+rows.map(p=>`- ${qty[p.id]} × ${p.name} (${p.unit}) at ${money(p.price)} = ${money(p.price*qty[p.id])}`).join("\n")+`\nMaterials total: ${money(total)}`+(loc?`\nDrop-off location: ${loc}`:"")+"\nPlease confirm availability and the delivery cost.";
+const msg=`Hello The Cement People,\n\nI would like a quote for *Estimate ${REF}* (${DATE}).\n`
++(loc?`\n*Drop-off location:* ${loc}\n`:"")
++"\n*Items*\n"+rows.map((p,i)=>`${i+1}. ${p.name} (${p.unit})\n   ${qty[p.id]} × ${money(p.price)} = ${money(p.price*qty[p.id])}`).join("\n")
++`\n\n*Materials total: ${money(sub)}*`
++(TAX_RATE?`\nTax (${+(TAX_RATE*100).toFixed(2)}%): ${money(tax)}\nTotal before delivery: ${money(total)}`:"")
++"\n\nPlease confirm availability and the delivery cost"+(loc?" to this location.":".");
+renderQuote(rows,sub,tax,total,loc);
 const sd=$("#send");
 if(rows.length){sd.href="https://wa.me/"+WA_NUMBER+"?text="+encodeURIComponent(msg);sd.classList.remove("off");sd.removeAttribute("aria-disabled")}
 else{sd.removeAttribute("href");sd.classList.add("off");sd.setAttribute("aria-disabled","true")}
 }
+const esc=s=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function renderQuote(rows,sub,tax,total,loc){
+$("#quote").innerHTML=`<header class="q-head"><div class="q-brand"><svg viewBox="0 0 59 38" aria-hidden="true"><rect x="0" y="26" width="28" height="12" rx="1" fill="#111"/><rect x="31" y="26" width="28" height="12" rx="1" fill="#111"/><rect x="17" y="13" width="42" height="12" rx="1" fill="#111"/><rect x="31" y="0" width="28" height="12" rx="1" fill="#f2c300"/></svg><div><b>The Cement People</b><span>Kasoa, Ghana · 055 846 3468 (call or WhatsApp)<br>thecementpeople.com</span></div></div>`
++`<div class="q-doc"><h1>Estimate</h1><dl><dt>Reference</dt><dd>${REF}</dd><dt>Date</dt><dd>${DATE}</dd></dl></div></header>`
++`<div class="q-to"><div><small>Drop-off location</small><p>${loc?esc(loc):"Not provided"}</p></div><div><small>Delivery</small><p>Quoted separately, by location</p></div></div>`
++`<table><thead><tr><th class="n">#</th><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>`
++(rows.length?rows.map((p,i)=>`<tr><td class="n">${i+1}</td><td>${p.name}<small>${p.cat}, per ${p.unit}</small></td><td class="r">${qty[p.id]}</td><td class="r">${money(p.price)}</td><td class="r">${money(p.price*qty[p.id])}</td></tr>`).join(""):`<tr class="q-empty"><td colspan="5">No items added yet.</td></tr>`)
++`</tbody></table><div class="q-close"><div class="q-terms"><h2>Delivery and terms</h2><ul>`
++`<li>We deliver to your drop-off location. The delivery cost depends on your order and location, and is agreed with you before delivery.</li>`
++`<li>This estimate is indicative. Final prices and availability are confirmed when you order.</li>`
++`<li>All prices are in Ghana cedis (GH₵).</li></ul>`
++`<h2>To order</h2><p>WhatsApp or call 055 846 3468 and quote reference <b>${REF}</b>.</p></div>`
++`<div class="q-sum"><div><span>Materials</span><span>${money(sub)}</span></div><div><span>Delivery</span><span>Quoted separately</span></div>`
++(TAX_RATE?`<div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")
++`<div class="gt"><span>Total before delivery</span><span>${money(total)}</span></div></div></div>`;
+// Compact running header on continuation pages only (page 2 onwards)
+let ps=document.getElementById("qpage");
+if(!ps){ps=document.createElement("style");ps.id="qpage";document.head.appendChild(ps);}
+ps.textContent=`@page{@top-left{content:"The Cement People  ·  Estimate ${REF}";font:700 7.5pt Montserrat,Arial,sans-serif;color:#111;vertical-align:bottom;padding-bottom:2mm}@top-right{content:"Continued";font:7.5pt Montserrat,Arial,sans-serif;color:#777;vertical-align:bottom;padding-bottom:2mm}}@page:first{@top-left{content:none}@top-right{content:none}}`;
+}
+addEventListener("beforeprint",()=>{renderEst();document.title=`The Cement People Estimate ${REF}`;});
+addEventListener("afterprint",()=>{document.title="The Cement People | Building materials and cost estimator";});
 function set(id,n){
 n=Math.max(0,Math.min(9999,n));
 if(n)qty[id]=n;else delete qty[id];
@@ -361,7 +435,7 @@ const i=e.target;if(i.dataset&&i.dataset.qty)set(i.dataset.qty,parseInt(i.value,
 });
 $("#q").addEventListener("input",e=>{q=e.target.value.trim().toLowerCase();renderList();});
 $("#print").addEventListener("click",()=>window.print());
-$("#clear").addEventListener("click",()=>{qty={};renderList();renderEst();});
+$("#clear").addEventListener("click",()=>{qty={};newQuote();renderList();renderEst();});
 const mq=matchMedia("(max-width:899px)");
 function openEst(){const e=$("#est");e.classList.add("open");e.scrollTop=0;document.body.style.overflow="hidden";$("#dclose").focus({preventScroll:true});}
 function closeEst(){$("#est").classList.remove("open");document.body.style.overflow="";}
@@ -370,8 +444,18 @@ $("#dclose").addEventListener("click",closeEst);
 document.addEventListener("click",e=>{if(mq.matches&&e.target.closest('a[href="#est"]')){e.preventDefault();openEst();}});
 mq.addEventListener("change",()=>{if(!mq.matches)closeEst();});
 
-$("#ref").textContent="Ref TCP-"+Date.now().toString(36).slice(-5).toUpperCase();
-$("#date").textContent=new Date().toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"});
+// Each quotation gets its own reference: TCP-YYMMDD-XXXXXX (date plus 6 random characters).
+// It stays the same for that quotation across the screen, PDF and WhatsApp, and a new one
+// is issued when the customer clears the estimate to start another quotation.
+let REF,DATE;
+function newQuote(){
+const d=new Date(),A="23456789ABCDEFGHJKLMNPQRSTUVWXYZ",r=new Uint8Array(6);crypto.getRandomValues(r);
+REF="TCP-"+String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0")+"-"+[...r].map(n=>A[n%32]).join("");
+DATE=d.toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"});
+$("#ref").textContent="Ref "+REF;
+$("#date").textContent=DATE;
+}
+newQuote();
 const WA_NUMBER="233558463468";
 $("#loc").addEventListener("input",renderEst);
 document.querySelectorAll("[data-wa]").forEach(a=>{if(WA_NUMBER)a.href="https://wa.me/"+WA_NUMBER+"?text="+encodeURIComponent("Hello, I would like to enquire about your materials.")});
