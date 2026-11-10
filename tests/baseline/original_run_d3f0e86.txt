@@ -1,0 +1,37 @@
+PASS Stepper +/−, typed qty and totals unchanged  [Materials | GH₵2,292.00 | Delivery | Quoted separately | Total before delivery | GH₵2,292.00]
+PASS Search still filters
+PASS Category tabs still switch
+PASS Quotation hidden on screen
+PASS WhatsApp: estimate reference  [TCP-261110-XD9R2V]
+PASS WhatsApp: drop-off location
+PASS WhatsApp: items, qty, unit price, line totals
+PASS WhatsApp: materials total
+PASS WhatsApp: confirm availability and delivery
+PASS WhatsApp: no location line when empty
+PASS A4 page size (595 x 842 pt)  [Page size:       594.96 x 841.92 pts (A4)]
+PASS Short estimate fits one page  [1 page(s)]
+PASS PDF quantities print as plain numbers
+PASS PDF has ref, date, location
+PASS Short PDF: page number 'Page 1 of 1'
+PASS Short PDF: no continuation header on page 1
+PASS Short PDF: closing section (terms, to order, ref)
+PASS Same ref on screen, PDF and WhatsApp  [TCP-261110-XD9R2V]
+PASS Ref format TCP-YYMMDD-XXXXXX  [TCP-261110-XD9R2V]
+PASS No website controls in PDF
+PASS Clear estimate issues a new reference  [TCP-261110-XD9R2V -> TCP-261110-2B4DPX]
+PASS 5,000 references generated in one day are all different  [5000 unique]
+PASS Long estimate flows to extra pages  [4 pages, Page size:       594.96 x 841.92 pts (A4)]
+PASS Column headings repeat on page 2
+PASS All 62 rows printed, none lost  [62 rows found]
+PASS Long PDF: different ref from short PDF  [TCP-261110-XD9R2V vs TCP-261110-LQLFLC]
+PASS Continuation pages: brand, ref, 'Page 2 of N'
+PASS Page 1 of long PDF has no continuation header
+PASS Last page: 'Page N of N' and closing section
+PASS Totals block intact on last page
+PASS No script errors (desktop)
+PASS Mobile: 'View estimate' still opens full screen
+PASS Mobile print: A4, content present while overlay open  [1 page(s), Page size:       594.96 x 841.92 pts (A4)]
+PASS No script errors (mobile)
+PASS No test items in the site code
+
+35/35 passed

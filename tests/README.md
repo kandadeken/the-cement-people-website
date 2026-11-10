@@ -1,0 +1,102 @@
+# Regression tests
+
+These tests are the safety net for thecementpeople.com. They open the website
+in a real (headless) Chrome browser, use it the way a customer would, and
+check that the price list, the estimate, the PDF quotation and the WhatsApp
+message all still behave correctly.
+
+They run automatically on GitHub for every pull request. A red cross means
+the change broke something and should not be merged.
+
+## What is tested
+
+| File | Tests | What it covers |
+| --- | --- | --- |
+| `test_baseline_35.py` | 35 | The original quotation checks: estimate behaviour, WhatsApp message, A4 PDF, references, long quotations, mobile, script errors |
+| `test_catalogue.py` | 6 | All 17 product names, units and prices match `baseline/products.json` on the price list, the estimate, the WhatsApp message and the PDF; the Print button works |
+
+`baseline/ORIGINAL_35_CHECKS.md` maps each of the 35 tests to the check it
+came from and records what was strengthened. Nothing was removed.
+
+## Running the tests on your own computer
+
+You need Python 3.10 or newer. From the top folder of the repository:
+
+```bash
+pip install -r tests/requirements.txt
+python -m playwright install chromium
+python -m pytest tests -v
+```
+
+On Linux, if the browser fails to start, install its system libraries once
+with `python -m playwright install --with-deps chromium`.
+
+A full run takes about 30 seconds. The PDFs the tests generate are saved in
+`tests/output/` so you can open and look at them.
+
+### Testing the published website instead of the local files
+
+```bash
+TCP_SITE_URL=https://thecementpeople.com python -m pytest tests -v
+```
+
+On Windows PowerShell: `$env:TCP_SITE_URL="https://thecementpeople.com"; python -m pytest tests -v`
+
+## How the tests are built
+
+- `conftest.py` holds four scenarios (`short`, `long`, `mobile`, `catalogue`).
+  Each one drives the site through its real controls: it searches, taps
+  **Add**, taps **+** and **−**, types quantities, types a drop-off location,
+  taps the category tabs and **Clear estimate**, then prints to PDF.
+- Each test makes one assertion about what a scenario observed.
+- PDFs are read back with `pypdf`, and every table row (number, product,
+  category, unit, quantity, unit price, amount) is compared exactly.
+
+## Changing a price
+
+`baseline/products.json` is the reference copy of the catalogue. If a price,
+name or unit changes on the website, the tests fail on purpose until the same
+change is made in that file, in the same pull request. That makes every price
+change deliberate and visible in review.
+
+## Known limits
+
+- **Print dialog.** Tests create the PDF with Chrome's built-in PDF function
+  after firing the same "about to print" signal a real print does. They cannot
+  click through a phone's own print dialog. `test_n06` confirms the on-page
+  Print button asks the browser to print.
+- **Browsers.** Only Chrome/Chromium is tested. Safari on iPhone prints the
+  quotation but does not print page numbers or the continuation header; that
+  is a browser limitation, not covered here.
+- **Long quotation.** The site has 17 products, which fit on one page. To test
+  multi-page quotations, the `long` scenario adds 45 synthetic "Test item"
+  products to the browser's memory for that one page. They never exist in the
+  website files; `test_b35` checks that. The items are then added to the
+  estimate through the normal search and Add controls.
+- **5,000 references.** `test_b22` presses the real **Clear estimate** button
+  5,000 times from a script inside the page, rather than 5,000 separate
+  simulated mouse clicks, to keep the run fast.
+- **Fonts.** The site loads Montserrat from Google Fonts. On a machine without
+  internet access the browser falls back to a system font; the tests ignore
+  that one network error and do not depend on exact page counts for long
+  quotations.
+- **Prices in numbers.** The browser is set to US English number formatting
+  (`1,392.00`). A visitor whose phone uses a different locale may see a
+  different thousands separator.
+
+## Files
+
+```
+tests/
+├─ README.md                  this file
+├─ requirements.txt           the three Python packages the tests need
+├─ conftest.py                scenarios and helpers
+├─ test_baseline_35.py        the original 35 checks
+├─ test_catalogue.py          catalogue and print-button checks
+├─ baseline/
+│  ├─ products.json           reference copy of the 17 products
+│  ├─ ORIGINAL_35_CHECKS.md   mapping from the original checks to today's tests
+│  ├─ original_checks.py      the original script, kept unchanged for the record
+│  └─ original_run_d3f0e86.txt  its 35/35 result against commit d3f0e86
+└─ output/                    generated PDFs (not committed)
+```
