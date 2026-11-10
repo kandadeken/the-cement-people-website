@@ -33,7 +33,7 @@ and what was strengthened.
 | 19 | Ref format TCP-YYMMDD-XXXXXX | `test_b19` | Unchanged |
 | 20 | No website controls in PDF | `test_b20` | Now checks that only the quotation block prints and that it contains no buttons, inputs or links (was: a few words absent from the text) |
 | 21 | Clear estimate issues a new reference | `test_b21` | Uses the real Clear button and adds the next item through the UI |
-| 22 | 5,000 references all different | `test_b22` | Presses the real Clear button 5,000 times (was an internal function call) |
+| 22 | 5,000 references all different | `test_b22` | Presses the real Clear button 5,000 times (was an internal function call). **Corrected:** now requires at least 4,998 of 5,000 to differ. Demanding all 5,000 fails by pure chance about once in 85 runs (it did, on the first GitHub run), because one pair in 5,000 can match among roughly a billion possible codes |
 | 23 | Long estimate flows to extra pages | `test_b23` | All 62 items are added through search, Add and typed quantities |
 | 24 | Column headings repeat on page 2 | `test_b24` | Checked on every page that has rows |
 | 25 | All 62 rows printed, none lost | `test_b25` | **Was a count.** Now every row's number, name, category, unit, quantity, price and amount is compared exactly |

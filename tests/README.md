@@ -75,7 +75,12 @@ change deliberate and visible in review.
   estimate through the normal search and Add controls.
 - **5,000 references.** `test_b22` presses the real **Clear estimate** button
   5,000 times from a script inside the page, rather than 5,000 separate
-  simulated mouse clicks, to keep the run fast.
+  simulated mouse clicks, to keep the run fast. It requires at least 4,998 of the
+  5,000 to be different: with about a billion possible codes a day, one chance
+  repeat in 5,000 happens in roughly 1 run in 85, so demanding a perfect 5,000
+  would raise false alarms. At a realistic volume the risk is tiny (about 1 in
+  200,000 for 100 quotations in one day), but references are not guaranteed
+  unique without a database.
 - **Fonts.** The site loads Montserrat from Google Fonts. On a machine without
   internet access the browser falls back to a system font; the tests ignore
   that one network error and do not depend on exact page counts for long

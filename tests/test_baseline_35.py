@@ -148,8 +148,14 @@ def test_b21_clear_estimate_issues_new_reference(short):
     assert short.ref not in short.message_after_clear
 
 
-def test_b22_five_thousand_references_all_different(short):
-    assert short.unique_refs == 5000
+def test_b22_five_thousand_references_do_not_repeat(short):
+    # A reference ends in 6 random characters: about 1.07 billion possibilities
+    # per day. Among 5,000 references there is roughly a 1.2% chance that one
+    # pair matches by pure chance, so demanding 5,000 out of 5,000 would fail
+    # about once in 85 runs with nothing wrong. Allowing two chance repeats
+    # brings a false alarm down to about 1 run in 4 million, while a real
+    # fault (a stuck or badly generated reference) still fails by a wide margin.
+    assert short.unique_refs >= 4998, f"only {short.unique_refs} of 5000 references were different"
 
 
 # ---- Long quotation (17 real + 45 synthetic rows) --------------------------
