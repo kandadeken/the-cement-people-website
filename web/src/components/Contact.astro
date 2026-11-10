@@ -1,0 +1,8 @@
+---
+/* Contact.astro - the "Contact us" section. Location and phone come from
+   src/config/business.ts. Address, opening hours and email are not shown
+   because they have not been provided yet (they are null in that file). */
+import WhatsAppIcon from "./WhatsAppIcon.astro";
+import { business } from "../config/business";
+---
+<section class="sec" id="contact"><div class="wrap"><h2 class="st">Contact us</h2><p>Ready to order, or not sure what you need? Send us a message on WhatsApp or give us a call and we will help.</p><p><b>Location:</b> {business.town}<br><b>Phone and WhatsApp:</b> <a href={`tel:${business.phoneInternational}`} target="_blank" rel="noopener">{business.phone}</a></p><a class="wa big" data-wa href="#contact"><WhatsAppIcon /><span>Enquire on WhatsApp</span></a></div></section>

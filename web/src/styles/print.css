@@ -1,0 +1,58 @@
+/* ==========================================================================
+   print.css - the A4 PDF quotation
+   --------------------------------------------------------------------------
+   When a customer taps "Print or save as PDF", the browser hides the whole
+   website and prints only the #quote section, which quote-engine.js fills
+   in. This file sets the A4 page, the footer with page numbers on every
+   page, and the layout of the quotation itself.
+
+   Copied unchanged from the original site. The footer line below repeats
+   the website and phone number from src/config/business.ts (CSS cannot
+   read that file); scripts/check-data.mjs fails the build if they differ.
+   The "continued" header on pages 2+ is added by quote-engine.js, because
+   it contains each quotation's own reference number.
+   ========================================================================== */
+/* Printed quotation: hidden on screen, the only thing printed */
+#quote{display:none}
+@page{size:A4;margin:16mm 14mm 15mm;
+@bottom-left{content:"thecementpeople.com  ·  055 846 3468";font:7pt Montserrat,Arial,sans-serif;color:#777}
+@bottom-right{content:"Page " counter(page) " of " counter(pages);font:7pt Montserrat,Arial,sans-serif;color:#777}}
+@media print{
+html,body{background:#fff!important;overflow:visible!important;height:auto!important;padding:0!important}
+body::before,body>*:not(#quote){display:none!important}
+#quote{display:block!important;color:#111;font:9.5pt/1.45 Montserrat,Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.q-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8mm;padding-bottom:5mm;border-bottom:1.2mm solid #f2c300}
+.q-brand{display:flex;gap:3.5mm;align-items:center}
+.q-brand svg{width:15mm;flex:none}
+.q-brand b{display:block;font-size:15pt;font-weight:800;letter-spacing:-.01em;line-height:1.1}
+.q-brand span{display:block;font-size:8.5pt;color:#555;margin-top:1mm}
+.q-doc{text-align:right}
+.q-doc h1{margin:0;font-size:17pt;font-weight:800;letter-spacing:.06em;text-transform:uppercase;line-height:1}
+.q-doc dl{display:grid;grid-template-columns:auto auto;gap:.6mm 4mm;margin:3mm 0 0;font-size:9pt}
+.q-doc dt{color:#555}.q-doc dd{margin:0;font-weight:700}
+.q-to{display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin:6mm 0 5mm}
+.q-to small{display:block;font-size:7.5pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555;margin-bottom:.8mm}
+.q-to p{margin:0;font-weight:600}
+#quote table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+#quote thead{display:table-header-group}
+#quote th{font-size:7.5pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;text-align:left;color:#fff;background:#111;padding:2.2mm 2.5mm}
+#quote td{padding:2.4mm 2.5mm;border-bottom:.25mm solid #d6d5d0;vertical-align:top}
+#quote tr{break-inside:avoid;page-break-inside:avoid}
+#quote .n{width:8mm;color:#555}
+#quote th.n{color:#fff}
+#quote .r{text-align:right;white-space:nowrap}
+#quote td small{display:block;color:#555;font-size:8pt}
+#quote .q-empty td{text-align:center;color:#555;padding:6mm}
+.q-close{display:grid;grid-template-columns:minmax(0,1fr) 84mm;gap:10mm;align-items:start;margin-top:5mm;break-inside:avoid;page-break-inside:avoid}
+.q-terms{font-size:8pt;color:#333}
+.q-terms h2{margin:0 0 1.5mm;font-size:7.5pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555}
+.q-terms h2+*{margin-top:0}
+.q-terms ul{margin:0 0 4mm;padding-left:3.5mm}
+.q-terms li{margin-bottom:1mm}
+.q-terms p{margin:0}
+.q-terms b{white-space:nowrap}
+.q-sum{font-variant-numeric:tabular-nums}
+.q-sum div{display:flex;justify-content:space-between;gap:4mm;padding:1.2mm 2.5mm}
+.q-sum span{white-space:nowrap}
+.q-sum .gt{margin-top:1.5mm;padding:2.6mm 2.5mm;background:#f2c300;font-size:11pt;font-weight:800}
+}

@@ -1,0 +1,11 @@
+---
+/* Logo.astro - The Cement People brick-stair mark (three grey bricks and
+   one yellow brick). Used in the header and the footer.
+
+   Props:
+     brick  colour of the three grey bricks. The header uses "currentColor"
+            (the text colour); the footer uses a light grey on black. */
+interface Props { brick?: string }
+const { brick = "currentColor" } = Astro.props;
+---
+<svg viewBox="0 0 59 38" aria-hidden="true"><rect x="0" y="26" width="28" height="12" rx="1" fill={brick}/><rect x="31" y="26" width="28" height="12" rx="1" fill={brick}/><rect x="17" y="13" width="42" height="12" rx="1" fill={brick}/><rect x="31" y="0" width="28" height="12" rx="1" fill="#f2c300"/></svg>
