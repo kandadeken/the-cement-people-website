@@ -33,3 +33,7 @@ exclude:
   - CNAME
   # --- New: the Astro version of the site (not live until Phase 4) ---
   - web
+  # --- Internal regression tests and their documentation ---
+  # They stay in the repository and still run in GitHub Actions; they are just
+  # not published as part of the customer-facing website.
+  - tests
