@@ -1,0 +1,43 @@
+{
+  "description": "Reference copy of The Cement People's confirmed business details (confirmed by the owner on 11 November 2026). Tests compare the website's visible text and structured data against this file, and the build compares web/src/config/business.ts against it. Change a detail here only in the same pull request that changes it on the website.",
+  "confirmed_on": "2026-11-11",
+  "name": "The Cement People",
+  "website": "thecementpeople.com",
+  "siteUrl": "https://thecementpeople.com",
+  "phone": "055 846 3468",
+  "phoneInternational": "+233558463468",
+  "whatsapp": "233558463468",
+  "publicEmail": "sales@thecementpeople.com",
+  "town": "Kasoa, Ghana",
+  "address": {
+    "street": "Krispol City Road",
+    "area": "Krispol City",
+    "locality": "Kasoa",
+    "region": "Central Region",
+    "country": "Ghana",
+    "countryCode": "GH"
+  },
+  "addressLine": "Krispol City Road, Krispol City, Kasoa, Central Region, Ghana",
+  "landmark": "Near GOIL Filling Station",
+  "plusCode": "GGMX+F9 Kasoa",
+  "geo": { "latitude": 5.5336575, "longitude": -0.4515421 },
+  "mapUrl": "https://maps.app.goo.gl/4SLMLa7DXVrXhDie8",
+  "openingHours": [
+    {
+      "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+      "opens": "07:00",
+      "closes": "17:00"
+    }
+  ],
+  "closedDays": ["Sunday"],
+  "openingHoursText": "Monday–Saturday, 7:00 am–5:00 pm",
+  "closedText": "Sunday closed",
+  "deliveryAreas": ["Kasoa", "Greater Accra"],
+  "currencyCode": "GHS",
+  "currencySymbol": "GH₵",
+  "taxRate": 0,
+  "page": {
+    "title": "The Cement People",
+    "description": "Cement, iron rods and binding wire from Krispol City, Kasoa, delivered across Kasoa and Greater Accra. See prices in Ghana cedis, build an estimate and send it on WhatsApp."
+  }
+}

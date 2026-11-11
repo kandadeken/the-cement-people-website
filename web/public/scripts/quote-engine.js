@@ -21,6 +21,16 @@
    business details are read from the page instead of being typed in here.
    The comments are new. All calculations, the WhatsApp text, the quotation
    layout and every element ID are unchanged.
+
+   PHASE 2 (SEO) CHANGES - presentation only, no calculation touched
+   1. In the price list, category headings are now <h3> and subgroup headings
+      <h4> (were <h2>/<h3>), so the page has a correct heading outline under
+      "Products and prices". site.css was updated to match; nothing looks
+      different.
+   2. After printing, the page title is restored from the page itself
+      instead of a title typed into this file.
+   The same price-list markup is also written into the page at build time by
+   src/lib/catalog-html.ts; a test keeps the two identical.
    =========================================================================== */
 // ---------------------------------------------------------------------------
 // DATA HOOK-UP 1 of 2: products, currency and tax rate
@@ -59,7 +69,7 @@ function renderTabs(){
 $("#tabs").innerHTML=cats.map(c=>`<button data-cat="${c}" aria-pressed="${c===cat}">${c}</button>`).join("");
 }
 const rowHTML=p=>`<div class="row"><div class="nm">${p.name}<small>per ${p.unit}</small></div><div class="pr">${money(p.price)}</div>${ctrl(p)}</div>`;
-const sec=(g,l)=>{const subs=[...new Set(l.map(p=>p.sub||""))];return `<section><h2>${ICON[g]||""}${g}</h2>${subs.map(x=>(x?`<h3>${x}</h3>`:"")+l.filter(p=>(p.sub||"")===x).map(rowHTML).join("")).join("")}</section>`;};
+const sec=(g,l)=>{const subs=[...new Set(l.map(p=>p.sub||""))];return `<section><h3>${ICON[g]||""}${g}</h3>${subs.map(x=>(x?`<h4>${x}</h4>`:"")+l.filter(p=>(p.sub||"")===x).map(rowHTML).join("")).join("")}</section>`;};
 function fit(){const L=$("#list");if(q||!L.children.length)return;const s=L.children[cats.indexOf(cat)];if(s)L.style.height=s.offsetHeight+"px";}
 function renderList(){
 const L=$("#list");
@@ -135,8 +145,10 @@ ps.textContent=`@page{@top-left{content:"The Cement People  ·  Estimate ${REF}"
 }
 
 // Refresh the quotation just before printing, and name the PDF after the reference.
+// The page's own title, put back after printing (the PDF is named after the reference).
+const PAGE_TITLE=document.title;
 addEventListener("beforeprint",()=>{renderEst();document.title=`The Cement People Estimate ${REF}`;});
-addEventListener("afterprint",()=>{document.title="The Cement People | Building materials and cost estimator";});
+addEventListener("afterprint",()=>{document.title=PAGE_TITLE;});
 
 // ---- Changing a quantity: every Add, +, − and typed number goes through set() --
 function set(id,n){
