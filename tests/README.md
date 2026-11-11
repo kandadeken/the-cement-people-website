@@ -14,7 +14,7 @@ the change broke something and should not be merged.
 | --- | --- | --- |
 | `test_baseline_35.py` | 35 | The original quotation checks: estimate behaviour, WhatsApp message, A4 PDF, references, long quotations, mobile, script errors |
 | `test_catalogue.py` | 6 | All 17 product names, units and prices match `baseline/products.json` on the price list, the estimate, the WhatsApp message and the PDF; the Print button works |
-| `test_product_images.py` | 6 | Product photos and rod banners exist, stay small and load; every photo has alt text; each rod tab keeps a real text heading; rod sizes are text tags; a missing banner falls back to the visible heading; no sideways scrolling on a phone |
+| `test_product_images.py` | 7 | Product photos exist and stay small; cement and wire photos load straight away with alt text; both rod tabs show the same shared photo, then a visible heading and a "how it's sold" note; rod sizes are text tags; a missing photo is left out while the heading stays; no sideways scrolling on a phone, including on the rod tabs once the font and photo load; a phone gets the small 720 px rod photo for both tabs |
 
 `baseline/ORIGINAL_35_CHECKS.md` maps each of the 35 tests to the check it
 came from and records what was strengthened. Nothing was removed.

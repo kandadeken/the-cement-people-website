@@ -210,24 +210,21 @@ input[type=search],#loc,select{border:1px solid var(--line);border-radius:6px;fo
 #list h3{font-size:14px;font-weight:700;color:var(--mute);margin:22px 0 2px}
 /* --- Product images (added with the product-images branch) ---------------
    Rows for products that have a photo (cement bags, binding wire) get a square
-   thumbnail in front of the name. The iron rod sections open with a wide
-   banner that shows the section name; the real <h2> heading is still in the
-   page for screen readers, search engines and the regression tests, just
-   visually hidden while the banner is showing. Image sizes are set in the
-   HTML (width/height) so the page doesn't jump while pictures load. */
+   thumbnail in front of the name. Each iron rod tab opens with the same wide
+   photo of the rods ("Iron Rods, 8 mm to 16 mm, 30 ft length"), followed by
+   the tab's normal heading (Single Piece / Per Ton) and a one-line note on how
+   it is sold. Image sizes are set in the HTML (width/height) so the page
+   doesn't jump while pictures load. */
 .row.has-img{grid-template-columns:64px minmax(0,1fr) auto auto}
 .thumb{display:block;width:64px;height:64px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px}
-.banner{display:block;width:100%;max-width:100%;min-width:0;height:auto;aspect-ratio:3/1;object-fit:cover;background:#fff;border:1px solid var(--line);border-radius:8px;margin:24px 0 4px}
-/* Keeps the hidden heading inside its own tab; without this it would sit off
-   to the right of the page and make phones zoom out. */
-#list section{position:relative}
-/* Stops the banner's large built-in size (1086 px) from widening the price
-   list column on phones; the column takes the screen width instead. */
+.banner{display:block;width:100%;max-width:100%;min-width:0;height:auto;aspect-ratio:3/1;object-fit:cover;background:#fff;border:1px solid var(--line);border-radius:8px;margin:24px 0 0}
+/* Stops the banner's large built-in size from widening the price list column
+   on phones; the column takes the screen width instead. */
 #catalog{min-width:0}
-.vh{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-/* If a banner fails to load, show the normal text heading instead */
+/* If the photo fails to load it is simply left out; the heading is always shown */
 section.nobanner .banner{display:none}
-section.nobanner h2.vh{position:static!important;width:auto;height:auto;margin:30px 0 0;overflow:visible;clip:auto;white-space:normal;padding-bottom:10px;border-bottom:1px solid var(--line)}
+/* "How it's sold" note under a tab heading, e.g. "Sold by the piece..." */
+#list .cat-note{margin:8px 0 0;font-size:14px;color:var(--mute)}
 /* Rod sizes: the size ("16 mm") is shown first as a bold black tag. In the
    page text the name still reads "Iron rod 16 mm" (the tag is only moved
    visually), so the estimate, PDF, WhatsApp message and tests are unchanged. */
@@ -379,13 +376,24 @@ const P=[
 {id:"i8",cat:"Iron Rods (Single Piece)",sub:"Binding wire",name:"Binding wire",unit:"roll",price:60,img:IMG+"binding-wire.webp",alt:"Coil of black annealed binding wire"}
 ];
 const cats=[...new Set(P.map(p=>p.cat))];
-// Optional wide banner for a whole tab. The banner shows the section name, so
-// the text heading is kept for screen readers but hidden on screen. Banners
-// are shown when browsing the tabs, not in search results.
-const BANNER={
-"Iron Rods (Single Piece)":IMG+"iron-rods-single-piece.webp",
-"Iron Rods (Per Ton)":IMG+"iron-rods-per-ton.webp"
+// Optional extras for a whole tab:
+//   banner - a wide photo shown at the top of the tab (when browsing, not in
+//            search results). Give it in several widths ("srcset") so phones
+//            download a small copy and large screens a sharp one.
+//   note   - one line under the heading saying how the products are sold.
+// Both rod tabs share ONE photo, so it is downloaded only once.
+const ROD_PHOTO={
+src:IMG+"iron-rods-1086.webp",
+srcset:IMG+"iron-rods-720.webp 720w, "+IMG+"iron-rods-1086.webp 1086w, "+IMG+"iron-rods-1440.webp 1440w",
+w:1086,h:362
 };
+const CAT_INFO={
+"Iron Rods (Single Piece)":{banner:ROD_PHOTO,note:"Sold by the piece. Each rod is 30 ft long."},
+"Iron Rods (Per Ton)":{banner:ROD_PHOTO,note:"Sold by the ton, in each size."}
+};
+// Width the banner is shown at: the price list column on large screens,
+// the screen width minus the side margins on phones.
+const BANNER_SIZES="(min-width:1100px) 652px, (min-width:900px) calc(100vw - 448px), calc(100vw - 32px)";
 const ICON={"Cement":`<svg viewBox="0 0 28 28" aria-hidden="true"><path d="M6 5h16l3 5v14H3V10z" fill="currentColor"/><rect x="8" y="12" width="12" height="8" fill="#f2c300"/></svg>`,"Iron rods and wire":`<svg viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="5" width="24" height="4" rx="2" fill="currentColor"/><rect x="2" y="12" width="24" height="4" rx="2" fill="currentColor"/><rect x="2" y="19" width="24" height="4" rx="2" fill="currentColor"/><rect x="11" y="3" width="5" height="22" fill="#f2c300"/></svg>`};
 ICON["Iron Rods (Single Piece)"]=ICON["Iron Rods (Per Ton)"]=ICON["Iron rods and wire"];
 let cat=cats[0],q="",qty={};
@@ -400,16 +408,22 @@ function renderTabs(){
 $("#tabs").innerHTML=cats.map(c=>`<button data-cat="${c}" aria-pressed="${c===cat}">${c}</button>`).join("");
 }
 // Product photo shown in front of the name (only for products with an img).
-const thumb=p=>p.img?`<img class="thumb" src="${p.img}" alt="${p.alt||""}" width="64" height="64" loading="lazy" decoding="async">`:"";
+// Loaded straight away (not "lazy"): the cement photos are on screen when the
+// page opens, and the files are small.
+const thumb=p=>p.img?`<img class="thumb" src="${p.img}" alt="${p.alt||""}" width="64" height="64">`:"";
 // Product name. For rods the size becomes a bold tag; the text still reads
 // "Iron rod 16 mm" in that order, the tag is only moved to the front by CSS.
 const label=p=>p.size&&p.name.endsWith(p.size)?`<span class="rn">${p.name.slice(0,-p.size.length)}<b class="sz">${p.size}</b></span>`:p.name;
 const rowHTML=p=>`<div class="row${p.img?" has-img":""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="pr">${money(p.price)}</div>${ctrl(p)}</div>`;
 // One category section. "browse" is true for the swipeable tabs and false for
-// search results; banners are only used when browsing.
-const sec=(g,l,browse)=>{const subs=[...new Set(l.map(p=>p.sub||""))],b=browse&&BANNER[g];
-return `<section><h2${b?' class="vh"':""}>${ICON[g]||""}${g}</h2>`
-+(b?`<img class="banner" src="${b}" alt="" width="1086" height="362" loading="lazy" decoding="async" onerror="this.closest('section').classList.add('nobanner')">`:"")
+// search results; banner photos are only shown when browsing.
+// The banner is decorative (alt=""): the heading and note below it say the same.
+// It is loaded with the page at low priority, so it is usually ready before
+// the customer opens a rod tab, without slowing down the first screen.
+const sec=(g,l,browse)=>{const subs=[...new Set(l.map(p=>p.sub||""))],info=CAT_INFO[g]||{},b=browse&&info.banner;
+return `<section>`
++(b?`<img class="banner" src="${b.src}" srcset="${b.srcset}" sizes="${BANNER_SIZES}" alt="" width="${b.w}" height="${b.h}" fetchpriority="low" onerror="this.closest('section').classList.add('nobanner')">`:"")
++`<h2>${ICON[g]||""}${g}</h2>`+(info.note?`<p class="cat-note">${info.note}</p>`:"")
 +`${subs.map(x=>(x?`<h3>${x}</h3>`:"")+l.filter(p=>(p.sub||"")===x).map(rowHTML).join("")).join("")}</section>`;};
 function fit(){const L=$("#list");if(q||!L.children.length)return;const s=L.children[cats.indexOf(cat)];if(s)L.style.height=s.offsetHeight+"px";}
 // Re-measure the visible tab when a picture finishes loading or fails, so the

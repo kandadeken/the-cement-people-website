@@ -79,8 +79,8 @@ npm run preview   # serve the built website at http://localhost:4321
 
 ## Testing
 
-The regression tests in `../tests/` (47 at the time of the product images
-change; the 5 product-image browser checks are skipped for this build until
+The regression tests in `../tests/` (48 at the time of the product images
+change; the 6 product-image browser checks are skipped for this build until
 it is carried over) run against both versions of the site
 on every pull request (see `../.github/workflows/tests.yml`):
 
@@ -118,11 +118,15 @@ tests run against this build (they detect the local address
 | `dzata-42-5.webp` | Dzata 42.5 row (c3) | 360 × 360 |
 | `ghacem-waterproof-42-5.webp` | Ghacem Waterproof 42.5 row (c4) | 360 × 360 |
 | `binding-wire.webp` | Binding wire row (i8) | 360 × 360 |
-| `iron-rods-single-piece.webp` | banner for the "Iron Rods (Single Piece)" tab | 1086 × 362 |
-| `iron-rods-per-ton.webp` | banner for the "Iron Rods (Per Ton)" tab | 1086 × 362 |
+| `iron-rods-720.webp` | shared rod photo, phones | 720 × 240 (~18 KB) |
+| `iron-rods-1086.webp` | shared rod photo, default / mid-size screens | 1086 × 362 (~35 KB) |
+| `iron-rods-1440.webp` | shared rod photo, sharp screens | 1440 × 480 (~55 KB) |
+
+The rod photo shows "Iron Rods, 8 mm to 16 mm, 30 ft length" and is the same
+for both rod tabs. How each tab is sold is page text, not part of the image.
 
 Full-size originals are in `../design/product-originals/` (not published).
-For Astro, copy the seven WebP files to `public/images/products/` so the paths
+For Astro, copy the eight WebP files to `public/images/products/` so the paths
 stay `/images/products/...`.
 
 ### Product data
@@ -134,13 +138,19 @@ in the `P` list; here they belong in `src/data/products.json`):
 - `alt`: short description of the photo for screen readers
 - `size`: for iron rods, the part of the name shown as a bold tag (`"16 mm"`)
 
-and one map from tab name to banner image:
+and per-tab extras:
 
 ```js
-const BANNER = {
-  "Iron Rods (Single Piece)": "images/products/iron-rods-single-piece.webp",
-  "Iron Rods (Per Ton)": "images/products/iron-rods-per-ton.webp"
+const ROD_PHOTO = {
+  src: "images/products/iron-rods-1086.webp",
+  srcset: "…720.webp 720w, …1086.webp 1086w, …1440.webp 1440w",
+  w: 1086, h: 362
 };
+const CAT_INFO = {
+  "Iron Rods (Single Piece)": {banner: ROD_PHOTO, note: "Sold by the piece. Each rod is 30 ft long."},
+  "Iron Rods (Per Ton)":      {banner: ROD_PHOTO, note: "Sold by the ton, in each size."}
+};
+const BANNER_SIZES = "(min-width:1100px) 652px, (min-width:900px) calc(100vw - 448px), calc(100vw - 32px)";
 ```
 
 `tests/baseline/products.json` does not need these fields: the tests still
@@ -150,27 +160,31 @@ ignoring them.
 ### Layout rules
 
 1. **Photo rows.** A product with `img` gets a 64 × 64 thumbnail in front of
-   the name (`<img class="thumb" width="64" height="64" loading="lazy">`).
-   On phones (560 px and narrower) the thumbnail sits on the left across two
-   lines; the name on the first line, price and Add/quantity on the second.
-2. **Banner tabs.** When browsing the tabs, a category with a banner shows
-   the banner at the top of its section. The real `<h2>` stays first in the
-   section, with the exact category text, but is visually hidden (class
-   `vh`) because the banner already shows the name. The banner has `alt=""`.
-   Search results show the normal visible heading and no banner.
-3. **Banner fallback.** If a banner fails to load, the section gets the class
-   `nobanner`, the banner is hidden and the heading becomes visible.
-4. **Rod size tags.** For products with `size`, the name is written as
+   the name (`<img class="thumb" width="64" height="64">`, loaded straight
+   away, not lazily: the cement photos are on the first screen). On phones
+   (560 px and narrower) the thumbnail sits on the left across two lines; the
+   name on the first line, price and Add/quantity on the second.
+2. **Rod tabs.** When browsing the tabs, a tab with a `banner` shows, in this
+   order: the shared rod photo, the normal visible `<h2>` with the exact
+   category text, then the `note` as a `<p class="cat-note">`. The photo has
+   `alt=""` because the heading and note say the same. Search results show
+   the heading and note but no photo.
+3. **Loading.** The photo uses `srcset` and `sizes` (above), so a phone
+   downloads the 720 px copy and a large sharp screen the 1440 px copy. It is
+   not lazy: it loads with the page with `fetchpriority="low"`, so it is
+   ready before a customer opens a rod tab without slowing the first screen.
+   Both tabs use the same file, so it is downloaded once.
+4. **Fallback.** If the photo fails to load, the section gets the class
+   `nobanner` and the photo is hidden; the heading is always visible.
+5. **Rod size tags.** For products with `size`, the name is written as
    `<span class="rn">Iron rod <b class="sz">16 mm</b></span>`. CSS
    (`order:-1`) moves the bold black tag to the front, so it reads
    "**16 mm** Iron rod" on screen, while the text in the page is still
    "Iron rod 16 mm". The estimate, PDF and WhatsApp message use `name` and
    are unchanged.
-5. **Sections are `position:relative`.** Required: without it the visually
-   hidden headings in the other tabs push the page wider than a phone screen.
-6. **Width on phones.** The banner has `max-width:100%` and the price-list
-   column (`#catalog`) has `min-width:0`; without these the banner's built-in
-   1086 px size widened the page on phones once the Montserrat font loaded.
+6. **Width on phones.** The photo has `max-width:100%` and the price-list
+   column (`#catalog`) has `min-width:0`; without these the photo's built-in
+   size widened the page on phones once the Montserrat font loaded.
 7. **Height.** The price list re-measures its height when any image loads or
    fails, so the swipeable tabs never cut a row off.
 
