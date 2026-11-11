@@ -37,3 +37,7 @@ exclude:
   # They stay in the repository and still run in GitHub Actions; they are just
   # not published as part of the customer-facing website.
   - tests
+  # --- Full-size original artwork (product images as generated) ---
+  # Kept in the repository as the master copies, but not published: the site
+  # uses the small optimised versions in images/products/ instead.
+  - design

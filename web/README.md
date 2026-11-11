@@ -114,7 +114,11 @@ npm run preview   # serve the built website at http://localhost:4321
 
 The regression tests in `../tests/` run against both versions of the site
 on every pull request: 41 quotation and catalogue tests on both, plus 13
-search-engine tests (`test_seo.py`) on this Astro version (see `../.github/workflows/tests.yml`):
+search-engine tests (`test_seo.py`) on this Astro version, plus 7
+product-image checks (`test_product_images.py`) on the original site. Here
+only the image-file check of those 7 runs; the 6 browser checks are skipped
+until the product images are carried over (see "Product images" below)
+(see `../.github/workflows/tests.yml`):
 
 - **Original site:** the tests open `../index.html` directly.
 - **Astro build:** GitHub builds `web/`, serves `web/dist/` from a local web
@@ -131,6 +135,100 @@ TCP_SITE_URL=http://127.0.0.1:4321/ python -m pytest tests -v
 
 The built site must be served, not opened as a file: its pages load
 stylesheets from `/_astro/…` addresses, which only work through a web server.
+
+## Product images: carry over before the switch-over
+
+Added to the **live** site (`../index.html`) on the `product-images` branch,
+before the switch-over. This Astro version does not have it yet. It must be
+carried over before Phase 4 so the switch-over doesn't remove it. Until then,
+the browser checks in `../tests/test_product_images.py` are skipped when the
+tests run against this build (they detect the local address
+`http://127.0.0.1:4321`); remove that skip once this is done.
+
+### Assets
+
+| File (in `../images/products/`) | Used for | Size |
+| --- | --- | --- |
+| `supacem-32-5.webp` | Supacem 32.5R row (c1) | 360 × 360 |
+| `supacem-42-5.webp` | Supacem 42.5R row (c2) | 360 × 360 |
+| `dzata-42-5.webp` | Dzata 42.5R row (c3) | 360 × 360 |
+| `ghacem-waterproof-42-5.webp` | Ghacem Waterproof 42.5N row (c4) | 360 × 360 |
+| `binding-wire.webp` | Binding wire row (i8) | 360 × 360 |
+| `iron-rods-720.webp` | shared rod photo, phones | 720 × 241 (~17 KB) |
+| `iron-rods-1086.webp` | shared rod photo, default / mid-size screens | 1086 × 363 (~32 KB) |
+| `iron-rods-1440.webp` | shared rod photo, sharp screens | 1440 × 481 (~48 KB) |
+
+The rod photo carries only the label "8 mm to 16 mm | 30 ft length" (the
+photo itself shows what the product is) and is the same for both rod tabs.
+The tab heading and how each tab is sold are page text, not part of the image.
+
+Full-size originals are in `../design/product-originals/` (not published).
+For Astro, copy the eight WebP files to `public/images/products/` so the paths
+stay `/images/products/...`.
+
+### Product data
+
+Three optional fields were added to each product (in `index.html` these sit
+in the `P` list; here they belong in `src/data/products.json`):
+
+- `img`: path of the square photo, e.g. `images/products/dzata-42-5.webp`
+- `alt`: short description of the photo for screen readers
+- `size`: for iron rods, the part of the name shown as a bold tag (`"16 mm"`)
+
+and per-tab extras:
+
+```js
+const ROD_PHOTO = {
+  src: "images/products/iron-rods-1086.webp",
+  srcset: "…720.webp 720w, …1086.webp 1086w, …1440.webp 1440w",
+  w: 1086, h: 363
+};
+const CAT_INFO = {
+  "Iron Rods (Single Piece)": {banner: ROD_PHOTO, note: "Sold by the piece. Each rod is 30 ft long."},
+  "Iron Rods (Per Ton)":      {banner: ROD_PHOTO, note: "Sold by the ton, in each size."}
+};
+const BANNER_SIZES = "(min-width:1100px) 652px, (min-width:900px) calc(100vw - 448px), calc(100vw - 32px)";
+```
+
+`tests/baseline/products.json` does not need these fields: the tests still
+compare only id, category, name, unit and price. Keep `check-data.mjs`
+ignoring them.
+
+### Layout rules
+
+1. **Photo rows.** A product with `img` gets a 64 × 64 thumbnail in front of
+   the name (`<img class="thumb" width="64" height="64">`, loaded straight
+   away, not lazily: the cement photos are on the first screen). On phones
+   (560 px and narrower) the thumbnail sits on the left across two lines; the
+   name on the first line, price and Add/quantity on the second.
+2. **Rod tabs.** When browsing the tabs, a tab with a `banner` shows, in this
+   order: the shared rod photo, the normal visible `<h2>` with the exact
+   category text, then the `note` as a `<p class="cat-note">`. The photo has
+   `alt=""` because the heading and note say the same. Search results show
+   the heading and note but no photo.
+3. **Loading.** The photo uses `srcset` and `sizes` (above), so a phone
+   downloads the 720 px copy and a large sharp screen the 1440 px copy. It is
+   not lazy: it loads with the page with `fetchpriority="low"`, so it is
+   ready before a customer opens a rod tab without slowing the first screen.
+   Both tabs use the same file, so it is downloaded once.
+4. **Fallback.** If the photo fails to load, the section gets the class
+   `nobanner` and the photo is hidden; the heading is always visible.
+5. **Rod size tags.** For products with `size`, the name is written as
+   `<span class="rn">Iron rod <b class="sz">16 mm</b></span>`. CSS
+   (`order:-1`) moves the bold black tag to the front, so it reads
+   "**16 mm** Iron rod" on screen, while the text in the page is still
+   "Iron rod 16 mm". The estimate, PDF and WhatsApp message use `name` and
+   are unchanged.
+6. **Width on phones.** The photo has `max-width:100%` and the price-list
+   column (`#catalog`) has `min-width:0`; without these the photo's built-in
+   size widened the page on phones once the Montserrat font loaded.
+7. **Height.** The price list re-measures its height when any image loads or
+   fails, so the swipeable tabs never cut a row off.
+
+The CSS is in the block marked "Product images" in `../index.html`; the
+rendering is in the `thumb`, `label`, `rowHTML` and `sec` functions there.
+In Astro, the rendering belongs in `public/scripts/quote-engine.js` (it draws
+the price list) and the CSS in `src/styles/site.css`.
 
 ## What is deliberately not here yet
 

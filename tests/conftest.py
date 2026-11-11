@@ -259,7 +259,7 @@ def short(browser):
     s.page_source_on_load = page.content()
     s.quote_visible_on_screen = page.is_visible("#quote")
 
-    # Supacem 42.5: tap Add in the price list, tap + nine times, later tap - once -> 9
+    # Supacem 42.5R: tap Add in the price list, tap + nine times, later tap - once -> 9
     page.click('#list [data-inc="c2"]')
     for _ in range(9):
         page.click('#est [data-inc="c2"]')

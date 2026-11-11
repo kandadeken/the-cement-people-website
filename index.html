@@ -208,6 +208,34 @@ input[type=search],#loc,select{border:1px solid var(--line);border-radius:6px;fo
 .ctas .btn2{display:inline-flex;align-items:center;gap:8px}
 .btn2 svg{width:20px;height:20px;flex:none}
 #list h3{font-size:14px;font-weight:700;color:var(--mute);margin:22px 0 2px}
+/* --- Product images (added with the product-images branch) ---------------
+   Rows for products that have a photo (cement bags, binding wire) get a square
+   thumbnail in front of the name. Each iron rod tab opens with the same wide
+   photo of the rods (labelled only "8 mm to 16 mm | 30 ft length"), followed by
+   the tab's normal heading (Single Piece / Per Ton) and a one-line note on how
+   it is sold. Image sizes are set in the HTML (width/height) so the page
+   doesn't jump while pictures load. */
+.row.has-img{grid-template-columns:64px minmax(0,1fr) auto auto}
+.thumb{display:block;width:64px;height:64px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px}
+.banner{display:block;width:100%;max-width:100%;min-width:0;height:auto;aspect-ratio:3/1;object-fit:cover;background:#fff;border:1px solid var(--line);border-radius:8px;margin:24px 0 0}
+/* Stops the banner's large built-in size from widening the price list column
+   on phones; the column takes the screen width instead. */
+#catalog{min-width:0}
+/* If the photo fails to load it is simply left out; the heading is always shown */
+section.nobanner .banner{display:none}
+/* "How it's sold" note under a tab heading, e.g. "Sold by the piece..." */
+#list .cat-note{margin:8px 0 0;font-size:14px;color:var(--mute)}
+/* Rod sizes: the size ("16 mm") is shown first as a bold black tag. In the
+   page text the name still reads "Iron rod 16 mm" (the tag is only moved
+   visually), so the estimate, PDF, WhatsApp message and tests are unchanged. */
+.nm .rn{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
+.nm .sz{order:-1;display:inline-block;min-width:76px;text-align:center;background:#111;color:#fff;font-weight:800;font-size:17px;line-height:1;padding:9px 10px;border-radius:6px;letter-spacing:.01em}
+@media (max-width:560px){
+.row.has-img{grid-template-columns:64px minmax(0,1fr) auto}
+.row.has-img .thumb{grid-row:span 2;align-self:start}
+.row.has-img .nm{grid-column:2/-1}
+.banner{margin-top:18px}
+}
 .tabs{align-items:stretch}
 .tabs button{flex:1 1 0;white-space:normal;line-height:1.25;text-align:center;padding:8px 6px}
 /* Printed quotation: hidden on screen, the only thing printed */
@@ -315,26 +343,57 @@ body::before,body>*:not(#quote){display:none!important}
 <script>
 // Edit these to match your depot.
 const CURRENCY="GH₵",TAX_RATE=0;
+// THE PRODUCT LIST. Each line is one product. Fields:
+//   id    - fixed code used by the estimate (never reuse or change it)
+//   cat   - the tab the product appears under
+//   sub   - optional small subheading inside that tab (e.g. Binding wire)
+//   name  - shown on the price list, estimate, PDF and WhatsApp message
+//   unit  - what one "1" means (shown as "per 50 kg bag", "per ton", ...)
+//   price - in Ghana cedis
+//   img   - optional square product photo shown beside the name
+//   alt   - short description of that photo for screen readers
+//   size  - optional: for iron rods, the part of the name shown as a bold tag
+// To add a product, copy a similar line and change it. The tests in tests/
+// compare id, cat, name, unit and price against tests/baseline/products.json.
+const IMG="images/products/";
 const P=[
-{id:"c1",cat:"Cement",name:"Supacem 32.5",unit:"50 kg bag",price:75},
-{id:"c2",cat:"Cement",name:"Supacem 42.5",unit:"50 kg bag",price:100},
-{id:"c3",cat:"Cement",name:"Dzata 42.5",unit:"50 kg bag",price:110},
-{id:"c4",cat:"Cement",name:"Ghacem Waterproof 42.5",unit:"50 kg bag",price:120},
-{id:"i1",cat:"Iron Rods (Single Piece)",name:"Iron rod 16 mm",unit:"30 ft rod",price:102},
-{id:"i2",cat:"Iron Rods (Single Piece)",name:"Iron rod 14 mm",unit:"30 ft rod",price:75},
-{id:"i3",cat:"Iron Rods (Single Piece)",name:"Iron rod 12 mm",unit:"30 ft rod",price:58},
-{id:"i4",cat:"Iron Rods (Single Piece)",name:"Iron rod 11.5 mm",unit:"30 ft rod",price:48},
-{id:"i5",cat:"Iron Rods (Single Piece)",name:"Iron rod 10 mm",unit:"30 ft rod",price:40},
-{id:"i6",cat:"Iron Rods (Single Piece)",name:"Iron rod 8 mm",unit:"30 ft rod",price:25},
-{id:"j1",cat:"Iron Rods (Per Ton)",name:"Iron rod 16 mm",unit:"ton",price:7000},
-{id:"j2",cat:"Iron Rods (Per Ton)",name:"Iron rod 14 mm",unit:"ton",price:7000},
-{id:"j3",cat:"Iron Rods (Per Ton)",name:"Iron rod 12 mm",unit:"ton",price:7000},
-{id:"j4",cat:"Iron Rods (Per Ton)",name:"Iron rod 11.5 mm",unit:"ton",price:7000},
-{id:"j5",cat:"Iron Rods (Per Ton)",name:"Iron rod 10 mm",unit:"ton",price:7000},
-{id:"j6",cat:"Iron Rods (Per Ton)",name:"Iron rod 8 mm",unit:"ton",price:7000},
-{id:"i8",cat:"Iron Rods (Single Piece)",sub:"Binding wire",name:"Binding wire",unit:"roll",price:60}
+{id:"c1",cat:"Cement",name:"Supacem 32.5R",unit:"50 kg bag",price:75,img:IMG+"supacem-32-5.webp",alt:"Supacem Supa Fast 32.5R bag, green and kraft brown"},
+{id:"c2",cat:"Cement",name:"Supacem 42.5R",unit:"50 kg bag",price:100,img:IMG+"supacem-42-5.webp",alt:"Supacem Supa Power 42.5R bag, kraft brown with black panel"},
+{id:"c3",cat:"Cement",name:"Dzata 42.5R",unit:"50 kg bag",price:110,img:IMG+"dzata-42-5.webp",alt:"Dzata 42.5R bag, kraft brown with black and white lion panel"},
+{id:"c4",cat:"Cement",name:"Ghacem Waterproof 42.5N",unit:"50 kg bag",price:120,img:IMG+"ghacem-waterproof-42-5.webp",alt:"Ghacem Super Strong Waterproof 42.5N bag, black and yellow panel with blue waves"},
+{id:"i1",cat:"Iron Rods (Single Piece)",name:"Iron rod 16 mm",unit:"30 ft rod",price:102,size:"16 mm"},
+{id:"i2",cat:"Iron Rods (Single Piece)",name:"Iron rod 14 mm",unit:"30 ft rod",price:75,size:"14 mm"},
+{id:"i3",cat:"Iron Rods (Single Piece)",name:"Iron rod 12 mm",unit:"30 ft rod",price:58,size:"12 mm"},
+{id:"i4",cat:"Iron Rods (Single Piece)",name:"Iron rod 11.5 mm",unit:"30 ft rod",price:48,size:"11.5 mm"},
+{id:"i5",cat:"Iron Rods (Single Piece)",name:"Iron rod 10 mm",unit:"30 ft rod",price:40,size:"10 mm"},
+{id:"i6",cat:"Iron Rods (Single Piece)",name:"Iron rod 8 mm",unit:"30 ft rod",price:25,size:"8 mm"},
+{id:"j1",cat:"Iron Rods (Per Ton)",name:"Iron rod 16 mm",unit:"ton",price:7000,size:"16 mm"},
+{id:"j2",cat:"Iron Rods (Per Ton)",name:"Iron rod 14 mm",unit:"ton",price:7000,size:"14 mm"},
+{id:"j3",cat:"Iron Rods (Per Ton)",name:"Iron rod 12 mm",unit:"ton",price:7000,size:"12 mm"},
+{id:"j4",cat:"Iron Rods (Per Ton)",name:"Iron rod 11.5 mm",unit:"ton",price:7000,size:"11.5 mm"},
+{id:"j5",cat:"Iron Rods (Per Ton)",name:"Iron rod 10 mm",unit:"ton",price:7000,size:"10 mm"},
+{id:"j6",cat:"Iron Rods (Per Ton)",name:"Iron rod 8 mm",unit:"ton",price:7000,size:"8 mm"},
+{id:"i8",cat:"Iron Rods (Single Piece)",sub:"Binding wire",name:"Binding wire",unit:"roll",price:60,img:IMG+"binding-wire.webp",alt:"Coil of black annealed binding wire"}
 ];
 const cats=[...new Set(P.map(p=>p.cat))];
+// Optional extras for a whole tab:
+//   banner - a wide photo shown at the top of the tab (when browsing, not in
+//            search results). Give it in several widths ("srcset") so phones
+//            download a small copy and large screens a sharp one.
+//   note   - one line under the heading saying how the products are sold.
+// Both rod tabs share ONE photo, so it is downloaded only once.
+const ROD_PHOTO={
+src:IMG+"iron-rods-1086.webp",
+srcset:IMG+"iron-rods-720.webp 720w, "+IMG+"iron-rods-1086.webp 1086w, "+IMG+"iron-rods-1440.webp 1440w",
+w:1086,h:363
+};
+const CAT_INFO={
+"Iron Rods (Single Piece)":{banner:ROD_PHOTO,note:"Sold by the piece. Each rod is 30 ft long."},
+"Iron Rods (Per Ton)":{banner:ROD_PHOTO,note:"Sold by the ton, in each size."}
+};
+// Width the banner is shown at: the price list column on large screens,
+// the screen width minus the side margins on phones.
+const BANNER_SIZES="(min-width:1100px) 652px, (min-width:900px) calc(100vw - 448px), calc(100vw - 32px)";
 const ICON={"Cement":`<svg viewBox="0 0 28 28" aria-hidden="true"><path d="M6 5h16l3 5v14H3V10z" fill="currentColor"/><rect x="8" y="12" width="12" height="8" fill="#f2c300"/></svg>`,"Iron rods and wire":`<svg viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="5" width="24" height="4" rx="2" fill="currentColor"/><rect x="2" y="12" width="24" height="4" rx="2" fill="currentColor"/><rect x="2" y="19" width="24" height="4" rx="2" fill="currentColor"/><rect x="11" y="3" width="5" height="22" fill="#f2c300"/></svg>`};
 ICON["Iron Rods (Single Piece)"]=ICON["Iron Rods (Per Ton)"]=ICON["Iron rods and wire"];
 let cat=cats[0],q="",qty={};
@@ -348,9 +407,29 @@ const ctrl=p=>{const n=qty[p.id]||0;return n
 function renderTabs(){
 $("#tabs").innerHTML=cats.map(c=>`<button data-cat="${c}" aria-pressed="${c===cat}">${c}</button>`).join("");
 }
-const rowHTML=p=>`<div class="row"><div class="nm">${p.name}<small>per ${p.unit}</small></div><div class="pr">${money(p.price)}</div>${ctrl(p)}</div>`;
-const sec=(g,l)=>{const subs=[...new Set(l.map(p=>p.sub||""))];return `<section><h2>${ICON[g]||""}${g}</h2>${subs.map(x=>(x?`<h3>${x}</h3>`:"")+l.filter(p=>(p.sub||"")===x).map(rowHTML).join("")).join("")}</section>`;};
+// Product photo shown in front of the name (only for products with an img).
+// Loaded straight away (not "lazy"): the cement photos are on screen when the
+// page opens, and the files are small.
+const thumb=p=>p.img?`<img class="thumb" src="${p.img}" alt="${p.alt||""}" width="64" height="64">`:"";
+// Product name. For rods the size becomes a bold tag; the text still reads
+// "Iron rod 16 mm" in that order, the tag is only moved to the front by CSS.
+const label=p=>p.size&&p.name.endsWith(p.size)?`<span class="rn">${p.name.slice(0,-p.size.length)}<b class="sz">${p.size}</b></span>`:p.name;
+const rowHTML=p=>`<div class="row${p.img?" has-img":""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="pr">${money(p.price)}</div>${ctrl(p)}</div>`;
+// One category section. "browse" is true for the swipeable tabs and false for
+// search results; banner photos are only shown when browsing.
+// The banner is decorative (alt=""): the heading and note below it say the same.
+// It is loaded with the page at low priority, so it is usually ready before
+// the customer opens a rod tab, without slowing down the first screen.
+const sec=(g,l,browse)=>{const subs=[...new Set(l.map(p=>p.sub||""))],info=CAT_INFO[g]||{},b=browse&&info.banner;
+return `<section>`
++(b?`<img class="banner" src="${b.src}" srcset="${b.srcset}" sizes="${BANNER_SIZES}" alt="" width="${b.w}" height="${b.h}" fetchpriority="low" onerror="this.closest('section').classList.add('nobanner')">`:"")
++`<h2>${ICON[g]||""}${g}</h2>`+(info.note?`<p class="cat-note">${info.note}</p>`:"")
++`${subs.map(x=>(x?`<h3>${x}</h3>`:"")+l.filter(p=>(p.sub||"")===x).map(rowHTML).join("")).join("")}</section>`;};
 function fit(){const L=$("#list");if(q||!L.children.length)return;const s=L.children[cats.indexOf(cat)];if(s)L.style.height=s.offsetHeight+"px";}
+// Re-measure the visible tab when a picture finishes loading or fails, so the
+// price list is never cut short or left with a gap.
+$("#list").addEventListener("load",()=>setTimeout(fit),true);
+$("#list").addEventListener("error",()=>setTimeout(fit),true);
 function renderList(){
 const L=$("#list");
 if(q){
@@ -360,7 +439,7 @@ L.innerHTML=M.length?[...new Set(M.map(p=>p.cat))].map(g=>sec(g,M.filter(p=>p.ca
 return;
 }
 L.className="snap";
-L.innerHTML=cats.map(g=>`<div class="slide">${sec(g,P.filter(p=>p.cat===g))}</div>`).join("");
+L.innerHTML=cats.map(g=>`<div class="slide">${sec(g,P.filter(p=>p.cat===g),true)}</div>`).join("");
 L.scrollLeft=cats.indexOf(cat)*L.clientWidth;
 fit();
 }

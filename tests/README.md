@@ -14,6 +14,7 @@ the change broke something and should not be merged.
 | --- | --- | --- |
 | `test_baseline_35.py` | 35 | The original quotation checks: estimate behaviour, WhatsApp message, A4 PDF, references, long quotations, mobile, script errors |
 | `test_catalogue.py` | 6 | All 17 product names, units and prices match `baseline/products.json` on the price list, the estimate, the WhatsApp message and the PDF; the Print button works |
+| `test_product_images.py` | 7 | Product photos exist and stay small; cement and wire photos load straight away with alt text; both rod tabs show the same shared photo, then a visible heading and a "how it's sold" note; rod sizes are text tags; a missing photo is left out while the heading stays; no sideways scrolling on a phone, including on the rod tabs once the font and photo load; a phone gets the small 720 px rod photo for both tabs |
 | `test_seo.py` | 13 | Search-engine and AI readability of the Astro site: all 17 products present in the HTML without JavaScript and identical to what the engine draws; title, description, canonical address and link preview; structured data valid and containing only the confirmed details in `baseline/business.json`; business details visible; heading outline; image descriptions and sizes; sitemap; robots.txt; no broken links; logo file |
 
 `baseline/ORIGINAL_35_CHECKS.md` maps each of the 35 tests to the check it
@@ -120,6 +121,8 @@ tests/
 ├─ conftest.py                scenarios and helpers
 ├─ test_baseline_35.py        the original 35 checks
 ├─ test_catalogue.py          catalogue and print-button checks
+├─ test_product_images.py     product photos, banners and rod size tags
+├─ screenshots/               review screenshots attached to pull requests
 ├─ test_seo.py                search-engine checks (Astro site only)
 ├─ baseline/
 │  ├─ products.json           reference copy of the 17 products
