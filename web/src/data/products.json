@@ -2,28 +2,28 @@
   {
     "id": "c1",
     "category": "Cement",
-    "name": "Supacem 32.5",
+    "name": "Supacem 32.5R",
     "unit": "50 kg bag",
     "price": 75
   },
   {
     "id": "c2",
     "category": "Cement",
-    "name": "Supacem 42.5",
+    "name": "Supacem 42.5R",
     "unit": "50 kg bag",
     "price": 100
   },
   {
     "id": "c3",
     "category": "Cement",
-    "name": "Dzata 42.5",
+    "name": "Dzata 42.5R",
     "unit": "50 kg bag",
     "price": 110
   },
   {
     "id": "c4",
     "category": "Cement",
-    "name": "Ghacem Waterproof 42.5",
+    "name": "Ghacem Waterproof 42.5N",
     "unit": "50 kg bag",
     "price": 120
   },

@@ -21,7 +21,7 @@ def is_a4(size):
 def test_b01_steppers_typed_quantity_and_totals(short):
     assert short.c2_after_plus == "10", "Add then + nine times should give 10"
     assert short.lines == [
-        {"name": "Supacem 42.5", "detail": f"{money(100)} per 50 kg bag", "qty": "9",
+        {"name": "Supacem 42.5R", "detail": f"{money(100)} per 50 kg bag", "qty": "9",
          "amount": money(900)},
         {"name": "Iron rod 12 mm", "detail": f"{money(58)} per 30 ft rod", "qty": "24",
          "amount": money(1392)},
@@ -32,7 +32,7 @@ def test_b01_steppers_typed_quantity_and_totals(short):
 
 
 def test_b02_search_filters(short):
-    assert [(r["name"], r["price"]) for r in short.search_rows] == [("Dzata 42.5", money(110))]
+    assert [(r["name"], r["price"]) for r in short.search_rows] == [("Dzata 42.5R", money(110))]
     assert short.rows_after_clearing_search == len(PRODUCTS)
 
 
@@ -59,7 +59,7 @@ def test_b06_whatsapp_has_drop_off_location(short):
 def test_b07_whatsapp_items_quantities_prices_line_totals(short):
     items = short.message.split("*Items*\n")[1].split("\n\n")[0]
     assert items == (
-        "1. Supacem 42.5 (50 kg bag)\n"
+        "1. Supacem 42.5R (50 kg bag)\n"
         f"   9 × {money(100)} = {money(900)}\n"
         "2. Iron rod 12 mm (30 ft rod)\n"
         f"   24 × {money(58)} = {money(1392)}")

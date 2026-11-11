@@ -211,7 +211,7 @@ input[type=search],#loc,select{border:1px solid var(--line);border-radius:6px;fo
 /* --- Product images (added with the product-images branch) ---------------
    Rows for products that have a photo (cement bags, binding wire) get a square
    thumbnail in front of the name. Each iron rod tab opens with the same wide
-   photo of the rods ("Iron Rods, 8 mm to 16 mm, 30 ft length"), followed by
+   photo of the rods (labelled only "8 mm to 16 mm | 30 ft length"), followed by
    the tab's normal heading (Single Piece / Per Ton) and a one-line note on how
    it is sold. Image sizes are set in the HTML (width/height) so the page
    doesn't jump while pictures load. */
@@ -357,10 +357,10 @@ const CURRENCY="GH₵",TAX_RATE=0;
 // compare id, cat, name, unit and price against tests/baseline/products.json.
 const IMG="images/products/";
 const P=[
-{id:"c1",cat:"Cement",name:"Supacem 32.5",unit:"50 kg bag",price:75,img:IMG+"supacem-32-5.webp",alt:"Supacem Supa Fast 32.5R bag, green and kraft brown"},
-{id:"c2",cat:"Cement",name:"Supacem 42.5",unit:"50 kg bag",price:100,img:IMG+"supacem-42-5.webp",alt:"Supacem Supa Power 42.5R bag, kraft brown with black panel"},
-{id:"c3",cat:"Cement",name:"Dzata 42.5",unit:"50 kg bag",price:110,img:IMG+"dzata-42-5.webp",alt:"Dzata 42.5R bag, kraft brown with black and white lion panel"},
-{id:"c4",cat:"Cement",name:"Ghacem Waterproof 42.5",unit:"50 kg bag",price:120,img:IMG+"ghacem-waterproof-42-5.webp",alt:"Ghacem Super Strong Waterproof 42.5N bag, black and yellow panel with blue waves"},
+{id:"c1",cat:"Cement",name:"Supacem 32.5R",unit:"50 kg bag",price:75,img:IMG+"supacem-32-5.webp",alt:"Supacem Supa Fast 32.5R bag, green and kraft brown"},
+{id:"c2",cat:"Cement",name:"Supacem 42.5R",unit:"50 kg bag",price:100,img:IMG+"supacem-42-5.webp",alt:"Supacem Supa Power 42.5R bag, kraft brown with black panel"},
+{id:"c3",cat:"Cement",name:"Dzata 42.5R",unit:"50 kg bag",price:110,img:IMG+"dzata-42-5.webp",alt:"Dzata 42.5R bag, kraft brown with black and white lion panel"},
+{id:"c4",cat:"Cement",name:"Ghacem Waterproof 42.5N",unit:"50 kg bag",price:120,img:IMG+"ghacem-waterproof-42-5.webp",alt:"Ghacem Super Strong Waterproof 42.5N bag, black and yellow panel with blue waves"},
 {id:"i1",cat:"Iron Rods (Single Piece)",name:"Iron rod 16 mm",unit:"30 ft rod",price:102,size:"16 mm"},
 {id:"i2",cat:"Iron Rods (Single Piece)",name:"Iron rod 14 mm",unit:"30 ft rod",price:75,size:"14 mm"},
 {id:"i3",cat:"Iron Rods (Single Piece)",name:"Iron rod 12 mm",unit:"30 ft rod",price:58,size:"12 mm"},
@@ -385,7 +385,7 @@ const cats=[...new Set(P.map(p=>p.cat))];
 const ROD_PHOTO={
 src:IMG+"iron-rods-1086.webp",
 srcset:IMG+"iron-rods-720.webp 720w, "+IMG+"iron-rods-1086.webp 1086w, "+IMG+"iron-rods-1440.webp 1440w",
-w:1086,h:362
+w:1086,h:363
 };
 const CAT_INFO={
 "Iron Rods (Single Piece)":{banner:ROD_PHOTO,note:"Sold by the piece. Each rod is 30 ft long."},

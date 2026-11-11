@@ -1,5 +1,5 @@
 {
-  "description": "Reference copy of the product catalogue as published on thecementpeople.com at commit d3f0e86 (tag v1-single-file). Tests compare the website against this file. Change a price here only in the same pull request that changes it on the website.",
+  "description": "Reference copy of the product catalogue as published on thecementpeople.com at commit d3f0e86 (tag v1-single-file). Tests compare the website against this file. Change a price here only in the same pull request that changes it on the website. Since then: the four cement names gained their strength class letter (32.5R, 42.5R, 42.5N) in PR #6, matching the bags.",
   "source_commit": "d3f0e86",
   "currency": "GHS",
   "currency_symbol": "GH₵",
@@ -7,28 +7,28 @@
     {
       "id": "c1",
       "category": "Cement",
-      "name": "Supacem 32.5",
+      "name": "Supacem 32.5R",
       "unit": "50 kg bag",
       "price": 75
     },
     {
       "id": "c2",
       "category": "Cement",
-      "name": "Supacem 42.5",
+      "name": "Supacem 42.5R",
       "unit": "50 kg bag",
       "price": 100
     },
     {
       "id": "c3",
       "category": "Cement",
-      "name": "Dzata 42.5",
+      "name": "Dzata 42.5R",
       "unit": "50 kg bag",
       "price": 110
     },
     {
       "id": "c4",
       "category": "Cement",
-      "name": "Ghacem Waterproof 42.5",
+      "name": "Ghacem Waterproof 42.5N",
       "unit": "50 kg bag",
       "price": 120
     },

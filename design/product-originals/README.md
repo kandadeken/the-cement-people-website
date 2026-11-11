@@ -15,7 +15,7 @@ The website uses the small optimised copies in `images/products/` instead:
 | `dzata-42-5.png` | `images/products/dzata-42-5.webp` | square crop of the bag, 360 × 360, WebP |
 | `ghacem-waterproof-42-5.png` | `images/products/ghacem-waterproof-42-5.webp` | square crop of the bag, 360 × 360, WebP |
 | `binding-wire.png` | `images/products/binding-wire.webp` | square crop of the coil, 360 × 360, WebP |
-| `iron-rods.png` | `images/products/iron-rods-720.webp`, `-1086.webp`, `-1440.webp` | whole image at three widths (720, 1086, 1440 px), WebP quality 82; one shared photo for both rod tabs |
+| `iron-rods.png` | `images/products/iron-rods-720.webp`, `-1086.webp`, `-1440.webp` | whole image at three widths (720, 1086, 1440 px), WebP quality 82; one shared photo for both rod tabs, labelled only "8 mm to 16 mm \| 30 ft length" |
 
 ## Important
 

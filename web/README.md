@@ -113,17 +113,18 @@ tests run against this build (they detect the local address
 
 | File (in `../images/products/`) | Used for | Size |
 | --- | --- | --- |
-| `supacem-32-5.webp` | Supacem 32.5 row (c1) | 360 × 360 |
-| `supacem-42-5.webp` | Supacem 42.5 row (c2) | 360 × 360 |
-| `dzata-42-5.webp` | Dzata 42.5 row (c3) | 360 × 360 |
-| `ghacem-waterproof-42-5.webp` | Ghacem Waterproof 42.5 row (c4) | 360 × 360 |
+| `supacem-32-5.webp` | Supacem 32.5R row (c1) | 360 × 360 |
+| `supacem-42-5.webp` | Supacem 42.5R row (c2) | 360 × 360 |
+| `dzata-42-5.webp` | Dzata 42.5R row (c3) | 360 × 360 |
+| `ghacem-waterproof-42-5.webp` | Ghacem Waterproof 42.5N row (c4) | 360 × 360 |
 | `binding-wire.webp` | Binding wire row (i8) | 360 × 360 |
-| `iron-rods-720.webp` | shared rod photo, phones | 720 × 240 (~18 KB) |
-| `iron-rods-1086.webp` | shared rod photo, default / mid-size screens | 1086 × 362 (~35 KB) |
-| `iron-rods-1440.webp` | shared rod photo, sharp screens | 1440 × 480 (~55 KB) |
+| `iron-rods-720.webp` | shared rod photo, phones | 720 × 241 (~17 KB) |
+| `iron-rods-1086.webp` | shared rod photo, default / mid-size screens | 1086 × 363 (~32 KB) |
+| `iron-rods-1440.webp` | shared rod photo, sharp screens | 1440 × 481 (~48 KB) |
 
-The rod photo shows "Iron Rods, 8 mm to 16 mm, 30 ft length" and is the same
-for both rod tabs. How each tab is sold is page text, not part of the image.
+The rod photo carries only the label "8 mm to 16 mm | 30 ft length" (the
+photo itself shows what the product is) and is the same for both rod tabs.
+The tab heading and how each tab is sold are page text, not part of the image.
 
 Full-size originals are in `../design/product-originals/` (not published).
 For Astro, copy the eight WebP files to `public/images/products/` so the paths
@@ -144,7 +145,7 @@ and per-tab extras:
 const ROD_PHOTO = {
   src: "images/products/iron-rods-1086.webp",
   srcset: "…720.webp 720w, …1086.webp 1086w, …1440.webp 1440w",
-  w: 1086, h: 362
+  w: 1086, h: 363
 };
 const CAT_INFO = {
   "Iron Rods (Single Piece)": {banner: ROD_PHOTO, note: "Sold by the piece. Each rod is 30 ft long."},
