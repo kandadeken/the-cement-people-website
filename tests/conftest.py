@@ -143,7 +143,9 @@ def price_list(page):
     """Read the visible price list: one entry per product row."""
     return page.evaluate("""() =>
         [...document.querySelectorAll('#list section')].flatMap(sec => {
-            const category = sec.querySelector('h2').textContent.trim();
+            // The category heading is the first heading in its section: <h2> on the
+            // original single-file site, <h3> on the Astro site (corrected outline).
+            const category = sec.querySelector('h2, h3').textContent.trim();
             return [...sec.querySelectorAll('.row')].map(row => {
                 const nm = row.querySelector('.nm');
                 return {

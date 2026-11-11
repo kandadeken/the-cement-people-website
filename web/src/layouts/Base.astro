@@ -3,7 +3,8 @@
    Base.astro - the shell every page sits inside
    ---------------------------------------------------------------------------
    Writes the <head>: page title, description, canonical address, link
-   previews for WhatsApp/Facebook/X, the Montserrat font and the stylesheets.
+   previews for WhatsApp/Facebook/X, structured data for search engines,
+   the Montserrat font and the stylesheets.
    The page's own content goes where <slot /> is.
 
    Props:
@@ -12,6 +13,8 @@
      path         this page's address on the site, e.g. "/" (for the canonical URL)
    =========================================================================== */
 import { business } from "../config/business";
+import { buildStructuredData } from "../lib/structured-data";
+import { HERO_ALT } from "../components/Hero.astro";
 
 // Stylesheets, in the order they must apply: brand colours, screen, print.
 import "../styles/tokens.css";
@@ -27,8 +30,21 @@ const { title, description, path = "/" } = Astro.props;
 
 // The one official address for this page (avoids duplicates in search results).
 const canonical = new URL(path, business.siteUrl).href;
-// Picture shown when the link is shared on WhatsApp or social media.
-const previewImage = new URL("/images/hero-left.jpg", business.siteUrl).href;
+
+// Picture shown when the link is shared on WhatsApp or social media,
+// with its real size and a description.
+const preview = {
+  url: new URL("/images/hero-left.jpg", business.siteUrl).href,
+  width: 520,
+  height: 691,
+  alt: HERO_ALT,
+};
+
+// Machine-readable description of the business, website and page (JSON-LD).
+// "<" is escaped so the text can never close the <script> tag early.
+const structuredData = JSON.stringify(
+  buildStructuredData({ title, description, url: canonical, image: preview.url }),
+).replace(/</g, "\\u003c");
 ---
 <!DOCTYPE html>
 <html lang="en">
@@ -45,8 +61,14 @@ const previewImage = new URL("/images/hero-left.jpg", business.siteUrl).href;
 <meta property="og:title" content={title}>
 <meta property="og:description" content={description}>
 <meta property="og:url" content={canonical}>
-<meta property="og:image" content={previewImage}>
+<meta property="og:image" content={preview.url}>
+<meta property="og:image:width" content={String(preview.width)}>
+<meta property="og:image:height" content={String(preview.height)}>
+<meta property="og:image:alt" content={preview.alt}>
 <meta name="twitter:card" content="summary_large_image">
+
+<!-- Structured data: tells search engines who and where the business is -->
+<script is:inline type="application/ld+json" set:html={structuredData}></script>
 
 <link rel="sitemap" href="/sitemap.xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">

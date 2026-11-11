@@ -5,6 +5,11 @@
    v1-single-file), in its original order, so the page looks identical.
    Only the brand colour variables moved out, into tokens.css.
 
+   Phase 2 change: the price list's category headings became <h3> and its
+   subgroup headings <h4> (a correct heading outline), so the rules that were
+   "#list h2" and "#list h3" are now "#list h3" and "#list h4". Same rules,
+   same look.
+
    The order of rules matters: several later rules deliberately refine
    earlier ones. Do not re-sort this file. Tidying it up is planned for a
    later phase, with screenshots compared before and after.
@@ -122,8 +127,8 @@ nav a:hover{border-bottom-color:var(--y)}
 .alt{background:var(--card)}
 .wrap{max-width:720px;margin:0 auto}
 .wrap p{margin:0 0 20px;font-size:16px;color:var(--mute)}
-#list h2{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800;margin:30px 0 0;padding-bottom:10px;border-bottom:1px solid var(--line)}
-#list h2 svg{width:26px;height:26px;color:var(--ink);flex:none}
+#list h3{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800;margin:30px 0 0;padding-bottom:10px;border-bottom:1px solid var(--line)}
+#list h3 svg{width:26px;height:26px;color:var(--ink);flex:none}
 h2::before{display:none}
 .row{padding:14px 0}
 .nm{font-size:16px}
@@ -162,8 +167,8 @@ a.cta{display:flex;align-items:center;justify-content:center;gap:8px;text-decora
 @media (max-width:560px){.row{grid-template-columns:minmax(0,1fr) auto}.row .nm{grid-column:1/-1}.row .pr{text-align:left}}
 .st{font-size:clamp(24px,3.6vw,30px)}
 input[type=search],#loc,select{border:1px solid var(--line);border-radius:6px;font-weight:400}
-#list h2{font-size:16px;font-weight:700}
-#list h2 svg{width:22px;height:22px;color:var(--mute)}
+#list h3{font-size:16px;font-weight:700}
+#list h3 svg{width:22px;height:22px;color:var(--mute)}
 .nm{font-weight:500}
 .pr{font-weight:700;font-size:16px}
 .add{background:var(--card);color:var(--ink);border:1px solid var(--line);font-weight:600;padding:8px 18px}
@@ -208,6 +213,6 @@ input[type=search],#loc,select{border:1px solid var(--line);border-radius:6px;fo
 .dclose svg{width:20px;height:20px;flex:none}
 .ctas .btn2{display:inline-flex;align-items:center;gap:8px}
 .btn2 svg{width:20px;height:20px;flex:none}
-#list h3{font-size:14px;font-weight:700;color:var(--mute);margin:22px 0 2px}
+#list h4{font-size:14px;font-weight:700;color:var(--mute);margin:22px 0 2px}
 .tabs{align-items:stretch}
 .tabs button{flex:1 1 0;white-space:normal;line-height:1.25;text-align:center;padding:8px 6px}
