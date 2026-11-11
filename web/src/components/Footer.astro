@@ -1,10 +1,11 @@
 ---
-/* Footer.astro - the black strip at the bottom with the logo and a one-line
-   summary of the business. */
+/* Footer.astro - the black strip at the bottom with the logo, the address
+   and a one-line summary of the business. */
 import Logo from "./Logo.astro";
 import { business } from "../config/business";
+import { addressLine } from "../lib/business-format";
 ---
 <footer class="foot"><div>
 <Logo brick="#d9d9d6" />
-<p><b>{business.name}</b>{business.town}. Cement, iron rods and binding wire, delivered to your site. Prices in Ghana cedis ({business.currencySymbol}).</p>
+<p><b>{business.name}</b>{addressLine()}. Cement, iron rods and binding wire, delivered to your site. Prices in Ghana cedis ({business.currencySymbol}).</p>
 </div></footer>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  logo.svg - The Cement People brick-stair mark (three dark bricks, one yellow).
+
+  The reusable logo file: for search engines (structured data), link previews,
+  documents and anywhere outside the website's own pages. It is the same
+  drawing as the header logo (src/components/Logo.astro), with the brand's
+  fixed colours: charcoal #111111 and industrial yellow #F2C300.
+
+  It scales to any size without blurring. The width and height below are
+  only the default size when opened on its own.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 59 38" width="472" height="304" role="img" aria-label="The Cement People">
+  <title>The Cement People</title>
+  <rect x="0" y="26" width="28" height="12" rx="1" fill="#111111"/>
+  <rect x="31" y="26" width="28" height="12" rx="1" fill="#111111"/>
+  <rect x="17" y="13" width="42" height="12" rx="1" fill="#111111"/>
+  <rect x="31" y="0" width="28" height="12" rx="1" fill="#f2c300"/>
+</svg>

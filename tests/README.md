@@ -15,6 +15,7 @@ the change broke something and should not be merged.
 | `test_baseline_35.py` | 35 | The original quotation checks: estimate behaviour, WhatsApp message, A4 PDF, references, long quotations, mobile, script errors |
 | `test_catalogue.py` | 6 | All 17 product names, units and prices match `baseline/products.json` on the price list, the estimate, the WhatsApp message and the PDF; the Print button works |
 | `test_product_images.py` | 7 | Product photos exist and stay small; cement and wire photos load straight away with alt text; both rod tabs show the same shared photo, then a visible heading and a "how it's sold" note; rod sizes are text tags; a missing photo is left out while the heading stays; no sideways scrolling on a phone, including on the rod tabs once the font and photo load; a phone gets the small 720 px rod photo for both tabs |
+| `test_seo.py` | 13 | Search-engine and AI readability of the Astro site: all 17 products present in the HTML without JavaScript and identical to what the engine draws; title, description, canonical address and link preview; structured data valid and containing only the confirmed details in `baseline/business.json`; business details visible; heading outline; image descriptions and sizes; sitemap; robots.txt; no broken links; logo file |
 
 `baseline/ORIGINAL_35_CHECKS.md` maps each of the 35 tests to the check it
 came from and records what was strengthened. Nothing was removed.
@@ -52,6 +53,25 @@ On Windows PowerShell: `$env:TCP_SITE_URL="https://thecementpeople.com"; python 
 - Each test makes one assertion about what a scenario observed.
 - PDFs are read back with `pypdf`, and every table row (number, product,
   category, unit, quantity, unit price, amount) is compared exactly.
+
+## Which tests run where
+
+- **Original site** (`index.html` opened from disk): the 41 quotation and
+  catalogue tests. The 13 SEO tests are reported as *skipped*, because that
+  site predates them.
+- **Astro build** (served, `TCP_SITE_URL=http://127.0.0.1:4321/`): all 54.
+
+`test_seo.py` mostly reads the page as plain HTML with no JavaScript, the way
+a crawler does, using only Python's standard library.
+
+## Changing a business detail
+
+`baseline/business.json` is the reference copy of the confirmed business
+details (address, phone, email, hours, delivery areas, page title and
+description). The structured-data test accepts only the properties and values
+recorded there, so nothing unconfirmed can be published by accident. To change
+a detail, change it in `web/src/config/business.ts` and in that file, in the
+same pull request.
 
 ## Changing a price
 
@@ -103,8 +123,10 @@ tests/
 ├─ test_catalogue.py          catalogue and print-button checks
 ├─ test_product_images.py     product photos, banners and rod size tags
 ├─ screenshots/               review screenshots attached to pull requests
+├─ test_seo.py                search-engine checks (Astro site only)
 ├─ baseline/
 │  ├─ products.json           reference copy of the 17 products
+│  ├─ business.json           reference copy of the confirmed business details
 │  ├─ ORIGINAL_35_CHECKS.md   mapping from the original checks to today's tests
 │  ├─ original_checks.py      the original script, kept unchanged for the record
 │  └─ original_run_d3f0e86.txt  its 35/35 result against commit d3f0e86

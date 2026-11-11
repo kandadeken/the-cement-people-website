@@ -1,8 +1,15 @@
 ---
-/* Contact.astro - the "Contact us" section. Location and phone come from
-   src/config/business.ts. Address, opening hours and email are not shown
-   because they have not been provided yet (they are null in that file). */
+/* Contact.astro - the "Contact us" section: address, landmark, opening
+   hours, phone, email and delivery coverage, all from
+   src/config/business.ts (nothing is typed in here).
+
+   The address is the physical location (Kasoa, Central Region). The
+   "Delivery" line is coverage, which is wider than the address. */
 import WhatsAppIcon from "./WhatsAppIcon.astro";
 import { business } from "../config/business";
+import { addressLine, openingHoursLines, closedLine, deliveryAreasLine } from "../lib/business-format";
+
+// "Monday–Saturday, 7:00 am–5:00 pm. Sunday closed."
+const hours = [...openingHoursLines(), closedLine()].filter(Boolean).join(". ") + ".";
 ---
-<section class="sec" id="contact"><div class="wrap"><h2 class="st">Contact us</h2><p>Ready to order, or not sure what you need? Send us a message on WhatsApp or give us a call and we will help.</p><p><b>Location:</b> {business.town}<br><b>Phone and WhatsApp:</b> <a href={`tel:${business.phoneInternational}`} target="_blank" rel="noopener">{business.phone}</a></p><a class="wa big" data-wa href="#contact"><WhatsAppIcon /><span>Enquire on WhatsApp</span></a></div></section>
+<section class="sec" id="contact"><div class="wrap"><h2 class="st">Contact us</h2><p>Ready to order, or not sure what you need? Send us a message on WhatsApp or give us a call and we will help.</p><p><b>Address:</b> {addressLine()}<br><b>Landmark:</b> {business.landmark}<br><b>Plus Code:</b> {business.plusCode}<br><b>Opening hours:</b> {hours}<br><b>Phone and WhatsApp:</b> <a href={`tel:${business.phoneInternational}`} target="_blank" rel="noopener">{business.phone}</a><br><b>Email:</b> <a href={`mailto:${business.publicEmail}`}>{business.publicEmail}</a><br><b>Delivery:</b> {deliveryAreasLine()}</p><a class="wa big" data-wa href="#contact"><WhatsAppIcon /><span>Enquire on WhatsApp</span></a></div></section>

@@ -9,6 +9,11 @@
      Header · Hero · category tiles · Products + Estimate · About · Contact ·
      Footer · mobile estimate bar · hidden A4 quotation ·
      data block · quotation engine
+
+   The category tiles and the price list are written into the HTML here, at
+   build time, so search engines can read all 17 products without running
+   any script (see src/lib/catalog-html.ts). The engine redraws the same
+   markup when the page loads and handles everything interactive.
    =========================================================================== */
 import Base from "../layouts/Base.astro";
 import Header from "../components/Header.astro";
@@ -22,9 +27,13 @@ import QuotePieces from "../components/QuotePieces.astro";
 
 import products from "../data/products.json";
 import { business } from "../config/business";
+import { toEngineProducts, tilesHTML } from "../lib/catalog-html";
 
-// What the quotation engine reads, in the exact shape it has always used:
-// each product as {id, cat, sub?, name, unit, price}.
+// The products in the short form the quotation engine has always used:
+// each one as {id, cat, sub?, name, unit, price}.
+const engineProducts = toEngineProducts(products);
+
+// What the quotation engine reads from the page.
 const engineData = {
   currency: business.currencySymbol,
   taxRate: business.taxRate,
@@ -34,32 +43,25 @@ const engineData = {
     town: business.town,
     website: business.website,
   },
-  products: products.map((p) => ({
-    id: p.id,
-    cat: p.category,
-    ...("subgroup" in p ? { sub: p.subgroup } : {}),
-    name: p.name,
-    unit: p.unit,
-    price: p.price,
-  })),
+  products: engineProducts,
 };
 // JSON placed inside <script> must never contain "<" (it could close the tag early).
 const engineJson = JSON.stringify(engineData).replace(/</g, "\\u003c");
 ---
 <Base
-  title="The Cement People | Building materials and cost estimator"
-  description="Cement, iron rods and binding wire delivered to your site in Kasoa, Ghana. Check prices in Ghana cedis and build an estimate to send on WhatsApp."
+  title="The Cement People"
+  description="Cement, iron rods and binding wire from Krispol City, Kasoa, delivered across Kasoa and Greater Accra. See prices in Ghana cedis, build an estimate and send it on WhatsApp."
   path="/"
 >
 <Header />
 
 <Hero />
 
-<!-- Category tiles: filled in by quote-engine.js -->
-<section class="cats" id="cats" aria-label="Product categories"></section>
+<!-- Category tiles: written here at build time; quote-engine.js redraws the same markup -->
+<section class="cats" id="cats" aria-label="Product categories" set:html={tilesHTML(engineProducts)}></section>
 
 <main id="products">
-<Catalog />
+<Catalog products={engineProducts} />
 
 <EstimatePanel />
 </main>
