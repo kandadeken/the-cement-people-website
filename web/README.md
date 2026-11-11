@@ -168,7 +168,10 @@ ignoring them.
    are unchanged.
 5. **Sections are `position:relative`.** Required: without it the visually
    hidden headings in the other tabs push the page wider than a phone screen.
-6. **Height.** The price list re-measures its height when any image loads or
+6. **Width on phones.** The banner has `max-width:100%` and the price-list
+   column (`#catalog`) has `min-width:0`; without these the banner's built-in
+   1086 px size widened the page on phones once the Montserrat font loaded.
+7. **Height.** The price list re-measures its height when any image loads or
    fails, so the swipeable tabs never cut a row off.
 
 The CSS is in the block marked "Product images" in `../index.html`; the

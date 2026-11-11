@@ -217,10 +217,13 @@ input[type=search],#loc,select{border:1px solid var(--line);border-radius:6px;fo
    HTML (width/height) so the page doesn't jump while pictures load. */
 .row.has-img{grid-template-columns:64px minmax(0,1fr) auto auto}
 .thumb{display:block;width:64px;height:64px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px}
-.banner{display:block;width:100%;height:auto;aspect-ratio:3/1;object-fit:cover;background:#fff;border:1px solid var(--line);border-radius:8px;margin:24px 0 4px}
+.banner{display:block;width:100%;max-width:100%;min-width:0;height:auto;aspect-ratio:3/1;object-fit:cover;background:#fff;border:1px solid var(--line);border-radius:8px;margin:24px 0 4px}
 /* Keeps the hidden heading inside its own tab; without this it would sit off
    to the right of the page and make phones zoom out. */
 #list section{position:relative}
+/* Stops the banner's large built-in size (1086 px) from widening the price
+   list column on phones; the column takes the screen width instead. */
+#catalog{min-width:0}
 .vh{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 /* If a banner fails to load, show the normal text heading instead */
 section.nobanner .banner{display:none}
