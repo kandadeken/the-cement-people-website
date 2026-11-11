@@ -79,7 +79,9 @@ npm run preview   # serve the built website at http://localhost:4321
 
 ## Testing
 
-The 41 regression tests in `../tests/` run against both versions of the site
+The regression tests in `../tests/` (47 at the time of the product images
+change; the 5 product-image browser checks are skipped for this build until
+it is carried over) run against both versions of the site
 on every pull request (see `../.github/workflows/tests.yml`):
 
 - **Original site:** the tests open `../index.html` directly.
@@ -97,6 +99,82 @@ TCP_SITE_URL=http://127.0.0.1:4321/ python -m pytest tests -v
 
 The built site must be served, not opened as a file: its pages load
 stylesheets from `/_astro/…` addresses, which only work through a web server.
+
+## Product images: carry over before the switch-over
+
+Added to the **live** site (`../index.html`) on the `product-images` branch,
+before the switch-over. This Astro version does not have it yet. It must be
+carried over before Phase 4 so the switch-over doesn't remove it. Until then,
+the browser checks in `../tests/test_product_images.py` are skipped when the
+tests run against this build (they detect the local address
+`http://127.0.0.1:4321`); remove that skip once this is done.
+
+### Assets
+
+| File (in `../images/products/`) | Used for | Size |
+| --- | --- | --- |
+| `supacem-32-5.webp` | Supacem 32.5 row (c1) | 360 × 360 |
+| `supacem-42-5.webp` | Supacem 42.5 row (c2) | 360 × 360 |
+| `dzata-42-5.webp` | Dzata 42.5 row (c3) | 360 × 360 |
+| `ghacem-waterproof-42-5.webp` | Ghacem Waterproof 42.5 row (c4) | 360 × 360 |
+| `binding-wire.webp` | Binding wire row (i8) | 360 × 360 |
+| `iron-rods-single-piece.webp` | banner for the "Iron Rods (Single Piece)" tab | 1086 × 362 |
+| `iron-rods-per-ton.webp` | banner for the "Iron Rods (Per Ton)" tab | 1086 × 362 |
+
+Full-size originals are in `../design/product-originals/` (not published).
+For Astro, copy the seven WebP files to `public/images/products/` so the paths
+stay `/images/products/...`.
+
+### Product data
+
+Three optional fields were added to each product (in `index.html` these sit
+in the `P` list; here they belong in `src/data/products.json`):
+
+- `img`: path of the square photo, e.g. `images/products/dzata-42-5.webp`
+- `alt`: short description of the photo for screen readers
+- `size`: for iron rods, the part of the name shown as a bold tag (`"16 mm"`)
+
+and one map from tab name to banner image:
+
+```js
+const BANNER = {
+  "Iron Rods (Single Piece)": "images/products/iron-rods-single-piece.webp",
+  "Iron Rods (Per Ton)": "images/products/iron-rods-per-ton.webp"
+};
+```
+
+`tests/baseline/products.json` does not need these fields: the tests still
+compare only id, category, name, unit and price. Keep `check-data.mjs`
+ignoring them.
+
+### Layout rules
+
+1. **Photo rows.** A product with `img` gets a 64 × 64 thumbnail in front of
+   the name (`<img class="thumb" width="64" height="64" loading="lazy">`).
+   On phones (560 px and narrower) the thumbnail sits on the left across two
+   lines; the name on the first line, price and Add/quantity on the second.
+2. **Banner tabs.** When browsing the tabs, a category with a banner shows
+   the banner at the top of its section. The real `<h2>` stays first in the
+   section, with the exact category text, but is visually hidden (class
+   `vh`) because the banner already shows the name. The banner has `alt=""`.
+   Search results show the normal visible heading and no banner.
+3. **Banner fallback.** If a banner fails to load, the section gets the class
+   `nobanner`, the banner is hidden and the heading becomes visible.
+4. **Rod size tags.** For products with `size`, the name is written as
+   `<span class="rn">Iron rod <b class="sz">16 mm</b></span>`. CSS
+   (`order:-1`) moves the bold black tag to the front, so it reads
+   "**16 mm** Iron rod" on screen, while the text in the page is still
+   "Iron rod 16 mm". The estimate, PDF and WhatsApp message use `name` and
+   are unchanged.
+5. **Sections are `position:relative`.** Required: without it the visually
+   hidden headings in the other tabs push the page wider than a phone screen.
+6. **Height.** The price list re-measures its height when any image loads or
+   fails, so the swipeable tabs never cut a row off.
+
+The CSS is in the block marked "Product images" in `../index.html`; the
+rendering is in the `thumb`, `label`, `rowHTML` and `sec` functions there.
+In Astro, the rendering belongs in `public/scripts/quote-engine.js` (it draws
+the price list) and the CSS in `src/styles/site.css`.
 
 ## What is deliberately not here yet
 
