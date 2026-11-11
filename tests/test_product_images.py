@@ -114,7 +114,32 @@ def test_p05_missing_banner_falls_back_to_visible_heading(browser):
 
 @needs_live_layout
 def test_p06_no_sideways_scrolling_on_a_phone(browser):
+    # Checks the page as it opens, then each iron rod tab once its web font
+    # and banner have finished loading: an earlier version of the banner only
+    # widened the page after the Montserrat font had loaded.
     page, _ = open_site(browser, mobile=True)
     width = page.evaluate("[innerWidth, document.documentElement.scrollWidth]")
-    assert width == [390, 390], f"page is wider than the phone screen: {width}"
+    assert width == [390, 390], f"page is wider than the phone screen on opening: {width}"
+    for cat in BANNERS:
+        _tab(page, cat)
+        state = page.evaluate("""async cat => {
+            await document.fonts.ready;
+            const sec = [...document.querySelectorAll('#list .slide section')]
+                .find(s => s.querySelector('h2').textContent.trim() === cat);
+            const img = sec.querySelector('img.banner');
+            if (!img.complete) await new Promise(r => {
+                img.addEventListener('load', r, {once: true});
+                img.addEventListener('error', r, {once: true});
+            });
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+            const b = img.getBoundingClientRect();
+            return {loaded: img.naturalWidth > 0, viewport: innerWidth,
+                    page: document.documentElement.scrollWidth,
+                    banner: Math.round(b.width), bannerRight: Math.round(b.right)};
+        }""", cat)
+        assert state["loaded"], f"{cat}: banner did not load"
+        assert state["viewport"] == 390 and state["page"] == 390, \
+            f"{cat}: page is wider than the phone screen: {state}"
+        assert 0 < state["banner"] <= 390 and state["bannerRight"] <= 390, \
+            f"{cat}: banner does not fit the screen: {state}"
     page.context.close()
