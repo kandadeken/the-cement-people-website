@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- sitemap.xml - the list of pages for search engines. The site is one page
+     today; add each new page's full address here when there are more. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://thecementpeople.com/</loc></url>
+</urlset>
