@@ -12,8 +12,6 @@ import os
 
 import pytest
 
-from PIL import Image
-
 from conftest import ROOT, SITE_URL, open_site
 
 # The Astro version in web/ doesn't have the product images yet; they are
@@ -189,6 +187,23 @@ THUMBS = ["supacem-32-5", "supacem-42-5", "dzata-42-5", "ghacem-waterproof-42-5"
 THUMB_WIDTHS = [80, 96, 120, 160, 192, 240, 288]
 
 
+def webp_size(path):
+    """Width and height of a WebP file, read from its header (no image library
+    needed, so the GitHub test machines don't need anything extra installed)."""
+    b = path.read_bytes()[:40]
+    assert b[:4] == b"RIFF" and b[8:12] == b"WEBP", f"{path.name} is not a WebP file"
+    kind = b[12:16]
+    if kind == b"VP8 ":  # ordinary (lossy) WebP
+        return (int.from_bytes(b[26:28], "little") & 0x3FFF,
+                int.from_bytes(b[28:30], "little") & 0x3FFF)
+    if kind == b"VP8L":  # lossless WebP
+        bits = int.from_bytes(b[21:25], "little")
+        return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+    if kind == b"VP8X":  # extended WebP (e.g. with colour profile)
+        return int.from_bytes(b[24:27], "little") + 1, int.from_bytes(b[27:30], "little") + 1
+    raise AssertionError(f"{path.name}: unknown WebP type {kind!r}")
+
+
 def test_p08_every_thumbnail_exists_in_every_size():
     # Square, the size its name says, and each one smaller than the next.
     for n in THUMBS:
@@ -196,8 +211,7 @@ def test_p08_every_thumbnail_exists_in_every_size():
         for w in THUMB_WIDTHS + [360]:
             f = IMAGES / (f"{n}.webp" if w == 360 else f"{n}-{w}.webp")
             assert f.is_file(), f"missing {f.relative_to(ROOT)}"
-            with Image.open(f) as im:
-                assert im.format == "WEBP" and im.size == (w, w), f"{f.name}: {im.format} {im.size}"
+            assert webp_size(f) == (w, w), f"{f.name} is {webp_size(f)}, expected {w} x {w}"
             size = f.stat().st_size
             assert size > last, f"{f.name} should be larger than the next size down"
             last = size
