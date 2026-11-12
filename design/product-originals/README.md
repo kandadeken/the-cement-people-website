@@ -21,6 +21,26 @@ The website uses the small optimised copies in `images/products/` instead:
 | `binding-wire.png` | `images/products/binding-wire.webp` | square crop of the coil, 360 × 360, WebP |
 | `iron-rods.png` | `images/products/iron-rods-720.webp`, `-1086.webp`, `-1440.webp` | whole image at three widths (720, 1086, 1440 px), WebP quality 82; one shared photo for both rod tabs, labelled only "8 mm to 16 mm \| 30 ft length" |
 
+### Smaller copies for the price list thumbnails
+
+The price list shows the thumbnails at 96 × 96 px on computers and tablets and
+80 × 80 px on phones. Each thumbnail also exists in smaller copies, named with
+the width added: `supacem-32-5-80.webp`, `-96`, `-120`, `-160`, `-192`, `-240`
+and `-288` (the 360 px file without a number stays as the fallback). The
+browser downloads the smallest copy that is still sharp on the visitor's screen,
+for example `-120` on a PC with 125% display scaling and `-240` on a typical
+phone.
+
+How they were made (12 November 2026), so they can be remade the same way:
+
+- **Cement bags:** from the 1024 × 1024 masters in this folder. The square crop
+  is the one used for the 360 px file: the bag and its shadow (every pixel darker
+  than 215 in any colour channel), plus 5%, centred. Each size is a Lanczos
+  shrink of that crop, saved as WebP quality 86 (method 6).
+- **Binding wire:** from the approved 360 px `images/products/binding-wire.webp`,
+  because its exact crop from `binding-wire.png` could not be reproduced. The
+  copies are only ever smaller than 360 px, so nothing is enlarged.
+
 ## The Sunburst cement bags
 
 | Bag | Design reference used |
