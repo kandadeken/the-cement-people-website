@@ -178,6 +178,43 @@ def test_l07_github_pages_publishes_robots_and_sitemap():
         assert not (ROOT / name).read_text(encoding="utf-8").startswith("---")
 
 
+def test_l09_favicon_is_linked_present_and_the_right_size():
+    # The favicon is the small icon in browser tabs and next to the site in
+    # Google results. Google wants a square icon at a multiple of 48 pixels.
+    # Each linked file must exist, be published, and match its stated size;
+    # the Astro version (web/public/) must carry identical copies.
+    import struct
+
+    icons = {l["href"]: l for l in HEAD.links
+             if l.get("rel") in ("icon", "apple-touch-icon")}
+    expected = {"/favicon.ico", "/favicon.svg", "/favicon-96x96.png", "/apple-touch-icon.png"}
+    assert set(icons) == expected, sorted(icons)
+
+    excluded = re.findall(r"^\s*-\s*(\S+)", (ROOT / "_config.yml").read_text(encoding="utf-8"), re.M)
+    for href in expected:
+        name = href.lstrip("/")
+        data = (ROOT / name).read_bytes()
+        assert name not in excluded, f"{name} is excluded from the published site"
+        assert data == (ROOT / "web" / "public" / name).read_bytes(), \
+            f"{name} differs between the live site and web/public/"
+        if name.endswith(".png"):
+            assert data[:8] == b"\x89PNG\r\n\x1a\n", f"{name} is not a PNG"
+            width, height = struct.unpack(">II", data[16:24])
+            assert width == height, f"{name} is not square"
+            stated = icons[href].get("sizes")
+            if stated:
+                assert stated == f"{width}x{height}", f"{name} says {stated}, is {width}x{height}"
+            if icons[href]["rel"] == "icon":
+                assert width % 48 == 0, f"{name} should be a multiple of 48 px for Google"
+        elif name.endswith(".ico"):
+            assert data[:4] == b"\x00\x00\x01\x00", "favicon.ico is not an ICO file"
+            count = struct.unpack("<H", data[4:6])[0]
+            sizes = {(data[6 + 16 * i] or 256) for i in range(count)}
+            assert 48 in sizes, f"favicon.ico has no 48x48 image (has {sorted(sizes)})"
+        else:
+            assert "<svg" in data.decode("utf-8")
+
+
 ASTRO_BUILD = os.environ.get("TCP_SITE_URL", "").startswith("http://127.0.0.1:4321")
 
 

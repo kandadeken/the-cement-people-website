@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!--
+    favicon.svg - the small icon for browser tabs and Google search results.
+
+    It is the brick-stair mark from the logo (three charcoal bricks, one
+    yellow) on a white rounded square, so it stays visible on both light and
+    dark tabs. The mark is kept away from the edges because Google shows
+    favicons cut to a circle.
+
+    The PNG and ICO copies (favicon.ico, favicon-96x96.png,
+    apple-touch-icon.png) are made from this drawing; if it changes, remake
+    them too. A copy lives in web/public/ for the Astro version of the site.
+  -->
+  <rect width="48" height="48" rx="9" fill="#ffffff"/>
+  <g transform="translate(6.3 12.6) scale(0.6)"><rect x="0" y="26" width="28" height="12" rx="1" fill="#111111"/><rect x="31" y="26" width="28" height="12" rx="1" fill="#111111"/><rect x="17" y="13" width="42" height="12" rx="1" fill="#111111"/><rect x="31" y="0" width="28" height="12" rx="1" fill="#f2c300"/></g>
+</svg>

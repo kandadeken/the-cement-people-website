@@ -55,6 +55,13 @@ const structuredData = JSON.stringify(
 <meta name="description" content={description}>
 <link rel="canonical" href={canonical}>
 
+<!-- Favicon (browser tabs and Google results). Files are in public/; the
+     same set is at the repository root for the live site. -->
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-96x96.png" type="image/png" sizes="96x96">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
 <!-- Link previews (WhatsApp, Facebook, X) -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content={business.name}>
