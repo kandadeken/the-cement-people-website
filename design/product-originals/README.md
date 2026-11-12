@@ -3,8 +3,8 @@
 These are the master copies of the product pictures. The four cement bags were
 regenerated on 12 November 2026 with OpenAI's Sunburst image model
 (gpt-image-2.6-sunburst), using each manufacturer's official product photo as
-the design reference (PNG, 1024 × 1024 pixels, 0.5 to 0.9 MB each, bag on a
-white background). Binding wire and iron rods are still the ChatGPT originals
+the design reference. They are PNG, 1024 × 1024 pixels, 1.2 to 1.4 MB each,
+exactly as downloaded from the OpenAI playground (bag on a white background). Binding wire and iron rods are still the ChatGPT originals
 (PNG, about 2172 × 724 pixels).
 They are kept here so a better crop or a new size can always be made from the
 best available version. This folder is **not published** on the website
