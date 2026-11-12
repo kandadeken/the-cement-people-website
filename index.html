@@ -214,9 +214,15 @@ input[type=search],#loc,select{border:1px solid var(--line);border-radius:6px;fo
    photo of the rods (labelled only "8 mm to 16 mm | 30 ft length"), followed by
    the tab's normal heading (Single Piece / Per Ton) and a one-line note on how
    it is sold. Image sizes are set in the HTML (width/height) so the page
-   doesn't jump while pictures load. */
-.row.has-img{grid-template-columns:64px minmax(0,1fr) auto auto}
-.thumb{display:block;width:64px;height:64px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px}
+   doesn't jump while pictures load.
+   Thumbnail size (approved 12 Nov 2026 after a side-by-side comparison):
+   96 x 96 px on computers and tablets, 80 x 80 px on phones (see the
+   max-width:560px block further down). The thin grey frame is drawn just
+   OUTSIDE the photo (box-shadow) instead of inside it (border), so the photo
+   gets the full 96 px. On a PC with 125% display scaling, 96 px is then exactly
+   120 screen pixels, which keeps the picture crisp. */
+.row.has-img{grid-template-columns:96px minmax(0,1fr) auto auto}
+.thumb{display:block;width:96px;height:96px;object-fit:contain;background:#fff;border:0;box-shadow:0 0 0 1px var(--line);border-radius:6px}
 .banner{display:block;width:100%;max-width:100%;min-width:0;height:auto;aspect-ratio:3/1;object-fit:cover;background:#fff;border:1px solid var(--line);border-radius:8px;margin:24px 0 0}
 /* Stops the banner's large built-in size from widening the price list column
    on phones; the column takes the screen width instead. */
@@ -231,8 +237,10 @@ section.nobanner .banner{display:none}
 .nm .rn{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
 .nm .sz{order:-1;display:inline-block;min-width:76px;text-align:center;background:#111;color:#fff;font-weight:800;font-size:17px;line-height:1;padding:9px 10px;border-radius:6px;letter-spacing:.01em}
 @media (max-width:560px){
-.row.has-img{grid-template-columns:64px minmax(0,1fr) auto}
-.row.has-img .thumb{grid-row:span 2;align-self:start}
+/* Phones: 80 x 80 px thumbnail. It fits the existing row height (the name,
+   unit and price already stack to about this height), so rows don't grow. */
+.row.has-img{grid-template-columns:80px minmax(0,1fr) auto}
+.row.has-img .thumb{width:80px;height:80px;grid-row:span 2;align-self:start}
 .row.has-img .nm{grid-column:2/-1}
 .banner{margin-top:18px}
 }
@@ -410,7 +418,20 @@ $("#tabs").innerHTML=cats.map(c=>`<button data-cat="${c}" aria-pressed="${c===ca
 // Product photo shown in front of the name (only for products with an img).
 // Loaded straight away (not "lazy"): the cement photos are on screen when the
 // page opens, and the files are small.
-const thumb=p=>p.img?`<img class="thumb" src="${p.img}" alt="${p.alt||""}" width="64" height="64">`:"";
+// Each photo exists in several sizes: "supacem-32-5-120.webp" is the 120 px
+// copy of "supacem-32-5.webp" (the 360 px file, kept as the fallback). The
+// browser picks the smallest copy that is still sharp on the visitor's screen:
+// e.g. a PC at 125% scaling shows 96 px x 1.25 = 120 screen pixels, so it takes
+// the 120 px copy; a phone at 3x shows 80 px x 3 = 240, so it takes 240.
+// To add a product photo: put the 360 px file in images/products/ and make the
+// smaller copies with the same name plus "-80", "-96", "-120", ... (see
+// design/product-originals/README.md).
+const THUMB_WIDTHS=[80,96,120,160,192,240,288];
+// How wide the thumbnail is shown: 80 px on phones, 96 px everywhere else.
+// Keep in step with the .thumb sizes in the CSS above.
+const THUMB_SIZES="(max-width:560px) 80px, 96px";
+const thumbSrcset=src=>THUMB_WIDTHS.map(w=>`${src.replace(/\.webp$/,`-${w}.webp`)} ${w}w`).concat(`${src} 360w`).join(", ");
+const thumb=p=>p.img?`<img class="thumb" src="${p.img}" srcset="${thumbSrcset(p.img)}" sizes="${THUMB_SIZES}" alt="${p.alt||""}" width="96" height="96">`:"";
 // Product name. For rods the size becomes a bold tag; the text still reads
 // "Iron rod 16 mm" in that order, the tag is only moved to the front by CSS.
 const label=p=>p.size&&p.name.endsWith(p.size)?`<span class="rn">${p.name.slice(0,-p.size.length)}<b class="sz">${p.size}</b></span>`:p.name;

@@ -5,12 +5,16 @@ These checks make sure the pictures load, that every tab keeps its visible text
 heading, that both iron rod tabs share one photo (downloaded once, in a size
 that suits the screen), that the rod sizes are real text, that a missing photo
 is simply left out, and that the images don't make the page wider than a phone.
+The last checks cover the thumbnail sizes: 96 px on computers and tablets,
+80 px on phones, with each screen downloading the size that suits it.
 """
 import os
 
 import pytest
 
-from conftest import ROOT, open_site
+from PIL import Image
+
+from conftest import ROOT, SITE_URL, open_site
 
 # The Astro version in web/ doesn't have the product images yet; they are
 # carried over before the switch-over (see web/README.md, "Product images").
@@ -173,4 +177,95 @@ def test_p07_phone_uses_the_small_rod_photo_for_both_tabs(browser):
         _tab(page, cat)
         used.append(page.evaluate(READ_TAB, cat)["img"]["src"])
     assert used == ["iron-rods-720.webp", "iron-rods-720.webp"], f"rod photo on a phone: {used}"
+    page.context.close()
+
+
+# ---------------------------------------------------------------------------
+# Thumbnail sizes (added on the responsive-thumbnails branch, approved
+# 12 Nov 2026): 96 x 96 px on computers and tablets, 80 x 80 px on phones, each
+# photo in several sizes so every screen downloads only what it needs.
+# ---------------------------------------------------------------------------
+THUMBS = ["supacem-32-5", "supacem-42-5", "dzata-42-5", "ghacem-waterproof-42-5", "binding-wire"]
+THUMB_WIDTHS = [80, 96, 120, 160, 192, 240, 288]
+
+
+def test_p08_every_thumbnail_exists_in_every_size():
+    # Square, the size its name says, and each one smaller than the next.
+    for n in THUMBS:
+        last = 0
+        for w in THUMB_WIDTHS + [360]:
+            f = IMAGES / (f"{n}.webp" if w == 360 else f"{n}-{w}.webp")
+            assert f.is_file(), f"missing {f.relative_to(ROOT)}"
+            with Image.open(f) as im:
+                assert im.format == "WEBP" and im.size == (w, w), f"{f.name}: {im.format} {im.size}"
+            size = f.stat().st_size
+            assert size > last, f"{f.name} should be larger than the next size down"
+            last = size
+
+
+def _open(browser, width, height, scale, mobile=False):
+    context = browser.new_context(viewport={"width": width, "height": height},
+                                  device_scale_factor=scale, is_mobile=mobile, has_touch=mobile)
+    page = context.new_page()
+    page.goto(SITE_URL, wait_until="load")
+    page.wait_for_load_state("networkidle")
+    return page
+
+
+# Reads every visible thumbnail: the file the browser chose, the size of the
+# photo itself, and where the name, price and Add button sit in its row.
+READ_THUMBS = """() => [...document.querySelectorAll('#list img.thumb')]
+    .filter(i => i.getBoundingClientRect().width > 0).map(i => {
+        const row = i.closest('.row'), r = i.getBoundingClientRect();
+        const nm = row.querySelector('.nm').getBoundingClientRect();
+        const pr = row.querySelector('.pr').getBoundingClientRect();
+        const bt = row.querySelector('[data-inc]').getBoundingClientRect();
+        return {file: i.currentSrc.split('/').pop(), loaded: i.naturalWidth > 0,
+                box: [r.width, r.height], photo: [i.clientWidth, i.clientHeight],
+                sizes: i.sizes, srcset: i.srcset,
+                nameAfterPhoto: nm.left >= r.right, nameOneLine: nm.height < 60,
+                priceInsideRow: pr.right <= row.getBoundingClientRect().right + 0.5,
+                buttonInsideRow: bt.right <= row.getBoundingClientRect().right + 0.5};
+    })"""
+
+
+@needs_live_layout
+@pytest.mark.parametrize("width,height,scale,mobile,shown,expected_file", [
+    (1536, 742, 1.0, False, 96, "-96.webp"),    # ordinary PC screen
+    (1536, 742, 1.25, False, 96, "-120.webp"),  # PC with 125% display scaling
+    (1440, 900, 2.0, False, 96, "-192.webp"),   # high-resolution laptop
+    (820, 1180, 2.0, True, 96, "-192.webp"),    # tablet
+    (390, 844, 3.0, True, 80, "-240.webp"),     # typical phone
+    (360, 800, 2.0, True, 80, "-160.webp"),     # small phone
+])
+def test_p09_thumbnail_size_and_file_suit_the_screen(browser, width, height, scale, mobile,
+                                                     shown, expected_file):
+    page = _open(browser, width, height, scale, mobile)
+    for t in page.evaluate(READ_THUMBS):
+        assert t["loaded"], t
+        # The whole box is photo: the frame is drawn outside it, not inside.
+        assert t["box"] == [shown, shown] and t["photo"] == [shown, shown], t
+        assert t["file"].endswith(expected_file), f"{width}px @{scale}x chose {t['file']}"
+        assert t["sizes"] == "(max-width:560px) 80px, 96px", t["sizes"]
+        assert t["nameAfterPhoto"] and t["nameOneLine"], f"name crowded or wrapped: {t}"
+        assert t["priceInsideRow"] and t["buttonInsideRow"], f"price or button pushed out: {t}"
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "page scrolls sideways"
+    page.context.close()
+
+
+@needs_live_layout
+def test_p10_phone_thumbnail_is_no_taller_than_the_row_text(browser):
+    # On a phone the name, unit and price stack beside the photo. The 80 px
+    # photo must be no taller than that stack, so it doesn't make rows longer.
+    page = _open(browser, 390, 844, 3.0, True)
+    rows = page.evaluate("""() => [...document.querySelectorAll('#list .row.has-img')]
+        .filter(r => r.getBoundingClientRect().width > 0).map(r => {
+            const nm = r.querySelector('.nm').getBoundingClientRect();
+            const pr = r.querySelector('.pr').getBoundingClientRect();
+            return {photo: r.querySelector('img.thumb').getBoundingClientRect().height,
+                    text: Math.max(pr.bottom, r.querySelector('[data-inc]').getBoundingClientRect().bottom) - nm.top};
+        })""")
+    assert rows, "no phone rows with photos found"
+    for r in rows:
+        assert r["photo"] <= r["text"] + 1, f"photo taller than the row text: {r}"
     page.context.close()
