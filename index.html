@@ -3,7 +3,99 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>The Cement People | Building materials and cost estimator</title>
+<title>The Cement People</title>
+<!-- Search engines (added 12 Nov 2026 so Google can index the live site).
+     The page title is just the brand name, by the owner's choice; what the
+     business does and where it is goes in the description and in the
+     structured data below. All details are the confirmed ones in
+     tests/baseline/business.json (also used by the Astro version in web/):
+     change them there and here together. -->
+<meta name="description" content="Cement, iron rods and binding wire from Krispol City, Kasoa, delivered across Kasoa and Greater Accra. See prices in Ghana cedis, build an estimate and send it on WhatsApp.">
+<link rel="canonical" href="https://thecementpeople.com/">
+<!-- Structured data: tells search engines who the business is, where it is,
+     when it is open and where it delivers. One physical shop (Store, a kind
+     of LocalBusiness) in Kasoa; Kasoa and Greater Accra are delivery areas
+     (areaServed), not extra locations. The map position is the one on the
+     business's Google Maps listing. No ratings, reviews or prices. -->
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "Store",
+   "@id": "https://thecementpeople.com/#store",
+   "name": "The Cement People",
+   "url": "https://thecementpeople.com/",
+   "description": "Cement, iron rods and binding wire from Krispol City, Kasoa, delivered across Kasoa and Greater Accra. See prices in Ghana cedis, build an estimate and send it on WhatsApp.",
+   "telephone": "+233558463468",
+   "email": "sales@thecementpeople.com",
+   "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "Krispol City Road, Krispol City",
+    "addressLocality": "Kasoa",
+    "addressRegion": "Central Region",
+    "addressCountry": "GH"
+   },
+   "geo": {
+    "@type": "GeoCoordinates",
+    "latitude": 5.5336575,
+    "longitude": -0.4515421
+   },
+   "hasMap": "https://maps.app.goo.gl/4SLMLa7DXVrXhDie8",
+   "openingHoursSpecification": [
+    {
+     "@type": "OpeningHoursSpecification",
+     "dayOfWeek": [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday"
+     ],
+     "opens": "07:00",
+     "closes": "17:00"
+    }
+   ],
+   "areaServed": [
+    {
+     "@type": "Place",
+     "name": "Kasoa"
+    },
+    {
+     "@type": "Place",
+     "name": "Greater Accra"
+    }
+   ],
+   "currenciesAccepted": "GHS"
+  },
+  {
+   "@type": "WebSite",
+   "@id": "https://thecementpeople.com/#website",
+   "url": "https://thecementpeople.com/",
+   "name": "The Cement People",
+   "inLanguage": "en",
+   "publisher": {
+    "@id": "https://thecementpeople.com/#store"
+   }
+  },
+  {
+   "@type": "WebPage",
+   "@id": "https://thecementpeople.com/#webpage",
+   "url": "https://thecementpeople.com/",
+   "name": "The Cement People",
+   "description": "Cement, iron rods and binding wire from Krispol City, Kasoa, delivered across Kasoa and Greater Accra. See prices in Ghana cedis, build an estimate and send it on WhatsApp.",
+   "inLanguage": "en",
+   "isPartOf": {
+    "@id": "https://thecementpeople.com/#website"
+   },
+   "about": {
+    "@id": "https://thecementpeople.com/#store"
+   }
+  }
+ ]
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -521,8 +613,10 @@ let ps=document.getElementById("qpage");
 if(!ps){ps=document.createElement("style");ps.id="qpage";document.head.appendChild(ps);}
 ps.textContent=`@page{@top-left{content:"The Cement People  ·  Estimate ${REF}";font:700 7.5pt Montserrat,Arial,sans-serif;color:#111;vertical-align:bottom;padding-bottom:2mm}@top-right{content:"Continued";font:7.5pt Montserrat,Arial,sans-serif;color:#777;vertical-align:bottom;padding-bottom:2mm}}@page:first{@top-left{content:none}@top-right{content:none}}`;
 }
+// Remember the normal page title so it can be put back after printing.
+const PAGE_TITLE=document.title;
 addEventListener("beforeprint",()=>{renderEst();document.title=`The Cement People Estimate ${REF}`;});
-addEventListener("afterprint",()=>{document.title="The Cement People | Building materials and cost estimator";});
+addEventListener("afterprint",()=>{document.title=PAGE_TITLE;});
 function set(id,n){
 n=Math.max(0,Math.min(9999,n));
 if(n)qty[id]=n;else delete qty[id];

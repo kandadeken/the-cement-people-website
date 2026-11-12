@@ -16,6 +16,7 @@ the change broke something and should not be merged.
 | `test_catalogue.py` | 6 | All 17 product names, units and prices match `baseline/products.json` on the price list, the estimate, the WhatsApp message and the PDF; the Print button works |
 | `test_product_images.py` | 15 | Product photos exist and stay small; cement and wire photos load straight away with alt text; both rod tabs show the same shared photo, then a visible heading and a "how it's sold" note; rod sizes are text tags; a missing photo is left out while the heading stays; no sideways scrolling on a phone, including on the rod tabs once the font and photo load; a phone gets the small 720 px rod photo for both tabs; every thumbnail exists in every size (80 to 360 px); thumbnails show at 96 px on computers and tablets and 80 px on phones, with the whole box used for the photo, and each screen (1×, 1.25×, 2×, 3×) downloads the size that suits it without names wrapping or prices being pushed out; the phone photo is no taller than the row's text |
 | `test_seo.py` | 13 | Search-engine and AI readability of the Astro site: all 17 products present in the HTML without JavaScript and identical to what the engine draws; title, description, canonical address and link preview; structured data valid and containing only the confirmed details in `baseline/business.json`; business details visible; heading outline; image descriptions and sizes; sitemap; robots.txt; no broken links; logo file |
+| `test_seo_live.py` | 8 | Search-engine basics on the live single-file site: title is only "The Cement People"; description and canonical address; structured data valid, linked and containing only the confirmed details in `baseline/business.json` (one shop in Kasoa, delivery areas as areas served, no ratings or prices); robots.txt lets search engines in and names the sitemap; sitemap.xml lists the homepage; GitHub Pages publishes both files; the title goes back to normal after printing |
 
 `baseline/ORIGINAL_35_CHECKS.md` maps each of the 35 tests to the check it
 came from and records what was strengthened. Nothing was removed.
@@ -124,6 +125,7 @@ tests/
 ├─ test_product_images.py     product photos, banners and rod size tags
 ├─ screenshots/               review screenshots attached to pull requests
 ├─ test_seo.py                search-engine checks (Astro site only)
+├─ test_seo_live.py           search-engine basics on the live site
 ├─ baseline/
 │  ├─ products.json           reference copy of the 17 products
 │  ├─ business.json           reference copy of the confirmed business details
