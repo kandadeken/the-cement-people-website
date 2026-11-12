@@ -220,7 +220,13 @@ input[type=search],#loc,select{border:1px solid var(--line);border-radius:6px;fo
    max-width:560px block further down). The thin grey frame is drawn just
    OUTSIDE the photo (box-shadow) instead of inside it (border), so the photo
    gets the full 96 px. On a PC with 125% display scaling, 96 px is then exactly
-   120 screen pixels, which keeps the picture crisp. */
+   120 screen pixels, so the browser can show the 120 px copy (see THUMB_WIDTHS
+   in the script) one-to-one. Whether a picture is drawn one-to-one also depends
+   on where it lands on the screen's pixel grid, which depends on the window
+   width and the text above it. Checked 12 Nov 2026: desktop Chrome on Windows
+   at 125% snaps the thumbnails to whole screen pixels and drew them exactly at
+   every position tested. Other browsers may handle in-between positions
+   differently and look slightly softer; nothing on the page can control that. */
 .row.has-img{grid-template-columns:96px minmax(0,1fr) auto auto}
 .thumb{display:block;width:96px;height:96px;object-fit:contain;background:#fff;border:0;box-shadow:0 0 0 1px var(--line);border-radius:6px}
 .banner{display:block;width:100%;max-width:100%;min-width:0;height:auto;aspect-ratio:3/1;object-fit:cover;background:#fff;border:1px solid var(--line);border-radius:8px;margin:24px 0 0}
