@@ -31,6 +31,12 @@
       instead of a title typed into this file.
    The same price-list markup is also written into the page at build time by
    src/lib/catalog-html.ts; a test keeps the two identical.
+
+   PHASE 3 (Astro parity, Nov 2026) - presentation only, no calculation touched
+   Carried over from the live index.html: product thumbnails, the bold rod
+   size tags, and the shared iron-rods banner with a "how it's sold" note at
+   the top of each rod tab (see "Product photos" below). The data for them
+   comes from products.json and categories.json through the tcp-data block.
    =========================================================================== */
 // ---------------------------------------------------------------------------
 // DATA HOOK-UP 1 of 2: products, currency and tax rate
@@ -38,7 +44,10 @@
 // <script type="application/json" id="tcp-data"> block, built by Astro from
 // src/data/products.json and src/config/business.ts. "P" stays a plain
 // global variable, exactly as before (the regression tests rely on that).
-// Each product: {id, cat, sub (optional subgroup), name, unit, price}.
+// Each product: {id, cat, sub (optional subgroup), name, unit, price}, plus
+// optional img (square photo), alt (its description) and size (rod size tag).
+// The block also carries "banners" and "categoryInfo" (tab photos and notes,
+// from src/data/categories.json).
 // ---------------------------------------------------------------------------
 const TCP=JSON.parse(document.getElementById("tcp-data").textContent);
 const CURRENCY=TCP.currency,TAX_RATE=TCP.taxRate;
@@ -68,9 +77,52 @@ const ctrl=p=>{const n=qty[p.id]||0;return n
 function renderTabs(){
 $("#tabs").innerHTML=cats.map(c=>`<button data-cat="${c}" aria-pressed="${c===cat}">${c}</button>`).join("");
 }
-const rowHTML=p=>`<div class="row"><div class="nm">${p.name}<small>per ${p.unit}</small></div><div class="pr">${money(p.price)}</div>${ctrl(p)}</div>`;
-const sec=(g,l)=>{const subs=[...new Set(l.map(p=>p.sub||""))];return `<section><h3>${ICON[g]||""}${g}</h3>${subs.map(x=>(x?`<h4>${x}</h4>`:"")+l.filter(p=>(p.sub||"")===x).map(rowHTML).join("")).join("")}</section>`;};
+// ---- Product photos, rod size tags and tab banners (Phase 3: carried over
+// from the live index.html, product-images and responsive-thumbnails work) ----
+// Products with an "img" get a square thumbnail in front of the name. Each
+// photo exists in several sizes: "supacem-32-5-120.webp" is the 120 px copy
+// of "supacem-32-5.webp" (the 360 px file, kept as the fallback). The browser
+// picks the smallest copy that is still sharp on the visitor's screen: e.g. a
+// PC at 125% scaling shows 96 px x 1.25 = 120 screen pixels and takes the
+// 120 px copy; a phone at 3x shows 80 px x 3 = 240 and takes 240. Loaded
+// straight away (not "lazy"): the cement photos are on screen when the page
+// opens, and the files are small. Shown 96 px on computers and tablets, 80 px
+// on phones: keep THUMB_SIZES in step with the .thumb sizes in site.css.
+const THUMB_WIDTHS=[80,96,120,160,192,240,288];
+const THUMB_SIZES="(max-width:560px) 80px, 96px";
+const thumbSrcset=src=>THUMB_WIDTHS.map(w=>`${src.replace(/\.webp$/,`-${w}.webp`)} ${w}w`).concat(`${src} 360w`).join(", ");
+const thumb=p=>p.img?`<img class="thumb" src="${p.img}" srcset="${thumbSrcset(p.img)}" sizes="${THUMB_SIZES}" alt="${p.alt||""}" width="96" height="96">`:"";
+// Rods: the size ("16 mm") becomes a bold tag. The text still reads
+// "Iron rod 16 mm" in that order; CSS only moves the tag to the front, so the
+// estimate, PDF, WhatsApp message and tests are unchanged.
+const label=p=>p.size&&p.name.endsWith(p.size)?`<span class="rn">${p.name.slice(0,-p.size.length)}<b class="sz">${p.size}</b></span>`:p.name;
+// Wide photo and "how it's sold" note for a whole tab, from
+// src/data/categories.json. Both rod tabs point at the SAME banner object
+// (ROD_PHOTO), so the photo is downloaded once. ROD_PHOTO is a global on
+// purpose: a test points it at a missing file to check the fallback.
+const BANNERS=TCP.banners||{};
+const ROD_PHOTO=BANNERS.rods;
+const CAT_INFO={};
+for(const [c,info] of Object.entries(TCP.categoryInfo||{}))CAT_INFO[c]={note:info.note,banner:info.banner?BANNERS[info.banner]:undefined};
+// Width the banner is shown at: the price list column on large screens,
+// the screen width minus the side margins on phones.
+const BANNER_SIZES="(min-width:1100px) 652px, (min-width:900px) calc(100vw - 448px), calc(100vw - 32px)";
+const rowHTML=p=>`<div class="row${p.img?" has-img":""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="pr">${money(p.price)}</div>${ctrl(p)}</div>`;
+// One category section. "browse" is true for the swipeable tabs and false for
+// search results; banner photos are only shown when browsing. If the banner
+// fails to load, the section gets class "nobanner" and the photo is hidden;
+// the heading always stays. Loaded with the page at low priority, so it is
+// usually ready before the customer opens a rod tab.
+const sec=(g,l,browse)=>{const subs=[...new Set(l.map(p=>p.sub||""))],info=CAT_INFO[g]||{},b=browse&&info.banner;
+return `<section>`
++(b?`<img class="banner" src="${b.src}" srcset="${b.srcset}" sizes="${BANNER_SIZES}" alt="" width="${b.w}" height="${b.h}" fetchpriority="low" onerror="this.closest('section').classList.add('nobanner')">`:"")
++`<h3>${ICON[g]||""}${g}</h3>`+(info.note?`<p class="cat-note">${info.note}</p>`:"")
++`${subs.map(x=>(x?`<h4>${x}</h4>`:"")+l.filter(p=>(p.sub||"")===x).map(rowHTML).join("")).join("")}</section>`;};
 function fit(){const L=$("#list");if(q||!L.children.length)return;const s=L.children[cats.indexOf(cat)];if(s)L.style.height=s.offsetHeight+"px";}
+// Re-measure the visible tab when a picture finishes loading or fails, so the
+// price list is never cut short or left with a gap.
+$("#list").addEventListener("load",()=>setTimeout(fit),true);
+$("#list").addEventListener("error",()=>setTimeout(fit),true);
 function renderList(){
 const L=$("#list");
 if(q){
@@ -80,7 +132,7 @@ L.innerHTML=M.length?[...new Set(M.map(p=>p.cat))].map(g=>sec(g,M.filter(p=>p.ca
 return;
 }
 L.className="snap";
-L.innerHTML=cats.map(g=>`<div class="slide">${sec(g,P.filter(p=>p.cat===g))}</div>`).join("");
+L.innerHTML=cats.map(g=>`<div class="slide">${sec(g,P.filter(p=>p.cat===g),true)}</div>`).join("");
 L.scrollLeft=cats.indexOf(cat)*L.clientWidth;
 fit();
 }

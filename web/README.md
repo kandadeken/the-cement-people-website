@@ -4,11 +4,14 @@ This folder is the new foundation for thecementpeople.com, built with
 [Astro](https://astro.build). It produces a plain static website: HTML, CSS,
 images and one script. No server, database or paid service is needed.
 
-> **Status (Phase 2):** not live. The live site is still the single file
-> `index.html` at the top of the repository, published by GitHub Pages from
-> `main`. Nothing in `web/` is published until the switch-over is approved.
-> Phase 1 rebuilt the site to look and behave identically. Phase 2 made it
-> readable by search engines and AI tools (see "Search engines" below).
+> **Status (Phase 3, parity):** not live. The live site is still the single
+> file `index.html` at the top of the repository, published by GitHub Pages
+> from `main`. Nothing in `web/` is published until the switch-over is
+> approved. Phase 1 rebuilt the site to look and behave identically. Phase 2
+> made it readable by search engines and AI tools (see "Search engines"
+> below). Phase 3 carried over everything added to the live site since then
+> (product photos, rod banner, rod size tags), so this version now matches it
+> feature for feature; every test runs on both versions.
 
 ## How it fits together
 
@@ -113,12 +116,10 @@ npm run preview   # serve the built website at http://localhost:4321
 ## Testing
 
 The regression tests in `../tests/` run against both versions of the site
-on every pull request: 41 quotation and catalogue tests on both, plus 13
-search-engine tests (`test_seo.py`) on this Astro version, plus 7
-product-image checks (`test_product_images.py`) on the original site. Here
-only the image-file check of those 7 runs; the 6 browser checks are skipped
-until the product images are carried over (see "Product images" below)
-(see `../.github/workflows/tests.yml`):
+on every pull request, with nothing skipped on this Astro version since
+Phase 3. `test_parity.py` covers what the migration plan found untested: the
+phone estimate bar, sliding between tabs, search words, the text and links of
+the header, hero, About, Contact and footer, and the favicons (see `../.github/workflows/tests.yml`):
 
 - **Original site:** the tests open `../index.html` directly.
 - **Astro build:** GitHub builds `web/`, serves `web/dist/` from a local web
@@ -136,14 +137,22 @@ TCP_SITE_URL=http://127.0.0.1:4321/ python -m pytest tests -v
 The built site must be served, not opened as a file: its pages load
 stylesheets from `/_astro/…` addresses, which only work through a web server.
 
-## Product images: carry over before the switch-over
+## Product images (carried over in Phase 3)
 
-Added to the **live** site (`../index.html`) on the `product-images` branch,
-before the switch-over. This Astro version does not have it yet. It must be
-carried over before Phase 4 so the switch-over doesn't remove it. Until then,
-the browser checks in `../tests/test_product_images.py` are skipped when the
-tests run against this build (they detect the local address
-`http://127.0.0.1:4321`); remove that skip once this is done.
+Added to the live site (`../index.html`) on the `product-images` and
+`responsive-thumbnails` branches, and carried over here in Phase 3, unchanged:
+
+- **Data:** `src/data/products.json` gives each product an optional `image`
+  (the 360 px file), `imageAlt` (description for screen readers) and `size`
+  (a rod's bold size tag). `src/data/categories.json` holds the shared
+  iron-rods banner and the "how it's sold" note for each rod tab.
+- **Drawing:** `public/scripts/quote-engine.js` (in the browser) and
+  `src/lib/catalog-html.ts` (at build time, for search engines) draw the same
+  markup; a test keeps them identical.
+- **Styles:** the "Product images" block at the end of `src/styles/site.css`.
+- **Files:** `public/images/products/` is a byte-for-byte copy of
+  `../images/products/`. Test P01b fails if the two folders ever differ, so
+  add or change a photo in both places, in the same pull request.
 
 ### Assets
 
@@ -225,10 +234,17 @@ ignoring them.
 7. **Height.** The price list re-measures its height when any image loads or
    fails, so the swipeable tabs never cut a row off.
 
-The CSS is in the block marked "Product images" in `../index.html`; the
-rendering is in the `thumb`, `label`, `rowHTML` and `sec` functions there.
-In Astro, the rendering belongs in `public/scripts/quote-engine.js` (it draws
-the price list) and the CSS in `src/styles/site.css`.
+In both versions the rendering is in the `thumb`, `label`, `rowHTML` and `sec`
+functions (in `../index.html`, and in `public/scripts/quote-engine.js` here).
+
+## Preview copy (before the switch-over)
+
+`node scripts/make-preview.mjs <folder>` copies the production build in
+`dist/` to a folder for a private preview site, and on the copy only: removes
+`CNAME` (so the preview never claims thecementpeople.com), marks every page
+noindex, blocks crawlers in `robots.txt`, and adds `.nojekyll`. The preview
+must be served from the root of its address, because the site links to
+`/images/...`, `/scripts/...` and so on.
 
 ## What is deliberately not here yet
 

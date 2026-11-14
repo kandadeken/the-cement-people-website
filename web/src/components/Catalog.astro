@@ -11,12 +11,13 @@
    The IDs #q, #tabs and #list are used by quote-engine.js and the tests.
 
    Props:
-     products  the catalogue in the engine's short form ({id, cat, sub?, ...}) */
+     products      the catalogue in the engine's short form ({id, cat, sub?, img?, size?, ...})
+     categoryInfo  tab banners and notes (from src/data/categories.json) */
 import { business } from "../config/business";
-import { tabsHTML, listHTML, type EngineProduct } from "../lib/catalog-html";
+import { tabsHTML, listHTML, type EngineProduct, type CategoryInfo } from "../lib/catalog-html";
 
-interface Props { products: EngineProduct[] }
-const { products } = Astro.props;
+interface Props { products: EngineProduct[]; categoryInfo: CategoryInfo }
+const { products, categoryInfo } = Astro.props;
 ---
 <div id="catalog">
 <h2 class="st">Products and prices</h2>
@@ -26,5 +27,5 @@ const { products } = Astro.props;
 <div class="tabs" id="tabs" set:html={tabsHTML(products)}></div>
 <p class="hint">Swipe left or right to switch category.</p>
 </div>
-<div id="list" class="snap" set:html={listHTML(products, business.currencySymbol)}></div>
+<div id="list" class="snap" set:html={listHTML(products, business.currencySymbol, categoryInfo)}></div>
 </div>

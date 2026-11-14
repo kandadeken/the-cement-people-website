@@ -26,12 +26,16 @@ import Footer from "../components/Footer.astro";
 import QuotePieces from "../components/QuotePieces.astro";
 
 import products from "../data/products.json";
+import categoryData from "../data/categories.json";
 import { business } from "../config/business";
-import { toEngineProducts, tilesHTML } from "../lib/catalog-html";
+import { toEngineProducts, toCategoryInfo, tilesHTML } from "../lib/catalog-html";
 
 // The products in the short form the quotation engine has always used:
 // each one as {id, cat, sub?, name, unit, price}.
 const engineProducts = toEngineProducts(products);
+
+// Tab banners and notes (rod photo, "Sold by the piece..."), from categories.json.
+const categoryInfo = toCategoryInfo(categoryData);
 
 // What the quotation engine reads from the page.
 const engineData = {
@@ -44,6 +48,8 @@ const engineData = {
     website: business.website,
   },
   products: engineProducts,
+  banners: categoryData.banners,
+  categoryInfo: categoryData.categories,
 };
 // JSON placed inside <script> must never contain "<" (it could close the tag early).
 const engineJson = JSON.stringify(engineData).replace(/</g, "\\u003c");
@@ -61,7 +67,7 @@ const engineJson = JSON.stringify(engineData).replace(/</g, "\\u003c");
 <section class="cats" id="cats" aria-label="Product categories" set:html={tilesHTML(engineProducts)}></section>
 
 <main id="products">
-<Catalog products={engineProducts} />
+<Catalog products={engineProducts} categoryInfo={categoryInfo} />
 
 <EstimatePanel />
 </main>

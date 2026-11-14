@@ -14,13 +14,19 @@ import pytest
 
 from conftest import ROOT, SITE_URL, open_site
 
-# The Astro version in web/ doesn't have the product images yet; they are
-# carried over before the switch-over (see web/README.md, "Product images").
-# GitHub runs the whole tests/ folder against the Astro build on port 4321,
-# so the in-browser checks are skipped there until that work is done.
-ASTRO_BUILD = os.environ.get("TCP_SITE_URL", "").startswith("http://127.0.0.1:4321")
-needs_live_layout = pytest.mark.skipif(
-    ASTRO_BUILD, reason="product images not yet carried over to the Astro version")
+# Both versions are tested: the live index.html, and the Astro build in web/
+# (GitHub runs the whole tests/ folder against it on port 4321). The product
+# images were carried over to Astro in Phase 3, so nothing is skipped any more.
+# Category headings are <h2> on the live site and <h3> in Astro (Phase 2 fixed
+# the heading outline there), so the checks below accept either.
+CAT_HEADING = ":is(h2,h3)"
+ASTRO_IMAGES = ROOT / "web" / "public" / "images" / "products"
+
+
+def needs_live_layout(f):
+    """Kept as a no-op so the test list reads the same as before Phase 3."""
+    return f
+
 
 IMAGES = ROOT / "images" / "products"
 CEMENT_AND_WIRE = ["c1", "c2", "c3", "c4", "i8"]
@@ -33,14 +39,14 @@ ROD_TABS = {
 READ_TAB = """async cat => {
     await document.fonts.ready;
     const sec = [...document.querySelectorAll('#list .slide section')]
-        .find(s => s.querySelector('h2').textContent.trim() === cat);
+        .find(s => s.querySelector(':is(h2,h3)').textContent.trim() === cat);
     const img = sec.querySelector('img.banner');
     if (img && !img.complete) await new Promise(r => {
         img.addEventListener('load', r, {once: true});
         img.addEventListener('error', r, {once: true});
     });
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const h2 = sec.querySelector('h2'), note = sec.querySelector('.cat-note');
+    const h2 = sec.querySelector(':is(h2,h3)'), note = sec.querySelector('.cat-note');
     const hb = h2.getBoundingClientRect(), ib = img && img.getBoundingClientRect();
     return {
         img: img && {src: img.currentSrc.split('/').pop(), loaded: img.naturalWidth > 0,
@@ -135,8 +141,8 @@ def test_p05_missing_photo_is_left_out_and_heading_stays(browser):
     page.wait_for_timeout(800)
     t = page.evaluate("""() => {
         const sec = [...document.querySelectorAll('#list .slide section')]
-            .find(s => s.querySelector('h2').textContent.includes('Single Piece'));
-        const r = sec.querySelector('h2').getBoundingClientRect();
+            .find(s => s.querySelector(':is(h2,h3)').textContent.includes('Single Piece'));
+        const r = sec.querySelector(':is(h2,h3)').getBoundingClientRect();
         return {left_out: sec.classList.contains('nobanner'),
                 img_shown: sec.querySelector('img.banner').getBoundingClientRect().height > 0,
                 w: r.width, h: r.height};
@@ -202,6 +208,18 @@ def webp_size(path):
     if kind == b"VP8X":  # extended WebP (e.g. with colour profile)
         return int.from_bytes(b[24:27], "little") + 1, int.from_bytes(b[27:30], "little") + 1
     raise AssertionError(f"{path.name}: unknown WebP type {kind!r}")
+
+
+def test_p01b_astro_has_the_same_image_files():
+    # The Astro site serves its own copy of the photos (web/public/images/
+    # products). It must hold exactly the same files, byte for byte, as the
+    # live site's images/products, so the two versions can never drift.
+    live = {f.name: f.read_bytes() for f in IMAGES.iterdir() if f.is_file()}
+    astro = {f.name: f.read_bytes() for f in ASTRO_IMAGES.iterdir() if f.is_file()}
+    assert sorted(astro) == sorted(live), \
+        f"different files: only live {sorted(set(live) - set(astro))}, only Astro {sorted(set(astro) - set(live))}"
+    changed = [n for n in live if live[n] != astro[n]]
+    assert not changed, f"files differ between the two copies: {changed}"
 
 
 def test_p08_every_thumbnail_exists_in_every_size():

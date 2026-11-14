@@ -39,7 +39,10 @@ SITE = BUSINESS["siteUrl"]            # the public address, https://thecementpeo
 CANONICAL = SITE + "/"
 
 # Images that are decoration only and so correctly have empty alt text.
-DECORATIVE_IMAGES = {"/images/hero-right.jpg"}
+# Images with empty alt text on purpose: the second hero photo (the first one
+# already describes the scene) and the iron-rods banner (the tab heading and
+# note under it say the same thing).
+DECORATIVE_IMAGES = {"/images/hero-right.jpg", "/images/products/iron-rods-1086.webp"}
 
 # Every property the Store description may carry. Adding one means adding it
 # here on purpose, with a confirmed source in baseline/business.json.
@@ -190,13 +193,38 @@ def jpeg_size(data):
     raise AssertionError("not a readable JPEG")
 
 
+def webp_size(data):
+    """Width and height of a WebP file, read from its header."""
+    assert data[:4] == b"RIFF" and data[8:12] == b"WEBP", "not a WebP file"
+    kind = data[12:16]
+    if kind == b"VP8 ":
+        return (int.from_bytes(data[26:28], "little") & 0x3FFF,
+                int.from_bytes(data[28:30], "little") & 0x3FFF)
+    if kind == b"VP8L":
+        bits = int.from_bytes(data[21:25], "little")
+        return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+    if kind == b"VP8X":
+        return int.from_bytes(data[24:27], "little") + 1, int.from_bytes(data[27:30], "little") + 1
+    raise AssertionError(f"unknown WebP type {kind!r}")
+
+
+def image_size(data):
+    """Width and height of a JPEG or WebP file."""
+    return webp_size(data) if data[:4] == b"RIFF" else jpeg_size(data)
+
+
 # ---- Products are readable without JavaScript ------------------------------
-ROW = re.compile(r'<div class="row"><div class="nm">([^<]+)<small>per ([^<]+)</small></div>'
+# A price-list row. Since Phase 3 a row may start with a product photo
+# (class "row has-img" + <img class="thumb">), and a rod's name holds its size
+# as a bold tag ("Iron rod <b class="sz">16 mm</b>"). The name is read with
+# its tags removed, so it must still say exactly "Iron rod 16 mm".
+ROW = re.compile(r'<div class="row(?: has-img)?">(?:<img class="thumb"[^>]*>)?<div class="nm">(.+?)<small>per ([^<]+)</small></div>'
                  r'<div class="pr">([^<]+)</div>')
+TAGS = re.compile(r"<[^>]+>")
 
 
 def test_s01_all_17_products_are_in_the_html_without_javascript(html, page):
-    rows = ROW.findall(html)
+    rows = [(TAGS.sub("", name), unit, price) for name, unit, price in ROW.findall(html)]
     assert len(rows) == len(PRODUCTS) == 17
     assert sorted(rows) == sorted((p["name"], p["unit"], money(p["price"])) for p in PRODUCTS)
     # Each category is a heading a crawler can read, under "Products and prices".
@@ -336,8 +364,15 @@ def test_s08_images_have_descriptions_and_real_dimensions(page):
             described += 1
         else:
             assert src in DECORATIVE_IMAGES, f"{src} has empty alt text but is not listed as decorative"
-        width, height = jpeg_size(fetch(src))
-        assert (image.get("width"), image.get("height")) == (str(width), str(height)), src
+        width, height = image_size(fetch(src))
+        if image.get("srcset"):
+            # Product photos come in several sizes (srcset); their width and
+            # height give the size they are shown at (96 x 96), so here only the
+            # shape must match the file, to within one percent.
+            w, h = int(image["width"]), int(image["height"])
+            assert abs(w / h - width / height) < 0.01, f"{src}: {w}x{h} attributes, file is {width}x{height}"
+        else:
+            assert (image.get("width"), image.get("height")) == (str(width), str(height)), src
     assert described >= 1
 
 
