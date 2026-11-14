@@ -7,7 +7,7 @@ can't quietly undo it:
   D01  the typeface comes from the website itself: no requests to Google
        Fonts or any other outside server
   D02  everything a customer taps (buttons, tabs, inputs, menu and nav links,
-       quantity buttons) is at least 44 px tall, on a phone and on a computer
+       quantity buttons and the number box between them) is at least 44 px tall, on a phone and on a computer
   D03  the quantity stepper is only as wide as its buttons and box (before,
        it stretched into an empty white strip on phones)
   D04  one content width: the header, the price list and the About section
@@ -39,7 +39,7 @@ def _skip_unless_astro(page):
 # Returns [selector, text, height] for every visible tappable control
 # smaller than the minimum.
 SMALL_CONTROLS = """min => {
-  const sel = ['.ctas a', '.add', '.step button', '.tabs button', 'input[type=search]',
+  const sel = ['.ctas a', '.add', '.step button', '.step input', '.tabs button', 'input[type=search]',
                '#loc', '.acts .cta', '.ghost', 'header .wa', '#menu', 'nav a', '.bar button'];
   const out = [];
   for (const s of sel) for (const e of document.querySelectorAll(s)) {
