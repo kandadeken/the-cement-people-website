@@ -237,6 +237,24 @@ ignoring them.
 In both versions the rendering is in the `thumb`, `label`, `rowHTML` and `sec`
 functions (in `../index.html`, and in `public/scripts/quote-engine.js` here).
 
+## Publishing (set up in the publishing phase, not yet switched on)
+
+`.github/workflows/astro-publish.yml` runs on every merge into `main` (and
+checks pull requests that touch the site). It:
+
+1. builds the site with the exact Astro version in `package-lock.json`;
+2. runs `node scripts/check-build.mjs`, which refuses a build that is marked
+   noindex, blocks search engines, has the wrong `CNAME` or canonical
+   address, links to a missing file, or lacks any of the 17 products;
+3. builds again and confirms the files are identical (reproducible);
+4. runs the full test suite against those exact files;
+5. packages them for GitHub Pages.
+
+The last job, "Publish", is switched off: it runs only when the repository
+variable `ASTRO_LIVE` is `true`. The live site is still the root
+`index.html`. How to switch thecementpeople.com over, and back, is in
+[`SWITCH-OVER.md`](SWITCH-OVER.md).
+
 ## Preview copy (before the switch-over)
 
 `node scripts/make-preview.mjs <folder>` copies the production build in

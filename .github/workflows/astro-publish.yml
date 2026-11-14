@@ -1,0 +1,141 @@
+name: Astro publishing
+
+# Builds the Astro website in web/, checks it, and packages it ready for
+# GitHub Pages - every time something is merged into main.
+#
+# WHAT THIS DOES TODAY (publishing phase, Nov 2026)
+#   Build, check and package only. The "Publish" job is switched OFF: it only
+#   runs when the repository variable ASTRO_LIVE is set to "true", which it is
+#   not. thecementpeople.com keeps being served from the root index.html on
+#   main ("Deploy from a branch"), exactly as before.
+#
+# WHAT HAPPENS AT THE SWITCH-OVER (a separate, approved step - see
+# web/SWITCH-OVER.md)
+#   1. Settings -> Pages -> Source: "GitHub Actions".
+#   2. Settings -> Secrets and variables -> Actions -> Variables:
+#      ASTRO_LIVE = true.
+#   3. Re-run this workflow on main. The package it built is then published.
+#   Rollback: set Source back to "Deploy from a branch, main, / (root)".
+#
+# On pull requests that touch the website, the build-and-check job runs too
+# (never the publish job), so a change that would break the build or the
+# checks shows a red cross before it is merged.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "web/**"
+      - "tests/**"
+      - ".github/workflows/astro-publish.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never two publishing runs at once; a newer merge waits for the older one.
+concurrency:
+  group: astro-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build, check and package the Astro site
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js (Astro 7 needs 22.23.4 or newer)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install the exact Astro version recorded in package-lock.json
+        working-directory: web
+        run: npm ci
+
+      - name: Check product data and build the site
+        working-directory: web
+        run: npm run build
+
+      # The production-safety check: refuses a build that has noindex, blocks
+      # search engines, has the wrong CNAME or canonical address, links to a
+      # missing file, or lacks any of the 17 products (web/scripts/check-build.mjs).
+      - name: Check the build is safe for thecementpeople.com
+        working-directory: web
+        run: node scripts/check-build.mjs
+
+      # Reproducible: a second clean build from the same commit must give
+      # exactly the same files, so what was tested is what gets published.
+      - name: Build again and confirm the files are identical
+        working-directory: web
+        run: |
+          (cd dist && find . -type f -exec sha256sum {} \; | sort -k2) > /tmp/first.txt
+          rm -rf dist
+          npm run build > /dev/null
+          (cd dist && find . -type f -exec sha256sum {} \; | sort -k2) > /tmp/second.txt
+          diff /tmp/first.txt /tmp/second.txt
+          echo "OK: two builds are identical ($(wc -l < /tmp/first.txt) files)"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tests/requirements.txt
+
+      - name: Install test tools
+        run: pip install -r tests/requirements.txt
+
+      - name: Install the test browser
+        run: python -m playwright install --with-deps chromium
+
+      - name: Serve the built site locally
+        run: |
+          python -m http.server 4321 --bind 127.0.0.1 --directory web/dist > server.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:4321/ > /dev/null && exit 0; sleep 1; done
+          echo "Local server did not start"; cat server.log; exit 1
+
+      - name: Run the full test suite against this exact build
+        env:
+          TCP_SITE_URL: http://127.0.0.1:4321/
+        run: python -m pytest tests -v
+
+      # The package GitHub Pages would publish. Uploading it publishes
+      # nothing; only the "Publish" job below can, and it is switched off.
+      - name: Package the site for GitHub Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+      - name: Keep a downloadable copy of the built site
+        uses: actions/upload-artifact@v4
+        with:
+          name: astro-site-${{ github.sha }}
+          path: web/dist/
+          retention-days: 30
+
+  publish:
+    name: Publish to thecementpeople.com (switched off until the switch-over)
+    needs: build
+    # Runs only on main, and only once ASTRO_LIVE is set to "true" at the
+    # switch-over. Until then this job is skipped on every run.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.ASTRO_LIVE == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish the packaged site
+        id: deployment
+        uses: actions/deploy-pages@v4
