@@ -100,20 +100,34 @@ nav a:hover{border-bottom-color:var(--y)}
 .wa.big span{font-size:16px;font-weight:700}
 #menu{display:none;background:none;border:0;color:var(--ink);padding:4px;cursor:pointer}
 #menu svg{width:28px;height:28px;display:block}
-.hero{--ink:#111;--card:#fff;--mute:#555;background:#fff;color:#111;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,600px) minmax(0,1fr)}
-.hp{position:relative;overflow:hidden;min-height:200px}
-.hp img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.hp.l img{object-position:left center;-webkit-mask-image:linear-gradient(90deg,#000 62%,transparent);mask-image:linear-gradient(90deg,#000 62%,transparent)}
-.hp.r img{object-position:right center;-webkit-mask-image:linear-gradient(270deg,#000 62%,transparent);mask-image:linear-gradient(270deg,#000 62%,transparent)}
-.htx{text-align:center;padding:60px 20px;align-self:center}
+/* --- Hero (Nov 2026: one Sunburst product photo + warm-white text panel) ---
+   Phones and narrow tablets (below 900 px): text panel first, tall photo under
+   it, fading into the panel. 900 px and wider: wide photo left (65%), panel
+   right (35%). See components/Hero.astro. --hero-bg is the warm white agreed
+   for the design system; it is set here only until the design-system phase
+   moves it into tokens.css. */
+.hero{--hero-bg:#f7f4ef;--ink:#111;--card:#fff;--mute:#555;background:var(--hero-bg);color:#111;display:flex;flex-direction:column}
+.hpic{order:2;display:block;margin-top:-22vw}
+.hpic img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(180deg,transparent,#000 22%);mask-image:linear-gradient(180deg,transparent,#000 22%)}
+.htx{order:1;position:relative;z-index:1;text-align:left;padding:30px 20px 0}
 .kick{margin:0;font-size:13px;font-weight:700;letter-spacing:.22em;text-transform:uppercase}
-.htx h1{font-size:clamp(34px,5.4vw,58px);line-height:1;letter-spacing:-.03em;margin:14px 0 0;max-width:none}
-.htx h1::after{content:"";display:block;width:72px;height:6px;border-radius:3px;background:var(--y);margin:20px auto 0}
-.htx .lead{color:#333;font-size:17px;max-width:34ch;margin:20px auto 24px}
-.ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-.ctas a{padding:14px 24px;border:2px solid #111;border-radius:6px;font-size:16px;font-weight:700;text-decoration:none;color:#111}
+.htx h1{font-size:clamp(34px,9.5vw,44px);line-height:1.02;letter-spacing:-.03em;margin:12px 0 0;max-width:none}
+.htx .lead{color:#333;font-size:16px;max-width:30ch;margin:14px 0 20px}
+.ctas{display:flex;gap:10px;justify-content:flex-start;flex-wrap:wrap}
+.ctas a{display:inline-flex;align-items:center;gap:8px;min-height:44px;box-sizing:border-box;padding:10px 18px;border:2px solid #111;border-radius:6px;font-size:15px;font-weight:700;text-decoration:none;color:#111}
+.ctas a svg{width:16px;height:16px}
 .ctas .cta{background:var(--y)}
 .ctas .btn2{background:#fff}
+/* Very narrow phones: the two buttons stack, full width. */
+@media (max-width:359px){.ctas{flex-direction:column}.ctas a{justify-content:center}}
+@media (min-width:900px){
+.hero{display:grid;grid-template-columns:65fr 35fr}
+.hpic{order:0;margin:0}
+.hpic img{-webkit-mask-image:none;mask-image:none}
+.htx{order:0;align-self:center;padding:40px clamp(24px,3.5vw,56px)}
+.htx h1{font-size:clamp(32px,3.4vw,52px)}
+.htx .lead{font-size:17px}
+}
 .cats{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:repeat(2,1fr);padding:10px 16px}
 .cats a{display:flex;align-items:center;gap:16px;padding:22px 18px;color:var(--ink);text-decoration:none;border-left:1px solid var(--line)}
 .cats a:first-child{border-left:0}
@@ -149,10 +163,6 @@ nav.open{display:flex}
 nav a{padding:12px 0;border-bottom:1px solid var(--line)}
 #menu{display:block}
 .wa .long{display:none}.wa .short{display:inline}
-.hero{grid-template-columns:1fr 1fr;grid-template-areas:"t t" "l r"}
-.htx{grid-area:t;padding:36px 16px 26px}
-.hp.l{grid-area:l}.hp.r{grid-area:r}
-.hp.l img,.hp.r img{-webkit-mask-image:none;mask-image:none}
 .cats{grid-template-columns:1fr}
 .cats a{border-left:0;border-top:1px solid var(--line);padding:16px 4px}
 .cats a:first-child{border-top:0}

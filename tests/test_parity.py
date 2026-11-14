@@ -12,7 +12,7 @@ files; these checks cover the gaps found when the migration plan was written
   T02  sliding the price list sideways on a phone switches the selected tab
   T03  search words customers use: "tonne", "ton", "iron rods", a rod size and
        "binding" each find exactly the right products
-  T04  header, hero and About text and links are unchanged; Contact and footer
+  T04  header and About text and links are unchanged; hero, Contact and footer
        match the approved text for each version (tests/baseline/page-sections.json)
   T05  the four favicon files exist, are linked from the page and are the same
        files in both versions
@@ -107,10 +107,10 @@ def test_t03_search_words_find_the_right_products(browser, words, expected):
 
 def test_t04_page_sections_text_and_links_unchanged(browser):
     page, _ = open_site(browser)
-    for name, sel in [("header", "header"), ("hero", ".hero .htx"), ("about", "#about")]:
+    for name, sel in [("header", "header"), ("about", "#about")]:
         assert page.evaluate(READ_SECTION, sel) == SECTIONS["shared"][name], f"{name} text or links changed"
     version = "astro" if _is_astro(page) else "single_file"
-    for name, sel in [("contact", "#contact"), ("footer", "footer")]:
+    for name, sel in [("hero", ".hero .htx"), ("contact", "#contact"), ("footer", "footer")]:
         assert page.evaluate(READ_SECTION, sel) == SECTIONS[version][name], f"{name} text or links changed ({version})"
     page.context.close()
 

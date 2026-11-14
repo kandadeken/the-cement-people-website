@@ -39,10 +39,9 @@ SITE = BUSINESS["siteUrl"]            # the public address, https://thecementpeo
 CANONICAL = SITE + "/"
 
 # Images that are decoration only and so correctly have empty alt text.
-# Images with empty alt text on purpose: the second hero photo (the first one
-# already describes the scene) and the iron-rods banner (the tab heading and
-# note under it say the same thing).
-DECORATIVE_IMAGES = {"/images/hero-right.jpg", "/images/products/iron-rods-1086.webp"}
+# Images with empty alt text on purpose: the iron-rods banner (the tab heading
+# and note under it say the same thing). The hero photo is described.
+DECORATIVE_IMAGES = {"/images/products/iron-rods-1086.webp"}
 
 # Every property the Store description may carry. Adding one means adding it
 # here on purpose, with a confirmed source in baseline/business.json.

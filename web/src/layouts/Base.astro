@@ -32,11 +32,12 @@ const { title, description, path = "/" } = Astro.props;
 const canonical = new URL(path, business.siteUrl).href;
 
 // Picture shown when the link is shared on WhatsApp or social media,
-// with its real size and a description.
+// with its real size and a description. 1200 x 630 is the shape WhatsApp,
+// Facebook and X show best; it is cut from the wide hero photo.
 const preview = {
-  url: new URL("/images/hero-left.jpg", business.siteUrl).href,
-  width: 520,
-  height: 691,
+  url: new URL("/images/hero/hero-share-1200x630.jpg", business.siteUrl).href,
+  width: 1200,
+  height: 630,
   alt: HERO_ALT,
 };
 
