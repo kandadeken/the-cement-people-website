@@ -16,6 +16,13 @@ business (not during opening hours: Monday to Saturday, 7 am to 5 pm).
       phone and a computer and matches what you expect.
 - [ ] Tag the current state so it can always be found again:
       `v2-pre-astro` on the latest `main` commit (Claude does this).
+- [ ] **Verify the tag, don't assume it** (required; stop if either check
+      fails). On GitHub, Code -> Tags must list `v2-pre-astro`, and it must
+      point at the exact commit `main` is on at that moment (the same short
+      code as the newest commit on `main`). From a computer:
+      `git ls-remote origin refs/heads/main refs/tags/v2-pre-astro` must
+      print the same commit for both. If `main` has moved since tagging,
+      re-tag before going on.
 - [ ] Note down, from Settings -> Pages: the custom domain
       (`thecementpeople.com`) and that "Enforce HTTPS" is ticked.
 
