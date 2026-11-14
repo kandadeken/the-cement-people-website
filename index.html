@@ -262,6 +262,8 @@ nav a{padding:12px 0;border-bottom:1px solid var(--line)}
 .hero2 .hbg{order:2;display:block}
 .hero2 .hbg img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(180deg,transparent,#000 14%);mask-image:linear-gradient(180deg,transparent,#000 14%)}
 .hero.hero2 .htx{order:1;padding:36px 16px 0}
+/* phones: pull the photo up under the buttons; its top part is plain wall, so the text can sit on it */
+@media (max-width:819px){.hero2 .hbg{margin-top:-26vw}.hero2 .htx{position:relative;z-index:1}}
 .hero2 .htx .lead{color:#222}
 @media (min-width:1100px){
 .hero.hero2{display:block;position:relative;background:none}
