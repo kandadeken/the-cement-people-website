@@ -139,12 +139,19 @@ fit();
 const norm=s=>s.toLowerCase().replace(/[^a-z0-9.]/g,"");
 if(document.fonts)document.fonts.ready.then(fit);
 let lock=false,lt;
+// True on computers with a mouse or trackpad; false on phones and tablets.
+const FINE=matchMedia("(hover:hover) and (pointer:fine)");
 function goCat(c,instant){
 cat=c;renderTabs();
 if(q){q="";$("#q").value="";renderList();return;}
 const L=$("#list");
-lock=true;clearTimeout(lt);lt=setTimeout(()=>{lock=false},instant?50:500);
-L.scrollTo({left:cats.indexOf(c)*L.clientWidth,behavior:instant||RM?"auto":"smooth"});
+lock=true;clearTimeout(lt);lt=setTimeout(()=>{lock=false},instant||FINE.matches?50:500);
+// Computers with a mouse or trackpad (FINE): jump straight to the category.
+// Smooth sideways scrolling inside a snapping list did not always finish in
+// desktop browsers, so clicking a rod tab could seem to do nothing (bug found
+// by Daniel, 14 Nov 2026). Touch screens keep the smooth slide.
+if(instant||RM||FINE.matches)L.scrollLeft=cats.indexOf(c)*L.clientWidth;
+else L.scrollTo({left:cats.indexOf(c)*L.clientWidth,behavior:"smooth"});
 fit();
 }
 

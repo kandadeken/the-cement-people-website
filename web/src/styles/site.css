@@ -125,6 +125,12 @@ input[type=search]{width:100%;min-height:var(--tap);padding:10px var(--s3);font-
 #list.snap{display:flex;align-items:flex-start;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;transition:height .28s ease}
 #list.snap::-webkit-scrollbar{display:none}
 #list.snap .slide{flex:0 0 100%;min-width:0;scroll-snap-align:start;scroll-snap-stop:always}
+/* Computers with a mouse or trackpad: no swiping or snapping; the tabs
+   switch the list directly (see goCat in quote-engine.js). */
+@media (hover:hover) and (pointer:fine){
+#list.snap{overflow-x:hidden;scroll-snap-type:none}
+#list.snap .slide{scroll-snap-align:none}
+}
 @keyframes inl{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
 @keyframes inr{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}
 #list.in-l{animation:inl .25s ease-out}
