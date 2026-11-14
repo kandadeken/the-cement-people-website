@@ -171,23 +171,3 @@ export function listHTML(P: EngineProduct[], currency: string, info: CategoryInf
     .join("");
 }
 
-/** The two category tiles under the hero. Mirrors the engine's "Category tiles" section. */
-export function tilesHTML(P: EngineProduct[]): string {
-  const S = 'fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"';
-  const bag = `<svg class="ic" viewBox="0 0 48 48" aria-hidden="true"><path d="M13 8h22l5 9v26H8V17z" ${S}/><path d="M8 17h32" ${S}/></svg>`;
-  const rodsIcon = `<svg class="ic" viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="12" width="32" height="8" rx="4" ${S}/><rect x="11" y="22" width="32" height="8" rx="4" ${S}/><rect x="5" y="32" width="32" height="8" rx="4" ${S}/></svg>`;
-  const rodSizes = P.filter((p) => p.unit === "30 ft rod")
-    .map((p) => p.name.replace("Iron rod ", ""))
-    .reverse()
-    .join(", ");
-  const tiles: [string, string, string, string][] = [
-    ["Cement", "Cement", "50 kg bags: " + P.filter((p) => p.cat === "Cement").map((p) => p.name).join(", "), bag],
-    ["Iron Rods (Single Piece)", "Iron rods", "By the piece or the ton: " + rodSizes + ", and binding wire", rodsIcon],
-  ];
-  return tiles
-    .map(
-      ([c, t, s, i]) =>
-        `<a href="#products" data-go="${c}">${i}<div><b>${t}</b><small>${s}</small></div><span class="go" aria-hidden="true">›</span></a>`,
-    )
-    .join("");
-}

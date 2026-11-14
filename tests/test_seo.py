@@ -237,7 +237,9 @@ def test_s02_html_catalogue_is_identical_to_what_the_engine_draws(browser):
                                   viewport={"width": 1280, "height": 900})
     static = context.new_page()
     static.goto(SITE_URL, wait_until="load")
-    parts = ("#cats", "#tabs", "#list")
+    # (The category tiles under the hero, "#cats", were removed in the
+    # design-system phase; the tabs and the list are compared.)
+    parts = ("#tabs", "#list")
     without_js = [static.locator(part).inner_html() for part in parts]
     list_class = static.locator("#list").get_attribute("class")
     context.close()
@@ -246,9 +248,8 @@ def test_s02_html_catalogue_is_identical_to_what_the_engine_draws(browser):
     with_js = [live.locator(part).inner_html() for part in parts]
     live_class = live.get_attribute("#list", "class")
     live.context.close()
-    assert without_js[0] == with_js[0], "category tiles differ"
-    assert without_js[1] == with_js[1], "category tabs differ"
-    assert without_js[2] == with_js[2], "price list differs"
+    assert without_js[0] == with_js[0], "category tabs differ"
+    assert without_js[1] == with_js[1], "price list differs"
     assert list_class == live_class == "snap"
     assert errors == []
 

@@ -1,77 +1,242 @@
 /* ==========================================================================
    site.css - how the website looks on screen
    --------------------------------------------------------------------------
-   Copied unchanged from the original single-file site (index.html at
-   v1-single-file), in its original order, so the page looks identical.
-   Only the brand colour variables moved out, into tokens.css.
+   Design-system phase (Nov 2026): rewritten as one clean stylesheet. Before,
+   it was the original single-file site's styles in their original order,
+   with many later rules undoing earlier ones. Now each part of the page is
+   styled once, in page order, and every colour, size and spacing value
+   comes from tokens.css.
 
-   Phase 2 change: the price list's category headings became <h3> and its
-   subgroup headings <h4> (a correct heading outline), so the rules that were
-   "#list h2" and "#list h3" are now "#list h3" and "#list h4". Same rules,
-   same look.
+   Agreed look (Design-System Proposal, 14 Nov 2026): warm-white page
+   (--bg), white header, cards and inputs (--card); one content width
+   (--page) with one left edge; one type scale; buttons and inputs at least
+   44 px tall (--tap); TCP yellow (--y) for the main action in each area;
+   neutral "Add" buttons that turn light yellow on hover and keyboard focus;
+   bold prices.
 
-   The order of rules matters: several later rules deliberately refine
-   earlier ones. Do not re-sort this file. Tidying it up is planned for a
-   later phase, with screenshots compared before and after.
+   The "@media print" blocks are kept exactly as they were, so the printed
+   page and the PDF quotation (styled in print.css) do not change.
+
+   Contents: 1 base  2 header  3 hero  4 sections  5 price list
+             6 estimate  7 phone estimate bar  8 about/contact/footer
+             9 phones  10 print (unchanged)
    ========================================================================== */
+
+/* ---- 1. Base -------------------------------------------------------------- */
 :root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 *,*::before,*::after{box-sizing:inherit}
-html{scroll-padding-top:env(safe-area-inset-top,0px)}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:Montserrat,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:15px;line-height:1.5}
-body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:#111;z-index:10}
+html{scroll-behavior:smooth;scroll-padding-top:calc(env(safe-area-inset-top,0px) + 76px)}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:var(--t-body);line-height:1.5}
+/* Fills the phone's status-bar area (notch) so the page never shows under it. */
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--card);z-index:10}
 button,input,select{font-family:inherit}
 :focus-visible{outline:3px solid var(--ink);outline-offset:2px}
-header{position:sticky;top:env(safe-area-inset-top,0px);z-index:11;background:#111;border-bottom:4px solid var(--y);color:#fff}
-.hin{max-width:1100px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
-.hin span{font-weight:800;font-size:19px;letter-spacing:-.02em}
-main{max-width:1100px;margin:0 auto;padding:20px 16px 110px;display:grid;gap:24px}
+/* Kept from the original styles: used by the quotation's printed headings. */
 h1{font-size:clamp(28px,6vw,42px);line-height:1.05;letter-spacing:-.025em;font-weight:800;margin:6px 0 10px}
-.lead{color:var(--mute);max-width:52ch;margin:0}
-.tools{margin:18px 0 6px;display:grid;gap:10px}
-input[type=search]{width:100%;padding:11px 12px;font-size:15px;border:2px solid var(--ink);background:var(--card);color:var(--ink);border-radius:0}
-.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
-.tabs button{flex:none;background:none;border:0;border-bottom:3px solid transparent;color:var(--mute);font-size:14px;font-weight:600;padding:8px 10px;cursor:pointer}
-.tabs button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--y)}
 h2{font-size:17px;font-weight:800;margin:26px 0 2px;display:flex;align-items:center;gap:10px}
-h2::before{content:"";width:16px;height:9px;background:var(--y)}
-.row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
-.nm{font-weight:600}
-.nm small{display:block;font-weight:400;font-size:13px;color:var(--mute)}
-.pr{font-weight:800;text-align:right}
-.add{background:var(--y);color:#111;border:2px solid #111;font-weight:700;font-size:14px;padding:6px 16px;cursor:pointer}
-.step{display:inline-flex;border:2px solid var(--ink)}
-.step button{width:32px;border:0;background:var(--card);color:var(--ink);font-size:18px;font-weight:700;cursor:pointer}
-.step input{width:46px;text-align:center;border:0;border-inline:2px solid var(--ink);background:var(--card);color:var(--ink);font-size:15px;font-weight:600;border-radius:0;-moz-appearance:textfield}
-.step input::-webkit-outer-spin-button,.step input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .mute{color:var(--mute)}
-.docket{background:var(--card);border:2px solid var(--ink)}
-.dh{display:flex;justify-content:space-between;align-items:center;background:#111;color:#fff;padding:12px 14px;border-bottom:4px solid var(--y)}
-.dh b{font-size:18px;font-weight:800}
-.dh span{font-size:13px;color:#d9d9d6}
-.dm{padding:8px 14px;font-size:13px;color:var(--mute);border-bottom:1px solid var(--line)}
-#lines{padding:0 14px}
-.ln{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;padding:12px 0;border-bottom:1px solid var(--line)}
-.ln .nm{grid-column:1/-1}
-.ln .amt{text-align:right;font-weight:700;align-self:center}
-.empty{padding:16px 0;margin:0}
-.dl{display:block;padding:14px 14px 4px;font-weight:600;font-size:14px}
-#loc{display:block;width:100%;margin-top:6px;padding:10px;font-size:15px;border:2px solid var(--ink);background:var(--card);color:var(--ink);border-radius:0}
-.tot{padding:8px 14px 6px}
-.tot div{display:flex;justify-content:space-between;padding:5px 0}
-.tot .gt{border-top:2px solid var(--ink);margin-top:6px;padding-top:12px;font-size:20px;font-weight:800}
-.acts{display:grid;gap:6px;padding:8px 14px 12px}
-.cta{background:var(--y);color:#111;border:2px solid #111;font-size:15px;font-weight:700;padding:13px;cursor:pointer}
-.ghost{background:none;border:0;color:var(--mute);text-decoration:underline;padding:8px;font-size:14px;cursor:pointer}
-.fine{margin:0;padding:0 14px 14px;font-size:12px;color:var(--mute)}
-.bar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:12;background:#111;color:#fff;border-top:4px solid var(--y);padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));justify-content:space-between;align-items:center;gap:12px}
-.bar.on{display:flex}
-.bar b{font-weight:700}
-.bar button{background:var(--y);color:#111;border:0;font-weight:700;font-size:14px;padding:10px 16px;cursor:pointer}
+.lead{color:var(--mute);max-width:52ch;margin:0}
+
+/* Buttons. Primary: yellow, for the main action in an area ("View
+   products", "Enquire on WhatsApp", "Send my estimate", "View estimate").
+   Secondary: white with a dark border ("Call us"). "Add": neutral, see 5. */
+.cta,.wa,.bar button{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--tap);background:var(--y);color:var(--ink);border:1px solid var(--y);border-radius:var(--r-control);font-weight:var(--w-label);text-decoration:none;cursor:pointer}
+.btn2{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--tap);background:var(--card);color:var(--ink);border:1px solid var(--ink);border-radius:var(--r-control);font-weight:var(--w-label);text-decoration:none}
+.cta:hover,.wa:hover,.bar button:hover{border-color:var(--ink)}
+.btn2:hover{background:var(--bg)}
+
+/* ---- 2. Header ------------------------------------------------------------ */
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:11;background:var(--card);color:var(--ink);border-bottom:1px solid var(--line)}
+.hin{max-width:var(--page);margin:0 auto;padding:var(--s3) var(--s4);display:flex;align-items:center;gap:var(--s3)}
+.brand{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;margin-right:auto}
+.brand svg{width:40px;flex:none}
+.hin .brand span{font-weight:var(--w-strong);font-size:var(--t-sub);line-height:1.05;letter-spacing:-.02em}
+nav{display:flex;gap:var(--s5)}
+nav a{display:inline-flex;align-items:center;min-height:var(--tap);color:var(--ink);text-decoration:none;font-weight:var(--w-label);font-size:var(--t-body);border-bottom:3px solid transparent}
+nav a:hover{border-bottom-color:var(--y)}
+.wa{padding:10px var(--s4)}
+.wa svg{width:20px;height:20px;flex:none}
+.hin .wa span{font-size:var(--t-small);font-weight:var(--w-label)}
+.wa .short{display:none}
+.wa.big{padding:var(--s3) 22px}
+.wa.big span{font-size:var(--t-body);font-weight:var(--w-label)}
+#menu{display:none;min-width:var(--tap);min-height:var(--tap);background:none;border:0;color:var(--ink);padding:var(--s2);cursor:pointer}
+#menu svg{width:28px;height:28px;display:block}
+
+/* ---- 3. Hero ----------------------------------------------------------------
+   Agreed after seeing the real photo (PR #15): 900 px and wider, the wide
+   photo on the left (65%) and the text panel on the right; phones and
+   narrow tablets, the text first and the tall photo straight under the
+   buttons, its plain-wall top fading into the warm white. Text left-aligned,
+   no line under the headline. See components/Hero.astro. */
+.hero{background:var(--bg);display:flex;flex-direction:column}
+.hpic{order:2;display:block;margin-top:-22vw}
+.hpic img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(180deg,transparent,#000 22%);mask-image:linear-gradient(180deg,transparent,#000 22%)}
+.htx{order:1;position:relative;z-index:1;text-align:left;padding:30px 20px 0}
+.kick{margin:0;font-size:var(--t-label);font-weight:var(--w-strong);letter-spacing:.22em;text-transform:uppercase}
+.htx h1{font-size:var(--t-display);line-height:1.02;letter-spacing:-.03em;margin:var(--s3) 0 0;max-width:none}
+.htx .lead{color:var(--ink);font-size:var(--t-body);max-width:30ch;margin:14px 0 20px}
+.ctas{display:flex;gap:10px;justify-content:flex-start;flex-wrap:wrap}
+.ctas a{padding:10px 18px;font-size:var(--t-body)}
+.ctas a svg{width:16px;height:16px;flex:none}
+/* Very narrow phones: the two buttons stack, full width. */
+@media (max-width:359px){.ctas{flex-direction:column}}
 @media (min-width:900px){
-main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;padding-bottom:40px;gap:36px}
-.docket{position:sticky;top:calc(env(safe-area-inset-top,0px) + 84px)}
-.bar,.bar.on{display:none}
+.hero{display:grid;grid-template-columns:65fr 35fr}
+.hpic{order:0;margin:0}
+.hpic img{-webkit-mask-image:none;mask-image:none}
+.htx{order:0;align-self:center;padding:40px clamp(24px,3.5vw,56px)}
+.htx .lead{font-size:var(--t-price)}
 }
+/* 900-1023 px: the text panel is narrow, so the panel and the two buttons
+   get slightly tighter side padding. That keeps "View products" and
+   "Call us" side by side instead of stacked (ChatGPT review, 14 Nov). */
+@media (min-width:900px) and (max-width:1023px){
+.htx{padding-inline:var(--s5)}
+.ctas{gap:var(--s2)}
+.ctas a{padding-inline:var(--s3)}
+}
+
+/* ---- 4. Sections: one width, one left edge, one rhythm ------------------- */
+main{max-width:var(--page);margin:0 auto;padding:var(--gap-section) var(--s4) 0;display:grid;gap:var(--s5)}
+.sec{padding:var(--gap-section) var(--s4) 0}
+/* main's 1100 px includes 16 px side padding, so the text inside sections
+   is 32 px narrower; matching that gives every section the same left edge. */
+.wrap{max-width:calc(var(--page) - 2*var(--s4));margin:0 auto}
+.wrap p{max-width:var(--measure);margin:0 0 20px;font-size:var(--t-body);color:var(--mute)}
+.wrap a:not(.wa){color:var(--ink);font-weight:var(--w-label)}
+/* Section heading ("Products and prices", "About us", "Contact us"). */
+.st{display:block;font-size:var(--t-heading);line-height:1.1;letter-spacing:-.02em;font-weight:var(--w-strong);margin:0 0 var(--s2);padding:0;border:0}
+.st::before{display:none}
+
+/* ---- 5. Price list ---------------------------------------------------------- */
+#catalog{min-width:0}
+#catalog>.lead{margin:0 0 6px}
+.tools{margin:20px 0 6px;display:grid;gap:10px}
+input[type=search]{width:100%;min-height:var(--tap);padding:10px var(--s3);font-size:var(--t-body);border:1px solid var(--line);border-radius:var(--r-control);background:var(--card);color:var(--ink)}
+.tabs{display:flex;gap:var(--s1);overflow-x:auto;scrollbar-width:none;align-items:stretch}
+.tabs button{flex:1 1 0;min-height:var(--tap);white-space:normal;line-height:1.25;text-align:center;padding:var(--s2) 6px;background:none;border:0;border-bottom:3px solid transparent;color:var(--mute);font-size:var(--t-small);font-weight:var(--w-label);cursor:pointer}
+.tabs button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--y)}
+.hint{display:none;margin:6px 0 0;font-size:var(--t-small);color:var(--mute)}
+@media (hover:none){.hint{display:block}}
+/* The list of slides (one per tab) that slides sideways on phones. */
+#list{touch-action:auto}
+#list.snap{display:flex;align-items:flex-start;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;transition:height .28s ease}
+#list.snap::-webkit-scrollbar{display:none}
+#list.snap .slide{flex:0 0 100%;min-width:0;scroll-snap-align:start;scroll-snap-stop:always}
+@keyframes inl{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
+@keyframes inr{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}
+#list.in-l{animation:inl .25s ease-out}
+#list.in-r{animation:inr .25s ease-out}
+@media (prefers-reduced-motion:reduce){#list.snap{transition:none}#list.in-l,#list.in-r{animation:none}}
+/* Category heading, subgroup heading, "how it's sold" note. */
+#list h3{display:flex;align-items:center;gap:10px;font-size:var(--t-sub);font-weight:var(--w-strong);margin:30px 0 0;padding-bottom:10px;border-bottom:1px solid var(--line)}
+#list h3 svg{width:22px;height:22px;color:var(--mute);flex:none}
+#list h4{font-size:var(--t-small);font-weight:var(--w-label);color:var(--mute);margin:22px 0 2px}
+#list .cat-note{margin:var(--s2) 0 0;font-size:var(--t-small);color:var(--mute)}
+/* Iron-rods banner: same wide photo at the top of both rod tabs. If it fails
+   to load it is left out; the heading is always shown. */
+.banner{display:block;width:100%;max-width:100%;min-width:0;height:auto;aspect-ratio:3/1;object-fit:cover;background:var(--card);border:1px solid var(--line);border-radius:var(--r-panel);margin:var(--s5) 0 0}
+section.nobanner .banner{display:none}
+/* One product row: [photo] name + unit, price, Add / quantity. */
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}
+.row.has-img{grid-template-columns:96px minmax(0,1fr) auto auto}
+/* 96 x 96 px photo (80 on phones); the frame is drawn just outside it so
+   the photo keeps its full size (approved 12 Nov 2026). */
+.thumb{display:block;width:96px;height:96px;object-fit:contain;background:var(--card);border:0;box-shadow:0 0 0 1px var(--line);border-radius:var(--r-control)}
+.nm{font-size:var(--t-body);font-weight:var(--w-text)}
+.nm small{display:block;font-weight:var(--w-text);font-size:var(--t-small);color:var(--mute)}
+/* Rods: the size ("16 mm") shown first as a bold black tag; the page text
+   still reads "Iron rod 16 mm", so estimate, PDF and WhatsApp are unchanged. */
+.nm .rn{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
+.nm .sz{order:-1;display:inline-block;min-width:76px;text-align:center;background:var(--ink);color:var(--card);font-weight:var(--w-strong);font-size:var(--t-price);line-height:1;padding:9px 10px;border-radius:var(--r-control);letter-spacing:.01em}
+.pr{font-weight:var(--w-strong);font-size:var(--t-price);text-align:right}
+/* "Add": neutral so the yellow stays for the main actions; turns light
+   yellow on hover and keyboard focus (decided 14 Nov 2026). */
+.add{min-height:var(--tap);padding:var(--s2) 18px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-control);font-size:var(--t-small);font-weight:var(--w-label);cursor:pointer}
+.add:hover,.add:focus-visible{background:var(--y-soft);border-color:var(--y)}
+/* Quantity stepper (in the list and the estimate). justify-self:start keeps
+   it as wide as its buttons; before, it stretched into an empty white strip. */
+.step{display:inline-flex;justify-self:start;border:1px solid var(--line);border-radius:var(--r-control);overflow:hidden}
+.step button{width:40px;min-height:var(--tap);border:0;background:var(--bg);color:var(--ink);font-size:var(--t-sub);font-weight:var(--w-label);cursor:pointer}
+.step input{width:50px;min-height:var(--tap);text-align:center;border:0;border-inline:1px solid var(--line);background:var(--card);color:var(--ink);font-size:var(--t-body);font-weight:var(--w-label);border-radius:0;-moz-appearance:textfield}
+.step input::-webkit-outer-spin-button,.step input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
+/* ---- 6. Estimate panel ------------------------------------------------------ */
+.docket{background:var(--card);border:1px solid var(--line);border-radius:var(--r-panel);overflow:hidden;box-shadow:var(--shadow)}
+.dh{display:flex;justify-content:space-between;align-items:center;background:var(--card);color:var(--ink);padding:var(--s3) 14px;border-bottom:1px solid var(--line)}
+.dh b{font-size:var(--t-sub);font-weight:var(--w-strong)}
+.dh span{font-size:var(--t-label);color:var(--mute)}
+.dm{padding:var(--s2) 14px;font-size:var(--t-label);color:var(--mute);border-bottom:1px solid var(--line)}
+#lines{padding:0 14px}
+.ln{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;padding:var(--s3) 0;border-bottom:1px solid var(--line)}
+.ln .nm{grid-column:1/-1}
+.ln .amt{text-align:right;font-weight:var(--w-strong);align-self:center}
+.empty{padding:var(--s4) 0;margin:0}
+.dl{display:block;padding:14px 14px var(--s1);font-weight:var(--w-label);font-size:var(--t-small)}
+#loc{display:block;width:100%;min-height:var(--tap);margin-top:6px;padding:10px;font-size:var(--t-body);border:1px solid var(--line);border-radius:var(--r-control);background:var(--card);color:var(--ink)}
+.tot{padding:var(--s2) 14px 6px}
+.tot div{display:flex;justify-content:space-between;padding:5px 0}
+.tot .gt{border-top:1px solid var(--line);margin-top:6px;padding-top:var(--s3);font-size:var(--t-sub);font-weight:var(--w-strong)}
+.acts{display:grid;gap:6px;padding:var(--s2) 14px var(--s3)}
+.acts .cta{width:100%;padding:var(--s3);font-size:var(--t-body);text-align:center}
+#send svg{width:20px;height:20px;flex:none}
+#send.off{opacity:.45;pointer-events:none}
+/* "Print or save as PDF", "Clear estimate": quiet text links, easy to tap. */
+.ghost{min-height:var(--tap);background:none;border:0;color:var(--mute);text-decoration:underline;padding:var(--s2);font-size:var(--t-small);cursor:pointer}
+.fine{margin:0;padding:0 14px 14px;font-size:var(--t-label);color:var(--mute)}
+/* "Back to products" bar, only when the estimate is open full-screen. */
+.dclose{display:none}
+.dclose svg{width:20px;height:20px;flex:none}
+@media (min-width:900px){
+main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;gap:var(--s6)}
+.docket{position:sticky;top:calc(env(safe-area-inset-top,0px) + 84px)}
+}
+/* Phones and narrow tablets: the estimate sits under the price list, and
+   opens full-screen from the bar at the bottom. */
+@media (max-width:899px){
+#est.open{position:fixed;inset:0;z-index:30;overflow:auto;border:0;border-radius:0;box-shadow:none;padding-top:env(safe-area-inset-top,0px);padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+#est.open .dclose{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:2;width:100%;min-height:var(--tap);text-align:left;padding:14px var(--s4);background:var(--card);border:0;border-bottom:1px solid var(--line);color:var(--ink);font-size:var(--t-body);font-weight:var(--w-label);cursor:pointer}
+}
+
+/* ---- 7. Phone estimate bar (bottom of the screen) ------------------------- */
+.bar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:12;background:var(--ink);color:var(--card);border-top:4px solid var(--y);padding:var(--s3) var(--s4) calc(12px + env(safe-area-inset-bottom,0px));justify-content:space-between;align-items:center;gap:var(--s3)}
+.bar.on{display:flex}
+.bar b{font-weight:var(--w-strong)}
+.bar button{padding:10px var(--s4);font-size:var(--t-small)}
+@media (min-width:900px){.bar,.bar.on{display:none}}
+
+/* ---- 8. About, Contact, footer -------------------------------------------- */
+.foot{margin-top:var(--gap-section);background:var(--ink);color:var(--footer-text);border-top:4px solid var(--y);padding:var(--s5) var(--s4) 110px}
+.foot div{max-width:var(--page);margin:0 auto;display:flex;align-items:center;gap:14px}
+.foot svg{width:44px;flex:none}
+.foot p{margin:0;font-size:var(--t-small)}
+.foot b{color:var(--card);font-weight:var(--w-strong);display:block;font-size:var(--t-body)}
+@media (min-width:900px){.foot{padding-bottom:28px}}
+
+/* ---- 9. Phones ---------------------------------------------------------------- */
+@media (max-width:819px){
+nav{display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border-bottom:1px solid var(--line);flex-direction:column;gap:0;padding:6px var(--s4) var(--s3)}
+nav.open{display:flex}
+nav a{padding:var(--s3) 0;border-bottom:1px solid var(--line)}
+#menu{display:block}
+/* Keeps the name to two lines next to the WhatsApp button and menu. */
+.hin .brand span{font-size:var(--t-body)}
+.wa .long{display:none}.wa .short{display:inline}
+}
+@media (max-width:560px){
+.row{grid-template-columns:minmax(0,1fr) auto}
+.row .nm{grid-column:1/-1}
+.row .pr{text-align:left}
+/* 80 x 80 px photo; fits the existing row height, so rows don't grow. */
+.row.has-img{grid-template-columns:80px minmax(0,1fr) auto}
+.row.has-img .thumb{width:80px;height:80px;grid-row:span 2;align-self:start}
+.row.has-img .nm{grid-column:2/-1}
+.banner{margin-top:18px}
+}
+
+/* ---- 10. Print (unchanged from before the design-system phase) ------------ */
 @media print{
 :root:not([data-theme="light"]),:root[data-theme="dark"]{--ink:#111;--bg:#fff;--card:#fff;--line:#ccc;--mute:#555;color-scheme:light}
 #catalog,.noprint,.bar,body::before{display:none!important}
@@ -82,191 +247,9 @@ main{display:block;padding:16px}
 .step{border:0}.step button{display:none}.step input{border:0;width:auto;text-align:left;padding:0}
 #loc{border:0;padding:0}#loc::placeholder{color:transparent}
 }
-html{scroll-behavior:smooth;scroll-padding-top:calc(env(safe-area-inset-top,0px) + 76px)}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-body::before{background:var(--card)}
-header{background:var(--card);color:var(--ink);border-bottom:1px solid var(--line)}
-.brand{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;margin-right:auto}
-.brand svg{width:40px;flex:none}
-.hin .brand span{font-size:18px;line-height:1.05}
-nav{display:flex;gap:24px}
-nav a{color:var(--ink);text-decoration:none;font-weight:600;font-size:15px;padding:6px 0;border-bottom:3px solid transparent}
-nav a:hover{border-bottom-color:var(--y)}
-.wa{display:inline-flex;align-items:center;gap:8px;background:var(--y);color:#111;border-radius:6px;padding:10px 16px;text-decoration:none}
-.wa svg{width:20px;height:20px;flex:none}
-.hin .wa span{font-size:14px;font-weight:700;letter-spacing:0}
-.wa .short{display:none}
-.wa.big{padding:14px 22px}
-.wa.big span{font-size:16px;font-weight:700}
-#menu{display:none;background:none;border:0;color:var(--ink);padding:4px;cursor:pointer}
-#menu svg{width:28px;height:28px;display:block}
-/* --- Hero (Nov 2026: one Sunburst product photo + warm-white text panel) ---
-   Phones and narrow tablets (below 900 px): text panel first, tall photo under
-   it, fading into the panel. 900 px and wider: wide photo left (65%), panel
-   right (35%). See components/Hero.astro. --hero-bg is the warm white agreed
-   for the design system; it is set here only until the design-system phase
-   moves it into tokens.css. */
-.hero{--hero-bg:#f7f4ef;--ink:#111;--card:#fff;--mute:#555;background:var(--hero-bg);color:#111;display:flex;flex-direction:column}
-.hpic{order:2;display:block;margin-top:-22vw}
-.hpic img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(180deg,transparent,#000 22%);mask-image:linear-gradient(180deg,transparent,#000 22%)}
-.htx{order:1;position:relative;z-index:1;text-align:left;padding:30px 20px 0}
-.kick{margin:0;font-size:13px;font-weight:700;letter-spacing:.22em;text-transform:uppercase}
-.htx h1{font-size:clamp(34px,9.5vw,44px);line-height:1.02;letter-spacing:-.03em;margin:12px 0 0;max-width:none}
-.htx .lead{color:#333;font-size:16px;max-width:30ch;margin:14px 0 20px}
-.ctas{display:flex;gap:10px;justify-content:flex-start;flex-wrap:wrap}
-.ctas a{display:inline-flex;align-items:center;gap:8px;min-height:44px;box-sizing:border-box;padding:10px 18px;border:2px solid #111;border-radius:6px;font-size:15px;font-weight:700;text-decoration:none;color:#111}
-.ctas a svg{width:16px;height:16px}
-.ctas .cta{background:var(--y)}
-.ctas .btn2{background:#fff}
-/* Very narrow phones: the two buttons stack, full width. */
-@media (max-width:359px){.ctas{flex-direction:column}.ctas a{justify-content:center}}
-@media (min-width:900px){
-.hero{display:grid;grid-template-columns:65fr 35fr}
-.hpic{order:0;margin:0}
-.hpic img{-webkit-mask-image:none;mask-image:none}
-.htx{order:0;align-self:center;padding:40px clamp(24px,3.5vw,56px)}
-.htx h1{font-size:clamp(32px,3.4vw,52px)}
-.htx .lead{font-size:17px}
-}
-.cats{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:repeat(2,1fr);padding:10px 16px}
-.cats a{display:flex;align-items:center;gap:16px;padding:22px 18px;color:var(--ink);text-decoration:none;border-left:1px solid var(--line)}
-.cats a:first-child{border-left:0}
-.cats .ic{width:52px;flex:none}
-.cats b{display:block;font-size:20px;font-weight:800}
-.cats small{display:block;color:var(--mute);font-size:13px;line-height:1.4}
-.cats .go{margin-left:auto;font-size:26px}
-.st{display:block;font-size:clamp(26px,4vw,34px);line-height:1.1;letter-spacing:-.02em;font-weight:800;margin:0 0 8px;padding:0;border:0}
-#catalog>.lead{margin:0 0 6px}
-.sec{padding:48px 16px}
-.alt{background:var(--card)}
-.wrap{max-width:720px;margin:0 auto}
-.wrap p{margin:0 0 20px;font-size:16px;color:var(--mute)}
-#list h3{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800;margin:30px 0 0;padding-bottom:10px;border-bottom:1px solid var(--line)}
-#list h3 svg{width:26px;height:26px;color:var(--ink);flex:none}
-h2::before{display:none}
-.row{padding:14px 0}
-.nm{font-size:16px}
-.pr{font-size:17px}
-.add,.cta{border-radius:6px}
-.docket{border-radius:8px;overflow:hidden}
-main{padding:40px 16px 28px}
-.tools{margin:20px 0 6px}
-.foot{background:#111;color:#d9d9d6;border-top:4px solid var(--y);padding:24px 16px 110px}
-.foot div{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:14px}
-.foot svg{width:44px;flex:none}
-.foot p{margin:0;font-size:14px}
-.foot b{color:#fff;font-weight:800;display:block;font-size:16px}
-@media (min-width:900px){.foot{padding-bottom:28px}}
-@media (max-width:819px){
-nav{display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border-bottom:1px solid var(--line);flex-direction:column;gap:0;padding:6px 16px 12px}
-nav.open{display:flex}
-nav a{padding:12px 0;border-bottom:1px solid var(--line)}
-#menu{display:block}
-.wa .long{display:none}.wa .short{display:inline}
-.cats{grid-template-columns:1fr}
-.cats a{border-left:0;border-top:1px solid var(--line);padding:16px 4px}
-.cats a:first-child{border-top:0}
-}
-@media print{.hero,.cats,#about,#contact,.foot,nav,.wa,#menu{display:none!important}}
-a.cta{display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;text-align:center}
-#send svg{width:20px;height:20px;flex:none}
-#send.off{opacity:.45;pointer-events:none}
-.wrap a:not(.wa){color:var(--ink);font-weight:600}
-.step button{width:40px;min-height:40px}
-.step input{width:50px}
-@media (max-width:560px){.row{grid-template-columns:minmax(0,1fr) auto}.row .nm{grid-column:1/-1}.row .pr{text-align:left}}
-.st{font-size:clamp(24px,3.6vw,30px)}
-input[type=search],#loc,select{border:1px solid var(--line);border-radius:6px;font-weight:400}
-#list h3{font-size:16px;font-weight:700}
-#list h3 svg{width:22px;height:22px;color:var(--mute)}
-.nm{font-weight:500}
-.pr{font-weight:700;font-size:16px}
-.add{background:var(--card);color:var(--ink);border:1px solid var(--line);font-weight:600;padding:8px 18px}
-.add:hover{background:var(--y);border-color:var(--y);color:#111}
-.step{border:1px solid var(--line);border-radius:6px;overflow:hidden}
-.step button{background:var(--bg)}
-.step input{border-inline:1px solid var(--line)}
-.docket{border:1px solid var(--line);box-shadow:0 2px 14px rgba(0,0,0,.06)}
-.dh{background:var(--card);color:var(--ink);border-bottom:1px solid var(--line)}
-.dh span{color:var(--mute)}
-.tot .gt{border-top:1px solid var(--line)}
-#list{touch-action:pan-y}
-.tabs button{flex:1}
-@keyframes inl{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
-@keyframes inr{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}
-#list.in-l{animation:inl .25s ease-out}
-#list.in-r{animation:inr .25s ease-out}
-@media (prefers-reduced-motion:reduce){#list.in-l,#list.in-r{animation:none}}
-.hint{display:none;margin:6px 0 0;font-size:13px;color:var(--mute)}
-@media (hover:none){.hint{display:block}}
-.dclose{display:none}
-#list{will-change:transform}
-@media (max-width:899px){
-#est{position:fixed;inset:0;z-index:30;display:none;overflow:auto;border:0;border-radius:0;box-shadow:none;padding-top:env(safe-area-inset-top,0px);padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
-#est.open{display:block}
-.dclose{display:block;position:sticky;top:0;z-index:2;width:100%;text-align:left;padding:14px 16px;background:var(--card);border:0;border-bottom:1px solid var(--line);color:var(--ink);font-size:15px;font-weight:600;cursor:pointer}
-}
+/* The quotation inherits the page's base text size where print.css sets
+   none. The screen moved to 16 px in this phase; print keeps the old 15 px
+   so the PDF quotation stays exactly the same. */
+@media print{body{font-size:15px}}
+@media print{.hero,#about,#contact,.foot,nav,.wa,#menu{display:none!important}}
 @media print{#est{display:block!important;position:static!important;overflow:visible!important}.dclose{display:none!important}}
-#list{touch-action:auto;will-change:auto}
-#list.snap{display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;transition:height .28s ease}
-#list.snap::-webkit-scrollbar{display:none}
-#list.snap .slide{flex:0 0 100%;min-width:0;scroll-snap-align:start;scroll-snap-stop:always}
-@media (prefers-reduced-motion:reduce){#list.snap{transition:none}}
-@media (max-width:899px){
-#est{position:static;display:block;overflow:hidden;border:1px solid var(--line);border-radius:8px;box-shadow:0 2px 14px rgba(0,0,0,.06);padding:0}
-#est.open{position:fixed;inset:0;z-index:30;overflow:auto;border:0;border-radius:0;box-shadow:none;padding-top:env(safe-area-inset-top,0px);padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
-.dclose{display:none}
-#est.open .dclose{display:block}
-}
-#list.snap{align-items:flex-start}
-#est.open .dclose{display:flex;align-items:center;gap:10px}
-.dclose svg{width:20px;height:20px;flex:none}
-.ctas .btn2{display:inline-flex;align-items:center;gap:8px}
-.btn2 svg{width:20px;height:20px;flex:none}
-#list h4{font-size:14px;font-weight:700;color:var(--mute);margin:22px 0 2px}
-.tabs{align-items:stretch}
-.tabs button{flex:1 1 0;white-space:normal;line-height:1.25;text-align:center;padding:8px 6px}
-
-/* --- Product images (Phase 3: copied unchanged from the live index.html,
-   where they were added on the product-images branch) ------------------------
-   Rows for products that have a photo (cement bags, binding wire) get a square
-   thumbnail in front of the name. Each iron rod tab opens with the same wide
-   photo of the rods (labelled only "8 mm to 16 mm | 30 ft length"), followed by
-   the tab's normal heading (Single Piece / Per Ton) and a one-line note on how
-   it is sold. Image sizes are set in the HTML (width/height) so the page
-   doesn't jump while pictures load.
-   Thumbnail size (approved 12 Nov 2026 after a side-by-side comparison):
-   96 x 96 px on computers and tablets, 80 x 80 px on phones (see the
-   max-width:560px block further down). The thin grey frame is drawn just
-   OUTSIDE the photo (box-shadow) instead of inside it (border), so the photo
-   gets the full 96 px. On a PC with 125% display scaling, 96 px is then exactly
-   120 screen pixels, so the browser can show the 120 px copy (see THUMB_WIDTHS
-   in the script) one-to-one. Whether a picture is drawn one-to-one also depends
-   on where it lands on the screen's pixel grid, which depends on the window
-   width and the text above it. Checked 12 Nov 2026: desktop Chrome on Windows
-   at 125% snaps the thumbnails to whole screen pixels and drew them exactly at
-   every position tested. Other browsers may handle in-between positions
-   differently and look slightly softer; nothing on the page can control that. */
-.row.has-img{grid-template-columns:96px minmax(0,1fr) auto auto}
-.thumb{display:block;width:96px;height:96px;object-fit:contain;background:#fff;border:0;box-shadow:0 0 0 1px var(--line);border-radius:6px}
-.banner{display:block;width:100%;max-width:100%;min-width:0;height:auto;aspect-ratio:3/1;object-fit:cover;background:#fff;border:1px solid var(--line);border-radius:8px;margin:24px 0 0}
-/* Stops the banner's large built-in size from widening the price list column
-   on phones; the column takes the screen width instead. */
-#catalog{min-width:0}
-/* If the photo fails to load it is simply left out; the heading is always shown */
-section.nobanner .banner{display:none}
-/* "How it's sold" note under a tab heading, e.g. "Sold by the piece..." */
-#list .cat-note{margin:8px 0 0;font-size:14px;color:var(--mute)}
-/* Rod sizes: the size ("16 mm") is shown first as a bold black tag. In the
-   page text the name still reads "Iron rod 16 mm" (the tag is only moved
-   visually), so the estimate, PDF, WhatsApp message and tests are unchanged. */
-.nm .rn{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
-.nm .sz{order:-1;display:inline-block;min-width:76px;text-align:center;background:#111;color:#fff;font-weight:800;font-size:17px;line-height:1;padding:9px 10px;border-radius:6px;letter-spacing:.01em}
-@media (max-width:560px){
-/* Phones: 80 x 80 px thumbnail. It fits the existing row height (the name,
-   unit and price already stack to about this height), so rows don't grow. */
-.row.has-img{grid-template-columns:80px minmax(0,1fr) auto}
-.row.has-img .thumb{width:80px;height:80px;grid-row:span 2;align-self:start}
-.row.has-img .nm{grid-column:2/-1}
-.banner{margin-top:18px}
-}
