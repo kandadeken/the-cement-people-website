@@ -4,112 +4,132 @@
     "category": "Cement",
     "name": "Supacem 32.5R",
     "unit": "50 kg bag",
-    "price": 75
+    "price": 75,
+    "image": "/images/products/supacem-32-5.webp",
+    "imageAlt": "Supacem Supa Fast 32.5R bag, green and kraft brown"
   },
   {
     "id": "c2",
     "category": "Cement",
     "name": "Supacem 42.5R",
     "unit": "50 kg bag",
-    "price": 100
+    "price": 100,
+    "image": "/images/products/supacem-42-5.webp",
+    "imageAlt": "Supacem Supa Power 42.5R bag, kraft brown with black panel"
   },
   {
     "id": "c3",
     "category": "Cement",
     "name": "Dzata 42.5R",
     "unit": "50 kg bag",
-    "price": 110
+    "price": 110,
+    "image": "/images/products/dzata-42-5.webp",
+    "imageAlt": "Dzata 42.5R bag, kraft brown with black and white lion panel"
   },
   {
     "id": "c4",
     "category": "Cement",
     "name": "Ghacem Waterproof 42.5N",
     "unit": "50 kg bag",
-    "price": 120
+    "price": 120,
+    "image": "/images/products/ghacem-waterproof-42-5.webp",
+    "imageAlt": "Ghacem Super Strong Waterproof 42.5N bag, black and yellow panel with blue waves"
   },
   {
     "id": "i1",
     "category": "Iron Rods (Single Piece)",
     "name": "Iron rod 16 mm",
     "unit": "30 ft rod",
-    "price": 102
+    "price": 102,
+    "size": "16 mm"
   },
   {
     "id": "i2",
     "category": "Iron Rods (Single Piece)",
     "name": "Iron rod 14 mm",
     "unit": "30 ft rod",
-    "price": 75
+    "price": 75,
+    "size": "14 mm"
   },
   {
     "id": "i3",
     "category": "Iron Rods (Single Piece)",
     "name": "Iron rod 12 mm",
     "unit": "30 ft rod",
-    "price": 58
+    "price": 58,
+    "size": "12 mm"
   },
   {
     "id": "i4",
     "category": "Iron Rods (Single Piece)",
     "name": "Iron rod 11.5 mm",
     "unit": "30 ft rod",
-    "price": 48
+    "price": 48,
+    "size": "11.5 mm"
   },
   {
     "id": "i5",
     "category": "Iron Rods (Single Piece)",
     "name": "Iron rod 10 mm",
     "unit": "30 ft rod",
-    "price": 40
+    "price": 40,
+    "size": "10 mm"
   },
   {
     "id": "i6",
     "category": "Iron Rods (Single Piece)",
     "name": "Iron rod 8 mm",
     "unit": "30 ft rod",
-    "price": 25
+    "price": 25,
+    "size": "8 mm"
   },
   {
     "id": "j1",
     "category": "Iron Rods (Per Ton)",
     "name": "Iron rod 16 mm",
     "unit": "ton",
-    "price": 7000
+    "price": 7000,
+    "size": "16 mm"
   },
   {
     "id": "j2",
     "category": "Iron Rods (Per Ton)",
     "name": "Iron rod 14 mm",
     "unit": "ton",
-    "price": 7000
+    "price": 7000,
+    "size": "14 mm"
   },
   {
     "id": "j3",
     "category": "Iron Rods (Per Ton)",
     "name": "Iron rod 12 mm",
     "unit": "ton",
-    "price": 7000
+    "price": 7000,
+    "size": "12 mm"
   },
   {
     "id": "j4",
     "category": "Iron Rods (Per Ton)",
     "name": "Iron rod 11.5 mm",
     "unit": "ton",
-    "price": 7000
+    "price": 7000,
+    "size": "11.5 mm"
   },
   {
     "id": "j5",
     "category": "Iron Rods (Per Ton)",
     "name": "Iron rod 10 mm",
     "unit": "ton",
-    "price": 7000
+    "price": 7000,
+    "size": "10 mm"
   },
   {
     "id": "j6",
     "category": "Iron Rods (Per Ton)",
     "name": "Iron rod 8 mm",
     "unit": "ton",
-    "price": 7000
+    "price": 7000,
+    "size": "8 mm"
   },
   {
     "id": "i8",
@@ -117,6 +137,8 @@
     "subgroup": "Binding wire",
     "name": "Binding wire",
     "unit": "roll",
-    "price": 60
+    "price": 60,
+    "image": "/images/products/binding-wire.webp",
+    "imageAlt": "Coil of black annealed binding wire"
   }
 ]

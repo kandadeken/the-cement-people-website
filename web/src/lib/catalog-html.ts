@@ -29,6 +29,12 @@ export interface EngineProduct {
   name: string;
   unit: string;
   price: number;
+  /** Square product photo (the 360 px file; smaller copies sit beside it). */
+  img?: string;
+  /** Description of that photo for screen readers. */
+  alt?: string;
+  /** Rods: the part of the name shown as a bold size tag, e.g. "16 mm". */
+  size?: string;
 }
 
 /** A product as stored in src/data/products.json. */
@@ -39,6 +45,9 @@ interface StoredProduct {
   name: string;
   unit: string;
   price: number;
+  image?: string;
+  imageAlt?: string;
+  size?: string;
 }
 
 /** Convert products.json entries to the engine's short field names. */
@@ -50,7 +59,27 @@ export function toEngineProducts(products: StoredProduct[]): EngineProduct[] {
     name: p.name,
     unit: p.unit,
     price: p.price,
+    ...(p.image ? { img: p.image, alt: p.imageAlt || "" } : {}),
+    ...(p.size ? { size: p.size } : {}),
   }));
+}
+
+/** A wide tab photo, from src/data/categories.json. */
+export interface Banner { src: string; srcset: string; w: number; h: number }
+
+/** Tab extras in the form the engine uses: {category: {banner?, note?}}. */
+export type CategoryInfo = Record<string, { banner?: Banner; note?: string }>;
+
+/** Resolve categories.json ("banner": "rods") into the banner objects themselves. */
+export function toCategoryInfo(data: {
+  banners: Record<string, Banner>;
+  categories: Record<string, { banner?: string; note?: string }>;
+}): CategoryInfo {
+  const out: CategoryInfo = {};
+  for (const [c, info] of Object.entries(data.categories)) {
+    out[c] = { note: info.note, banner: info.banner ? data.banners[info.banner] : undefined };
+  }
+  return out;
 }
 
 /** Category names in the order they first appear. Mirrors the engine's `cats`. */
@@ -78,14 +107,36 @@ function addButton(p: EngineProduct): string {
   return `<button class="add" data-inc="${p.id}" aria-label="Add ${p.name} to estimate">Add</button>`;
 }
 
+// Thumbnail sizes. Mirror the engine's THUMB_WIDTHS / THUMB_SIZES exactly.
+const THUMB_WIDTHS = [80, 96, 120, 160, 192, 240, 288];
+const THUMB_SIZES = "(max-width:560px) 80px, 96px";
+/** Every size of one product photo. Mirrors `thumbSrcset()`. */
+const thumbSrcset = (src: string) =>
+  THUMB_WIDTHS.map((w) => `${src.replace(/\.webp$/, `-${w}.webp`)} ${w}w`).concat(`${src} 360w`).join(", ");
+/** The square photo in front of a product name. Mirrors `thumb()`. */
+const thumb = (p: EngineProduct) =>
+  p.img
+    ? `<img class="thumb" src="${p.img}" srcset="${thumbSrcset(p.img)}" sizes="${THUMB_SIZES}" alt="${p.alt || ""}" width="96" height="96">`
+    : "";
+/** Product name, with a rod's size as a bold tag. Mirrors `label()`. */
+const label = (p: EngineProduct) =>
+  p.size && p.name.endsWith(p.size)
+    ? `<span class="rn">${p.name.slice(0, -p.size.length)}<b class="sz">${p.size}</b></span>`
+    : p.name;
+/** Width a tab banner is shown at. Mirrors the engine's BANNER_SIZES. */
+const BANNER_SIZES = "(min-width:1100px) 652px, (min-width:900px) calc(100vw - 448px), calc(100vw - 32px)";
+
 /** One product row. Mirrors `rowHTML()`. */
 function rowHTML(p: EngineProduct, currency: string): string {
-  return `<div class="row"><div class="nm">${p.name}<small>per ${p.unit}</small></div><div class="pr">${money(p.price, currency)}</div>${addButton(p)}</div>`;
+  return `<div class="row${p.img ? " has-img" : ""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="pr">${money(p.price, currency)}</div>${addButton(p)}</div>`;
 }
 
-/** One category: heading (h3), optional subgroup headings (h4), then rows. Mirrors `sec()`. */
-function sectionHTML(category: string, list: EngineProduct[], currency: string): string {
+/** One category: optional banner, heading (h3), optional note, optional
+    subgroup headings (h4), then rows. Mirrors `sec()` while browsing. */
+function sectionHTML(category: string, list: EngineProduct[], currency: string, info: CategoryInfo): string {
   const subgroups = [...new Set(list.map((p) => p.sub || ""))];
+  const extra = info[category] || {};
+  const b = extra.banner;
   const body = subgroups
     .map(
       (sub) =>
@@ -96,7 +147,15 @@ function sectionHTML(category: string, list: EngineProduct[], currency: string):
           .join(""),
     )
     .join("");
-  return `<section><h3>${ICON[category] || ""}${category}</h3>${body}</section>`;
+  return (
+    `<section>` +
+    (b
+      ? `<img class="banner" src="${b.src}" srcset="${b.srcset}" sizes="${BANNER_SIZES}" alt="" width="${b.w}" height="${b.h}" fetchpriority="low" onerror="this.closest('section').classList.add('nobanner')">`
+      : "") +
+    `<h3>${ICON[category] || ""}${category}</h3>` +
+    (extra.note ? `<p class="cat-note">${extra.note}</p>` : "") +
+    `${body}</section>`
+  );
 }
 
 /** The category tabs, first one selected. Mirrors `renderTabs()` on first load. */
@@ -106,9 +165,9 @@ export function tabsHTML(P: EngineProduct[]): string {
 }
 
 /** The whole price list, one swipeable slide per category. Mirrors `renderList()` with no search. */
-export function listHTML(P: EngineProduct[], currency: string): string {
+export function listHTML(P: EngineProduct[], currency: string, info: CategoryInfo = {}): string {
   return categories(P)
-    .map((g) => `<div class="slide">${sectionHTML(g, P.filter((p) => p.cat === g), currency)}</div>`)
+    .map((g) => `<div class="slide">${sectionHTML(g, P.filter((p) => p.cat === g), currency, info)}</div>`)
     .join("");
 }
 

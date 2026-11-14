@@ -1,0 +1,21 @@
+{
+  "_about": "Extras shown for a whole category tab in the price list. 'banners' are wide photos, each given in several widths so phones download a small copy and large screens a sharp one; w and h are the default file's real size. 'categories' says which banner (if any) opens each tab, and the one-line note under the tab heading that says how the products are sold. Both iron rod tabs share the 'rods' banner, so it is downloaded only once. The banner is decorative (no alt text): the heading and note say the same. Same content as the live index.html (ROD_PHOTO and CAT_INFO).",
+  "banners": {
+    "rods": {
+      "src": "/images/products/iron-rods-1086.webp",
+      "srcset": "/images/products/iron-rods-720.webp 720w, /images/products/iron-rods-1086.webp 1086w, /images/products/iron-rods-1440.webp 1440w",
+      "w": 1086,
+      "h": 363
+    }
+  },
+  "categories": {
+    "Iron Rods (Single Piece)": {
+      "banner": "rods",
+      "note": "Sold by the piece. Each rod is 30 ft long."
+    },
+    "Iron Rods (Per Ton)": {
+      "banner": "rods",
+      "note": "Sold by the ton, in each size."
+    }
+  }
+}
