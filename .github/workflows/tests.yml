@@ -95,7 +95,9 @@ jobs:
           echo "--- Files that would be published:"
           (cd _site && find . -type f | sort)
 
-  # Phase 1: the same 41 tests, run against the Astro version in web/.
+  # The whole tests/ folder, run against the Astro version in web/. Since
+  # Phase 3 (Astro parity) nothing is skipped here: the product-image and
+  # parity checks (tests/test_parity.py) must pass on Astro too.
   # Builds web/ into web/dist/, serves it from a local web server on this
   # GitHub machine (Astro pages load files like /_astro/... and must be served,
   # not opened from disk), and points the tests at that server.
