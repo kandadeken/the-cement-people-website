@@ -1,24 +1,41 @@
 ---
-/* Hero.astro - the opening section: headline, "View products" and
-   "Call" buttons, with the cement-bag and iron-rod photos either side.
-   The photos live in public/images/ (they used to be embedded inside the
-   HTML as text, which made the page heavier and impossible to cache).
+/* Hero.astro - the opening section: one product photograph with the
+   headline, "View products" and "Call us" beside it (computers) or above it
+   (phones).
 
-   Image descriptions (alt text): both photos show the same things - cement
-   bags, iron rods, binding wire. The left one is described for people using
-   a screen reader and for image search. The right one is marked decorative
-   (alt="") so the same description is not read out twice.
+   Layout agreed with Daniel and ChatGPT ("Direction A, Refinement 02"):
+   - Screens 900 px and wider: the wide photo fills about 65% of the width on
+     the left; a warm-white panel with the text fills the rest.
+   - Phones and narrow tablets: the warm-white panel with the text comes
+     first, and the tall photo starts right under the buttons. The top of the
+     tall photo is plain wall, so it fades into the panel and text and photo
+     read as one picture.
+   - Text left-aligned; no yellow line under the headline; plain button
+     labels (no arrow). The call button says "Call us"; the number itself is
+     read out to screen readers and stays visible in Contact and the footer.
 
-   width/height are the photos' real sizes. They let the browser reserve the
-   space before the photo arrives; the stylesheet still controls the size
-   shown, so nothing looks different. */
+   The photos (Sunburst renders of the real products, Nov 2026) are in
+   public/images/hero/, each in several widths: the browser downloads only
+   the size the screen needs. Phones get the tall photo, wider screens the
+   wide one, via <picture>. width/height give the shape so the browser can
+   reserve the space before the photo arrives. */
 import { business } from "../config/business";
 
-/** Description of the left hero photo; also used for link previews (Base.astro). */
-export const HERO_ALT = "Bags of Supacem, Ghacem and Dzata cement beside a bundle of iron rods";
+/** Description of the hero photo; also used for link previews (Base.astro). */
+export const HERO_ALT =
+  "Bags of Supacem, Dzata and Ghacem cement beside strapped bundles of iron rods and coils of binding wire";
+
+const desktopSrcset = [960, 1440, 1920, 2560]
+  .map((w) => `/images/hero/hero-desktop-${w}.webp ${w}w`)
+  .join(", ");
+const phoneSrcset = [480, 780, 1024]
+  .map((w) => `/images/hero/hero-phone-${w}.webp ${w}w`)
+  .join(", ");
 ---
 <section class="hero" id="home">
-<div class="hp l"><img alt={HERO_ALT} src="/images/hero-left.jpg" width="520" height="691"></div>
-<div class="htx"><p class="kick">Building materials supplier</p><h1>Materials for stronger construction.</h1><p class="lead">Cement, iron rods and binding wire, delivered to your site.</p><div class="ctas"><a class="cta" href="#products">View products</a><a class="btn2" href={`tel:${business.phoneInternational}`} target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Call {business.phone}</a></div></div>
-<div class="hp r"><img alt="" src="/images/hero-right.jpg" width="520" height="676"></div>
+<picture class="hpic">
+<source media="(max-width:899px)" srcset={phoneSrcset} sizes="100vw" width="1024" height="1280">
+<img src="/images/hero/hero-desktop-1440.webp" srcset={desktopSrcset} sizes="(min-width:900px) 65vw, 100vw" width="2560" height="1440" alt={HERO_ALT} fetchpriority="high">
+</picture>
+<div class="htx"><p class="kick">Building materials supplier</p><h1>Materials for stronger construction.</h1><p class="lead">Cement, iron rods and binding wire, delivered to your site.</p><div class="ctas"><a class="cta" href="#products">View products</a><a class="btn2" href={`tel:${business.phoneInternational}`} aria-label={`Call us on ${business.phone}`}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Call us</a></div></div>
 </section>
