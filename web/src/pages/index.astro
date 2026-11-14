@@ -28,7 +28,7 @@ import QuotePieces from "../components/QuotePieces.astro";
 import products from "../data/products.json";
 import categoryData from "../data/categories.json";
 import { business } from "../config/business";
-import { toEngineProducts, toCategoryInfo, tilesHTML } from "../lib/catalog-html";
+import { toEngineProducts, toCategoryInfo } from "../lib/catalog-html";
 
 // The products in the short form the quotation engine has always used:
 // each one as {id, cat, sub?, name, unit, price}.
@@ -62,9 +62,6 @@ const engineJson = JSON.stringify(engineData).replace(/</g, "\\u003c");
 <Header />
 
 <Hero />
-
-<!-- Category tiles: written here at build time; quote-engine.js redraws the same markup -->
-<section class="cats" id="cats" aria-label="Product categories" set:html={tilesHTML(engineProducts)}></section>
 
 <main id="products">
 <Catalog products={engineProducts} categoryInfo={categoryInfo} />

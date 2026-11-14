@@ -4,7 +4,7 @@
    ---------------------------------------------------------------------------
    Writes the <head>: page title, description, canonical address, link
    previews for WhatsApp/Facebook/X, structured data for search engines,
-   the Montserrat font and the stylesheets.
+   the Montserrat font (hosted with the site) and the stylesheets.
    The page's own content goes where <slot /> is.
 
    Props:
@@ -79,9 +79,10 @@ const structuredData = JSON.stringify(
 <script is:inline type="application/ld+json" set:html={structuredData}></script>
 
 <link rel="sitemap" href="/sitemap.xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+<!-- Montserrat is hosted with the site (see styles/tokens.css); the two most used
+     files are fetched early so the headline and prices draw in the right font. -->
+<link rel="preload" href="/fonts/montserrat-latin-800-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/montserrat-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 </head>
 <body>
 <slot />

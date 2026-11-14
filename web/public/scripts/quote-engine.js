@@ -258,18 +258,9 @@ const WA_NUMBER=TCP.business.whatsapp;
 $("#loc").addEventListener("input",renderEst);
 document.querySelectorAll("[data-wa]").forEach(a=>{if(WA_NUMBER)a.href="https://wa.me/"+WA_NUMBER+"?text="+encodeURIComponent("Hello, I would like to enquire about your materials.")});
 
-// ---- Category tiles under the hero ("Cement", "Iron rods") --------------------
-const S='fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"';
-const IC={
-bag:`<svg class="ic" viewBox="0 0 48 48" aria-hidden="true"><path d="M13 8h22l5 9v26H8V17z" ${S}/><path d="M8 17h32" ${S}/></svg>`,
-rods:`<svg class="ic" viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="12" width="32" height="8" rx="4" ${S}/><rect x="11" y="22" width="32" height="8" rx="4" ${S}/><rect x="5" y="32" width="32" height="8" rx="4" ${S}/></svg>`,
-wire:`<svg class="ic" viewBox="0 0 48 48" aria-hidden="true"><ellipse cx="24" cy="27" rx="19" ry="11" ${S}/><ellipse cx="24" cy="22" rx="19" ry="11" ${S}/><ellipse cx="24" cy="22" rx="8" ry="4" ${S}/></svg>`};
-const rods=P.filter(p=>p.unit==="30 ft rod").map(p=>p.name.replace("Iron rod ","")).reverse().join(", ");
-$("#cats").innerHTML=[
-["Cement","Cement","50 kg bags: "+P.filter(p=>p.cat==="Cement").map(p=>p.name).join(", "),IC.bag],
-["Iron Rods (Single Piece)","Iron rods","By the piece or the ton: "+rods+", and binding wire",IC.rods]
-].map(([c,t,s,i])=>`<a href="#products" data-go="${c}">${i}<div><b>${t}</b><small>${s}</small></div><span class="go" aria-hidden="true">›</span></a>`).join("");
-$("#cats").addEventListener("click",e=>{const a=e.target.closest("[data-go]");if(a)goCat(a.dataset.go,true);});
+// ---- Category tiles under the hero: removed in the design-system phase
+// (Nov 2026). The tabs above the price list do the same job, and without the
+// tiles the first prices appear sooner. goCat() is still used by the tabs.
 
 // ---- Mobile menu ---------------------------------------------------------------
 $("#menu").addEventListener("click",()=>{const o=$("#nav").classList.toggle("open");$("#menu").setAttribute("aria-expanded",o)});
