@@ -4,14 +4,14 @@ This folder is the new foundation for thecementpeople.com, built with
 [Astro](https://astro.build). It produces a plain static website: HTML, CSS,
 images and one script. No server, database or paid service is needed.
 
-> **Status (Phase 3, parity):** not live. The live site is still the single
-> file `index.html` at the top of the repository, published by GitHub Pages
-> from `main`. Nothing in `web/` is published until the switch-over is
-> approved. Phase 1 rebuilt the site to look and behave identically. Phase 2
-> made it readable by search engines and AI tools (see "Search engines"
-> below). Phase 3 carried over everything added to the live site since then
-> (product photos, rod banner, rod size tags), so this version now matches it
-> feature for feature; every test runs on both versions.
+> **Status: live.** Since 14 November 2026 this Astro version is the
+> website at thecementpeople.com, published by the "Astro publishing"
+> workflow on every merge into `main` (see "Publishing" below). The old
+> single-file site, `../index.html`, stays in the repository as the rollback
+> copy (tag `v2-pre-astro`); it is no longer what visitors see. How it got
+> here: Phase 1 rebuilt the site identically, Phase 2 made it readable by
+> search engines and AI tools, Phase 3 carried over the product photos, rod
+> banner and size tags, and the publishing phase set up the pipeline.
 
 ## How it fits together
 
@@ -237,7 +237,7 @@ ignoring them.
 In both versions the rendering is in the `thumb`, `label`, `rowHTML` and `sec`
 functions (in `../index.html`, and in `public/scripts/quote-engine.js` here).
 
-## Publishing (set up in the publishing phase, not yet switched on)
+## Publishing (live since 14 November 2026)
 
 `.github/workflows/astro-publish.yml` runs on every merge into `main` (and
 checks pull requests that touch the site). It:
@@ -248,17 +248,19 @@ checks pull requests that touch the site). It:
    address, links to a missing file, or lacks any of the 17 products;
 3. builds again and confirms the files are identical (reproducible);
 4. runs the full test suite against those exact files;
-5. packages them for GitHub Pages.
+5. packages them for GitHub Pages;
+6. publishes them to thecementpeople.com (job "Publish"), only on `main` and
+   only while the repository variable `ASTRO_LIVE` is `true`.
 
-The last job, "Publish", is switched off: it runs only when the repository
-variable `ASTRO_LIVE` is `true`. The live site is still the root
-`index.html`. How to switch thecementpeople.com over, and back, is in
+If any step fails, nothing is published and the site stays as it was. How
+the switch-over was done, and how to roll back, is in
 [`SWITCH-OVER.md`](SWITCH-OVER.md).
 
-## Preview copy (before the switch-over)
+## Preview copy (for trying changes before they go live)
 
 `node scripts/make-preview.mjs <folder>` copies the production build in
-`dist/` to a folder for a private preview site, and on the copy only: removes
+`dist/` to a folder for the private preview site (https://kandadeken.github.io/,
+repository `kandadeken/kandadeken.github.io`), and on the copy only: removes
 `CNAME` (so the preview never claims thecementpeople.com), marks every page
 noindex, blocks crawlers in `robots.txt`, and adds `.nojekyll`. The preview
 must be served from the root of its address, because the site links to

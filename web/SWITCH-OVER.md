@@ -1,8 +1,16 @@
 # Switching thecementpeople.com to the Astro site, and switching back
 
-The exact steps for the switch-over phase. **Nothing here is done until that
-phase is approved.** Until then the live site is the root `index.html` on
-`main`, served by GitHub Pages with "Deploy from a branch".
+> **Done on Saturday 14 November 2026, about 8 pm**, approved by Daniel. The
+> pre-checks passed (tag `v2-pre-astro` and `main` both on `37aa70f`, latest
+> build green), the three steps below were carried out, and the checks after
+> passed: custom domain and "Enforce HTTPS" kept, DNS check successful, the
+> live files byte-for-byte the tested build, estimate, WhatsApp, PDF, search,
+> menu and phone layout all working, robots.txt, sitemap and favicons served,
+> no noindex. The rollback below stays valid as long as the root
+> `index.html` is kept (at least two weeks, then reviewed, not deleted
+> automatically).
+
+The exact steps, kept as the record of how it was done and for the rollback.
 
 Everything happens in the repository's **Settings** on GitHub; no code
 changes, no DNS changes. Allow about 15 minutes, at a quiet time for the

@@ -3,19 +3,15 @@ name: Astro publishing
 # Builds the Astro website in web/, checks it, and packages it ready for
 # GitHub Pages - every time something is merged into main.
 #
-# WHAT THIS DOES TODAY (publishing phase, Nov 2026)
-#   Build, check and package only. The "Publish" job is switched OFF: it only
-#   runs when the repository variable ASTRO_LIVE is set to "true", which it is
-#   not. thecementpeople.com keeps being served from the root index.html on
-#   main ("Deploy from a branch"), exactly as before.
+# STATUS: LIVE since 14 November 2026 (switch-over done, see web/SWITCH-OVER.md)
+#   GitHub Pages' source is "GitHub Actions" and the repository variable
+#   ASTRO_LIVE is "true", so every merge into main is built, checked, tested
+#   and then published to thecementpeople.com by the "Publish" job.
 #
-# WHAT HAPPENS AT THE SWITCH-OVER (a separate, approved step - see
-# web/SWITCH-OVER.md)
-#   1. Settings -> Pages -> Source: "GitHub Actions".
-#   2. Settings -> Secrets and variables -> Actions -> Variables:
-#      ASTRO_LIVE = true.
-#   3. Re-run this workflow on main. The package it built is then published.
-#   Rollback: set Source back to "Deploy from a branch, main, / (root)".
+# ROLLBACK (if the live site ever needs to go back to the old single file)
+#   Settings -> Pages -> Source: "Deploy from a branch, main, / (root)".
+#   GitHub then serves the root index.html again (kept on purpose, tagged
+#   v2-pre-astro). Then set ASTRO_LIVE to "false" so merges stop publishing.
 #
 # On pull requests that touch the website, the build-and-check job runs too
 # (never the publish job), so a change that would break the build or the
@@ -106,8 +102,9 @@ jobs:
           TCP_SITE_URL: http://127.0.0.1:4321/
         run: python -m pytest tests -v
 
-      # The package GitHub Pages would publish. Uploading it publishes
-      # nothing; only the "Publish" job below can, and it is switched off.
+      # The package GitHub Pages publishes. Uploading it publishes nothing
+      # by itself; the "Publish" job below does that, after every check above
+      # has passed.
       - name: Package the site for GitHub Pages
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
@@ -122,10 +119,11 @@ jobs:
           retention-days: 30
 
   publish:
-    name: Publish to thecementpeople.com (switched off until the switch-over)
+    name: Publish to thecementpeople.com
     needs: build
-    # Runs only on main, and only once ASTRO_LIVE is set to "true" at the
-    # switch-over. Until then this job is skipped on every run.
+    # Runs only on main (never for pull requests), and only while ASTRO_LIVE
+    # is "true" (set at the switch-over, 14 Nov 2026). Setting it to "false"
+    # stops publishing without touching anything else.
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.ASTRO_LIVE == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
