@@ -89,6 +89,14 @@ nav a:hover{border-bottom-color:var(--y)}
 .htx{order:0;align-self:center;padding:40px clamp(24px,3.5vw,56px)}
 .htx .lead{font-size:var(--t-price)}
 }
+/* 900-1023 px: the text panel is narrow, so the panel and the two buttons
+   get slightly tighter side padding. That keeps "View products" and
+   "Call us" side by side instead of stacked (ChatGPT review, 14 Nov). */
+@media (min-width:900px) and (max-width:1023px){
+.htx{padding-inline:var(--s5)}
+.ctas{gap:var(--s2)}
+.ctas a{padding-inline:var(--s3)}
+}
 
 /* ---- 4. Sections: one width, one left edge, one rhythm ------------------- */
 main{max-width:var(--page);margin:0 auto;padding:var(--gap-section) var(--s4) 0;display:grid;gap:var(--s5)}

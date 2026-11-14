@@ -15,6 +15,7 @@ can't quietly undo it:
   D05  the hero keeps a clear main button: "View products" is TCP yellow,
        "Call us" is white with a dark border, so they never look equal
   D06  the category cards under the hero are gone (the tabs do that job)
+  D07  from 900 px up, the two hero buttons sit side by side
 
 They only apply to the Astro build (the old single-file index.html keeps its
 old look), so they are skipped when the single file is under test.
@@ -124,3 +125,16 @@ def test_d06_category_cards_removed(browser):
     _skip_unless_astro(page)
     assert page.locator("#cats, .cats").count() == 0, "the category cards under the hero are back"
     page.context.close()
+
+
+@pytest.mark.parametrize("width", [900, 960, 1024, 1440])
+def test_d07_hero_buttons_side_by_side_on_wide_screens(browser, width):
+    # From 900 px up the hero is photo left, text right; "View products" and
+    # "Call us" should sit on one line, not stacked (ChatGPT review, 14 Nov).
+    context = browser.new_context(viewport={"width": width, "height": 800})
+    page = context.new_page()
+    page.goto(SITE_URL, wait_until="load")
+    _skip_unless_astro(page)
+    tops = page.evaluate("[...document.querySelectorAll('.ctas a')].map(a => Math.round(a.getBoundingClientRect().top))")
+    assert len(tops) == 2 and tops[0] == tops[1], f"hero buttons are stacked at {width} px: {tops}"
+    context.close()
