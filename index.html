@@ -254,24 +254,31 @@ nav a{padding:12px 0;border-bottom:1px solid var(--line)}
 .cats a:first-child{border-top:0}
 }
 /* ---- TEST hero (branch hero-sunburst-test) ----
-   One photo instead of the two side pictures.
-   Wide screens (1100px+): the headline sits over the empty wall in the photo's top-right corner.
-   Narrower screens: the headline sits on a band painted in the wall's colours, and the photo
-   fades up into that band, so text and photo read as one picture. */
-.hero.hero2{display:flex;flex-direction:column;background:linear-gradient(90deg,#e6ddd9,#bdb7b5 50%,#a9a4a4)}
-.hero2 .hbg{order:2;display:block}
-.hero2 .hbg img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(180deg,transparent,#000 14%);mask-image:linear-gradient(180deg,transparent,#000 14%)}
-.hero.hero2 .htx{order:1;padding:36px 16px 0}
-/* phones: pull the photo up under the buttons; its top part is plain wall, so the text can sit on it */
-@media (max-width:819px){.hero2 .hbg{margin-top:-26vw}.hero2 .htx{position:relative;z-index:1}}
-.hero2 .htx .lead{color:#222}
-@media (min-width:1100px){
-.hero.hero2{display:block;position:relative;background:none}
+   Layout agreed with ChatGPT ("Direction A, Refinement 02"):
+   - Wide screens: photo on the left (about 65%), a warm-white text panel on the right (35%).
+   - Phones: warm-white text panel on top, tall photo directly under the buttons.
+   - Text left-aligned, no yellow line under the headline, smaller buttons, no arrow. */
+.hero.hero2{display:flex;flex-direction:column;background:#f7f4ef}
+.hero2 .hbg{order:2;display:block;margin-top:-22vw}
+/* the photo's top is plain wall: fade it into the panel so text and photo read as one */
+.hero2 .hbg img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(180deg,transparent,#000 22%);mask-image:linear-gradient(180deg,transparent,#000 22%)}
+.hero.hero2 .htx{order:1;position:relative;z-index:1;text-align:left;padding:30px 20px 0}
+.hero2 .htx h1{font-size:clamp(34px,9.5vw,44px);margin-top:12px}
+.hero2 .htx h1::after{display:none}
+.hero2 .htx .lead{color:#333;font-size:16px;margin:14px 0 20px;max-width:30ch}
+.hero2 .ctas{justify-content:flex-start;gap:10px}
+.hero2 .ctas a{padding:11px 18px;font-size:15px;display:inline-flex;align-items:center;gap:8px}
+.hero2 .ctas svg{width:16px;height:16px}
+.hero2 .btn2{border-color:#bbb!important}
+/* very narrow phones: stack the two buttons full width */
+@media (max-width:359px){.hero2 .ctas{flex-direction:column}.hero2 .ctas a{justify-content:center}}
+@media (min-width:820px){
+.hero.hero2{display:grid;grid-template-columns:65fr 35fr}
+.hero2 .hbg{order:0;margin:0;overflow:hidden}
+/* whole photo shown, uncropped; it sets the hero height */
 .hero2 .hbg img{-webkit-mask-image:none;mask-image:none}
-/* the empty wall is roughly the right 30% of the photo and its top 55% */
-.hero.hero2 .htx{position:absolute;top:0;right:1%;width:30%;padding:3.2vw 0 0}
-.hero2 .htx h1{font-size:clamp(30px,3.4vw,56px)}
-.hero2 .htx .lead{font-size:clamp(15px,1.15vw,18px)}
+.hero.hero2 .htx{order:0;align-self:center;padding:40px clamp(24px,3.5vw,56px)}
+.hero2 .htx h1{font-size:clamp(32px,3.4vw,52px)}
 }
 @media print{.hero,.cats,#about,#contact,.foot,nav,.wa,#menu{display:none!important}}
 a.cta{display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;text-align:center}
@@ -435,7 +442,7 @@ body::before,body>*:not(#quote){display:none!important}
 <source media="(max-width:819px)" srcset="images/hero/hero-phone-640.jpg 640w, images/hero/hero-phone-1024.jpg 1024w" sizes="100vw" width="1024" height="1280">
 <img src="images/hero/hero-desktop-1920.jpg" srcset="images/hero/hero-desktop-1280.jpg 1280w, images/hero/hero-desktop-1920.jpg 1920w, images/hero/hero-desktop-2560.jpg 2560w" sizes="100vw" width="2560" height="1440" alt="Bags of Supacem, Dzata and Ghacem cement beside strapped bundles of iron rods and coils of binding wire" fetchpriority="high">
 </picture>
-<div class="htx"><p class="kick">Building materials supplier</p><h1>Materials for stronger construction.</h1><p class="lead">Cement, iron rods and binding wire, delivered to your site.</p><div class="ctas"><a class="cta" href="#products">View products</a><a class="btn2" href="tel:+233558463468" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Call 055 846 3468</a></div></div>
+<div class="htx"><p class="kick">Building materials supplier</p><h1>Materials for stronger construction.</h1><p class="lead">Cement, iron rods and binding wire, delivered to your site.</p><div class="ctas"><a class="cta" href="#products">View products</a><a class="btn2" href="tel:+233558463468" aria-label="Call us on 055 846 3468"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Call us</a></div></div>
 </section>
 
 <section class="cats" id="cats" aria-label="Product categories"></section>
