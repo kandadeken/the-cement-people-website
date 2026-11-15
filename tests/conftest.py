@@ -348,6 +348,11 @@ def mobile(browser):
     for product, qty in s.items:
         add_item(page, product, qty)
     clear_search(page)
+    # Back at the top of the page, where the estimate panel is off screen and
+    # the bar shows. (Since the catalogue phase the bar steps aside while the
+    # estimate panel itself is on screen.)
+    page.evaluate("scrollTo({top: 0, behavior: 'instant'})")
+    page.wait_for_timeout(300)
     page.click("#barBtn")
     page.wait_for_timeout(300)
     s.estimate_open = page.evaluate(

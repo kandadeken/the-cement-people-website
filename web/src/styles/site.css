@@ -36,6 +36,8 @@ button,input,select{font-family:inherit}
 h1{font-size:clamp(28px,6vw,42px);line-height:1.05;letter-spacing:-.025em;font-weight:800;margin:6px 0 10px}
 h2{font-size:17px;font-weight:800;margin:26px 0 2px;display:flex;align-items:center;gap:10px}
 .mute{color:var(--mute)}
+/* Visually hidden: read by screen readers and search engines, not shown. */
+.vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 .lead{color:var(--mute);max-width:52ch;margin:0}
 
 /* Buttons. Primary: yellow, for the main action in an area ("View
@@ -135,6 +137,10 @@ input[type=search]{width:100%;min-height:var(--tap);padding:10px var(--s3);font-
 #list h3 svg{width:22px;height:22px;color:var(--mute);flex:none}
 #list h4{font-size:var(--t-small);font-weight:var(--w-label);color:var(--mute);margin:22px 0 2px}
 #list .cat-note{margin:var(--s2) 0 0;font-size:var(--t-small);color:var(--mute)}
+/* A tab where every product has the same price (rods by the ton) shows that
+   price once here instead of on every row. */
+#list .cat-price{margin:var(--s2) 0 0;font-size:var(--t-body);color:var(--ink)}
+#list .cat-price b{font-size:var(--t-price);font-weight:var(--w-strong)}
 /* Iron-rods banner: same wide photo at the top of both rod tabs. If it fails
    to load it is left out; the heading is always shown. */
 .banner{display:block;width:100%;max-width:100%;min-width:0;height:auto;aspect-ratio:3/1;object-fit:cover;background:var(--card);border:1px solid var(--line);border-radius:var(--r-panel);margin:var(--s5) 0 0}
@@ -151,7 +157,9 @@ section.nobanner .banner{display:none}
    still reads "Iron rod 16 mm", so estimate, PDF and WhatsApp are unchanged. */
 .nm .rn{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
 .nm .sz{order:-1;display:inline-block;min-width:76px;text-align:center;background:var(--ink);color:var(--card);font-weight:var(--w-strong);font-size:var(--t-price);line-height:1;padding:9px 10px;border-radius:var(--r-control);letter-spacing:.01em}
-.pr{font-weight:var(--w-strong);font-size:var(--t-price);text-align:right}
+/* position:relative keeps a hidden price (.vh) inside its own row; without
+   it, hidden prices on off-screen slides made the phone page too wide. */
+.pr{position:relative;font-weight:var(--w-strong);font-size:var(--t-price);text-align:right}
 /* "Add": neutral so the yellow stays for the main actions; turns light
    yellow on hover and keyboard focus (decided 14 Nov 2026). */
 .add{min-height:var(--tap);padding:var(--s2) 18px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-control);font-size:var(--t-small);font-weight:var(--w-label);cursor:pointer}
@@ -161,6 +169,9 @@ section.nobanner .banner{display:none}
 .step{display:inline-flex;justify-self:start;border:1px solid var(--line);border-radius:var(--r-control);overflow:hidden}
 .step button{width:40px;min-height:var(--tap);border:0;background:var(--bg);color:var(--ink);font-size:var(--t-sub);font-weight:var(--w-label);cursor:pointer}
 .step input{width:50px;min-height:var(--tap);text-align:center;border:0;border-inline:1px solid var(--line);background:var(--card);color:var(--ink);font-size:var(--t-body);font-weight:var(--w-label);border-radius:0;-moz-appearance:textfield}
+/* Stepper plus its unit word ("tons" for rods sold by the ton). */
+.qty{display:inline-flex;align-items:center;gap:var(--s2);justify-self:start}
+.qty .u{font-size:var(--t-small);color:var(--mute)}
 .step input::-webkit-outer-spin-button,.step input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 
 /* ---- 6. Estimate panel ------------------------------------------------------ */
@@ -174,6 +185,8 @@ section.nobanner .banner{display:none}
 .ln .nm{grid-column:1/-1}
 .ln .amt{text-align:right;font-weight:var(--w-strong);align-self:center}
 .empty{padding:var(--s4) 0;margin:0}
+/* "Undo" after Clear estimate: shown for 10 seconds. */
+.empty .undo{color:var(--ink);font-weight:var(--w-label);padding:var(--s2) var(--s3)}
 .dl{display:block;padding:14px 14px var(--s1);font-weight:var(--w-label);font-size:var(--t-small)}
 #loc{display:block;width:100%;min-height:var(--tap);margin-top:6px;padding:10px;font-size:var(--t-body);border:1px solid var(--line);border-radius:var(--r-control);background:var(--card);color:var(--ink)}
 .tot{padding:var(--s2) 14px 6px}
@@ -203,6 +216,11 @@ main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;gap:var(--s6)}
 /* ---- 7. Phone estimate bar (bottom of the screen) ------------------------- */
 .bar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:12;background:var(--ink);color:var(--card);border-top:4px solid var(--y);padding:var(--s3) var(--s4) calc(12px + env(safe-area-inset-bottom,0px));justify-content:space-between;align-items:center;gap:var(--s3)}
 .bar.on{display:flex}
+/* While the estimate panel itself is on screen the bar is not needed and
+   would cover the panel's bottom, so it slides away (catalogue phase). */
+.bar{transition:transform .2s ease,visibility .2s}
+.bar.on.away{transform:translateY(100%);visibility:hidden}
+@media (prefers-reduced-motion:reduce){.bar{transition:none}}
 .bar b{font-weight:var(--w-strong)}
 .bar button{padding:10px var(--s4);font-size:var(--t-small)}
 @media (min-width:900px){.bar,.bar.on{display:none}}
@@ -229,6 +247,10 @@ nav a{padding:var(--s3) 0;border-bottom:1px solid var(--line)}
 .row{grid-template-columns:minmax(0,1fr) auto}
 .row .nm{grid-column:1/-1}
 .row .pr{text-align:left}
+/* Rows whose price is shown once under the heading (class "one"): no empty
+   price line, so Add / the stepper sits beside the size. */
+.row.one .nm{grid-column:1}
+.row.one .pr{grid-column:1;grid-row:1}
 /* 80 x 80 px photo; fits the existing row height, so rows don't grow. */
 .row.has-img{grid-template-columns:80px minmax(0,1fr) auto}
 .row.has-img .thumb{width:80px;height:80px;grid-row:span 2;align-self:start}

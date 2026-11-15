@@ -50,12 +50,17 @@ def test_t01_phone_estimate_bar_shows_total_and_opens_estimate(browser):
     assert page.inner_text("#barTxt") == "Estimate: GH₵75.00 (1 item)"
     page.click('#list [data-inc="c1"]')
     assert page.inner_text("#barTxt") == "Estimate: GH₵150.00 (1 item)"
-    # The bar stays at the bottom of the screen while scrolling.
-    page.mouse.wheel(0, 1500)
+    # The bar stays at the bottom of the screen while scrolling through the
+    # price list. (Catalogue phase: it now steps aside once the estimate
+    # panel itself is on screen, so this scrolls a short way only.)
+    page.mouse.wheel(0, 100)
     page.wait_for_timeout(300)
     box = bar.bounding_box()
     assert abs(box["y"] + box["height"] - 844) <= 1, f"bar is not docked at the bottom: {box}"
     # "View estimate" opens the full-screen estimate; "Back to products" closes it.
+    # (Back at the top first, where neither version's estimate panel is on screen.)
+    page.evaluate("scrollTo({top: 0, behavior: 'instant'})")
+    page.wait_for_timeout(300)
     page.click("#barBtn")
     assert "open" in page.get_attribute("#est", "class")
     est = page.locator("#est").bounding_box()
