@@ -102,6 +102,17 @@ jobs:
           TCP_SITE_URL: http://127.0.0.1:4321/
         run: python -m pytest tests -v
 
+      # If a test failed, keep what it saw: a screenshot of each open page
+      # and a step-by-step trace (tests/output/failures/), plus the PDFs.
+      - name: Keep screenshots and traces from failed tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-test-failures-${{ github.sha }}
+          path: tests/output/
+          if-no-files-found: ignore
+          retention-days: 14
+
       # The package GitHub Pages publishes. Uploading it publishes nothing
       # by itself; the "Publish" job below does that, after every check above
       # has passed.

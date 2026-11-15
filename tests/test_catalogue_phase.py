@@ -33,7 +33,9 @@ is not changed), so they are skipped when the single file is under test.
 """
 import pytest
 
-from conftest import SITE_URL, open_site
+from playwright.sync_api import expect
+
+from conftest import SITE_URL, goto_tab, open_site, settle, wait_bar, wait_rows, wait_slide
 
 # Which slide is lined up with the list's left edge, which tab is pressed,
 # and the heading of the slide that is showing.
@@ -45,10 +47,8 @@ STATE = """() => { const L = document.querySelector('#list'), l = L.getBoundingC
 
 
 def _settled(page, i):
-    """Wait (up to 3 s) for the list to finish sliding to slide number i."""
-    page.wait_for_function(
-        "i => { const L = document.querySelector('#list'); return Math.abs(L.scrollLeft - i * L.clientWidth) < 2; }",
-        arg=i, timeout=3000)
+    """Wait for the list to finish sliding to slide number i."""
+    wait_slide(page, i, must=False)  # the assertions that follow report a failure
 
 
 def _skip_unless_astro(page):
@@ -63,6 +63,7 @@ def test_c01_desktop_mouse_click_switches_tab(browser, width):
     page = context.new_page()
     page.goto(SITE_URL, wait_until="load")
     page.wait_for_selector("#list .row")
+    settle(page)
     _skip_unless_astro(page)
     names = page.evaluate(STATE)["names"]
     for i in [1, 2, 0, 2, 1]:
@@ -79,6 +80,7 @@ def test_c02_desktop_keyboard_switches_tab(browser):
     page = context.new_page()
     page.goto(SITE_URL, wait_until="load")
     page.wait_for_selector("#list .row")
+    settle(page)
     _skip_unless_astro(page)
     for i in [2, 1, 0]:
         page.locator("#tabs button").nth(i).focus()
@@ -103,8 +105,7 @@ def test_c03_list_keeps_its_sideways_slide(browser):
 
 
 def _goto_tab(page, name):
-    page.locator("#tabs button", has_text=name).click()
-    page.wait_for_timeout(900)  # let the list finish sliding across
+    goto_tab(page, text=name)
 
 
 def test_c04_per_ton_price_shown_once(browser):
@@ -124,7 +125,7 @@ def test_c04_per_ton_price_shown_once(browser):
         .map(s => [!!s.querySelector('.cat-price'), [...s.querySelectorAll('.row .pr')].every(e => e.innerText.trim())])""")
     assert others == [[False, True], [False, True]], f"cement and single-piece rows must keep their prices: {others}"
     page.fill("#q", "ton")
-    page.wait_for_timeout(150)
+    wait_rows(page, 6)  # the six rods sold by the ton
     found = page.evaluate("[...document.querySelectorAll('#list .row .pr')].map(e => e.innerText.trim())")
     assert found and all(p == "GH₵7,000.00" for p in found), f"search results should show each price: {found}"
     assert not errors, errors
@@ -183,16 +184,19 @@ def test_c06_phone_bar_steps_aside_for_the_estimate(browser):
     _skip_unless_astro(page)
     page.click('#list [data-inc="c1"]')
     page.evaluate("scrollTo({top: 0, behavior: 'instant'})")
-    page.wait_for_timeout(400)
-    assert page.locator("#bar").is_visible(), "bar should show while the estimate is off screen"
+    assert wait_bar(page, True, must=False), "bar should show while the estimate is off screen"
     page.evaluate("document.querySelector('#est').scrollIntoView({block: 'end', behavior: 'instant'})")
-    page.wait_for_timeout(500)
+    assert wait_bar(page, False, must=False), "bar should step aside while the estimate is on screen"
     assert page.evaluate("getComputedStyle(document.querySelector('#bar')).visibility") == "hidden"
+    # Wait for the scroll itself to finish before measuring.
+    try:
+        page.wait_for_function("document.querySelector('#est .fine').getBoundingClientRect().bottom <= innerHeight + 1", timeout=8000)
+    except Exception:
+        pass  # the assertion below reports it
     fine = page.locator("#est .fine").bounding_box()
-    assert fine["y"] + fine["height"] <= 844, "the estimate's last lines should be fully visible"
+    assert fine["y"] + fine["height"] <= 844 + 1, "the estimate's last lines should be fully visible"
     page.evaluate("scrollTo({top: 0, behavior: 'instant'})")
-    page.wait_for_timeout(500)
-    assert page.evaluate("getComputedStyle(document.querySelector('#bar')).visibility") == "visible"
+    assert wait_bar(page, True, must=False), "bar should come back when scrolling up to the price list"
     assert not errors, errors
     page.context.close()
 
@@ -203,6 +207,7 @@ def test_c07_undo_clear_estimate(browser):
     page.clock.install()
     page.goto(SITE_URL, wait_until="load")
     page.wait_for_selector("#list .row")
+    settle(page)
     _skip_unless_astro(page)
     page.click('#list [data-inc="c1"]')
     page.click('#list [data-inc="c1"]')
@@ -221,8 +226,7 @@ def test_c07_undo_clear_estimate(browser):
     # The Undo goes away after 10 seconds...
     page.click("#clear")
     page.clock.fast_forward(10_001)
-    page.wait_for_timeout(50)
-    assert page.locator("#undo").count() == 0
+    expect(page.locator("#undo")).to_have_count(0)
     assert "empty" in page.inner_text("#lines")
     # ...or as soon as something new is added.
     page.click('#list [data-inc="c2"]')
@@ -238,6 +242,7 @@ def _fresh(browser, width, height=800, touch=False):
     page = context.new_page()
     page.goto(SITE_URL, wait_until="load")
     page.wait_for_selector("#list .row")
+    settle(page)
     return page
 
 

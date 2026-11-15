@@ -12,7 +12,7 @@ import os
 
 import pytest
 
-from conftest import ROOT, SITE_URL, open_site
+from conftest import ROOT, SITE_URL, goto_tab, open_site
 
 # Both versions are tested: the live index.html, and the Astro build in web/
 # (GitHub runs the whole tests/ folder against it on port 4321). The product
@@ -65,8 +65,7 @@ READ_TAB = """async cat => {
 
 
 def _tab(page, category):
-    page.click(f'#tabs button[data-cat="{category}"]')
-    page.wait_for_timeout(600)
+    goto_tab(page, category)
 
 
 def test_p01_image_files_exist():
@@ -144,7 +143,10 @@ def test_p05_missing_photo_is_left_out_and_heading_stays(browser):
         document.querySelector('#clear').click();
     }""")
     _tab(page, "Iron Rods (Single Piece)")
-    page.wait_for_timeout(800)
+    # The page notices the photo failed and leaves it out; wait for that.
+    page.wait_for_function("""() => [...document.querySelectorAll('#list .slide section')]
+        .find(s => s.querySelector(':is(h2,h3)').textContent.includes('Single Piece')).classList.contains('nobanner')""",
+        timeout=8000)
     t = page.evaluate("""() => {
         const sec = [...document.querySelectorAll('#list .slide section')]
             .find(s => s.querySelector(':is(h2,h3)').textContent.includes('Single Piece'));

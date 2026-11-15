@@ -20,12 +20,15 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
+from playwright.sync_api import expect, sync_playwright
 from pypdf import PdfReader
 
 TESTS = Path(__file__).resolve().parent
 ROOT = TESTS.parent
-OUT = TESTS / "output"
+# Where generated PDFs go. TCP_TEST_OUTPUT can point somewhere else, so that
+# several copies of the suite can run at once without sharing files.
+OUT = Path(os.environ.get("TCP_TEST_OUTPUT", "").strip() or TESTS / "output")
 SITE_URL = os.environ.get("TCP_SITE_URL", "").strip() or (ROOT / "index.html").as_uri()
 
 BASELINE = json.loads((TESTS / "baseline" / "products.json").read_text(encoding="utf-8"))
@@ -35,9 +38,15 @@ SYMBOL = BASELINE["currency_symbol"]
 
 WA_PREFIX = "https://wa.me/233558463468?text="
 REF_PATTERN = r"TCP-\d{6}-[2-9A-HJ-NP-Z]{6}"
-# The site loads its typeface from Google Fonts. A machine without internet
-# access falls back to a system font; that is not a fault in the website.
+# Typeface. The Astro site serves Montserrat from its own /fonts folder, so
+# it always loads. The old single-file page (the rollback copy) asks Google
+# Fonts for it. So that a test run never depends on the internet, the test
+# browser is started with Google Fonts switched off (see the "browser"
+# fixture): the single-file page then always uses its fallback font, on every
+# machine. A failed request to these hosts is not a fault in the website.
 FONT_HOSTS = ("fonts.googleapis.com", "fonts.gstatic.com")
+# Where screenshots and traces of a failed test are kept (uploaded by CI).
+FAILURES = OUT / "failures"
 A4_POINTS = (595.276, 841.89)
 
 # Synthetic products used ONLY by the long-quotation test. They are added to
@@ -61,6 +70,68 @@ def money(n):
 def squash(text):
     """Remove all whitespace and upper-case, so letter-spaced headings compare cleanly."""
     return re.sub(r"\s+", "", text).upper()
+
+
+# --------------------------------------------------------------------------
+# Waiting for the page to be ready (test-reliability pass, 15 Nov 2026)
+# --------------------------------------------------------------------------
+# The tests used to pause for a fixed time (say 0.9 s) after a tap and hope
+# the page had finished moving. On a slow machine it sometimes had not. These
+# helpers wait for the page to actually reach the expected state instead,
+# for up to WAIT milliseconds, and carry on the moment it does.
+WAIT = 8000
+
+
+def settle(page):
+    """Wait until fonts have loaded and the page has drawn, so sizes are final."""
+    page.evaluate("""async () => { await document.fonts.ready;
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); }""")
+
+
+def _until(page, script, arg=None, must=True):
+    """Wait for a condition in the page. With must=False a time-out is left
+    for the test's own assertion to report, with its clearer message."""
+    try:
+        page.wait_for_function(script, arg=arg, timeout=WAIT)
+        return True
+    except PlaywrightTimeout:
+        if must:
+            raise
+        return False
+
+
+def wait_slide(page, index, must=True):
+    """Wait until the price list has finished sliding to slide number `index`
+    and that slide's tab is the selected one."""
+    return _until(page, """i => { const L = document.querySelector('#list');
+        const tabs = [...document.querySelectorAll('#tabs button')];
+        return Math.abs(L.scrollLeft - i * L.clientWidth) < 2
+            && tabs.findIndex(b => b.getAttribute('aria-pressed') === 'true') === i; }""", index, must)
+
+
+def goto_tab(page, category=None, text=None, must=True):
+    """Click a category tab (by exact name, or by part of its text) and wait
+    for the list to finish sliding there."""
+    index = page.evaluate(
+        """([c, t]) => [...document.querySelectorAll('#tabs button')]
+            .findIndex(b => c ? b.dataset.cat === c : b.innerText.includes(t))""", [category, text])
+    assert index >= 0, f"no tab for {category or text!r}"
+    page.locator("#tabs button").nth(index).click()
+    return wait_slide(page, index, must)
+
+
+def wait_bar(page, shown, must=True):
+    """Wait until the phone estimate bar is fully shown (docked at the bottom
+    of the screen) or fully out of the way."""
+    return _until(page, """shown => { const b = document.querySelector('#bar'), cs = getComputedStyle(b);
+        const visible = cs.display !== 'none' && cs.visibility === 'visible';
+        if (!shown) return !visible;
+        return visible && Math.abs(b.getBoundingClientRect().bottom - innerHeight) <= 1; }""", shown, must)
+
+
+def wait_rows(page, count, must=True):
+    """Wait until the price list shows exactly `count` product rows (search results)."""
+    return _until(page, "n => document.querySelectorAll('#list .row').length === n", count, must)
 
 
 # --------------------------------------------------------------------------
@@ -92,6 +163,7 @@ def open_site(browser, mobile=False, init_script=None):
         page.add_init_script(init_script)
     page.goto(SITE_URL, wait_until="load")
     page.wait_for_selector("#list .row")
+    settle(page)
     return page, errors
 
 
@@ -130,8 +202,7 @@ def whatsapp_message(page):
 
 def click_tab(page, category):
     """Tap a category tab; report whether it is selected and which slide is showing."""
-    page.click(f'#tabs button[data-cat="{category}"]')
-    page.wait_for_timeout(900)
+    goto_tab(page, category, must=False)  # the caller's assertions report a failure
     pressed = page.get_attribute(f'#tabs button[data-cat="{category}"]', "aria-pressed")
     slide = page.evaluate(
         "() => { const L = document.querySelector('#list');"
@@ -242,10 +313,58 @@ def print_pdf(page, filename):
 # --------------------------------------------------------------------------
 @pytest.fixture(scope="session")
 def browser():
+    global _BROWSER
     with sync_playwright() as pw:
-        b = pw.chromium.launch()
+        # Google Fonts switched off, so no test depends on the internet (see
+        # FONT_HOSTS above).
+        b = pw.chromium.launch(args=[
+            "--host-rules=" + ", ".join(f"MAP {h} 0.0.0.0" for h in FONT_HOSTS)])
+        # Every browser window records a "trace" (what was clicked, what the
+        # page looked like at each step). It is only saved if a test fails.
+        make_context = b.new_context
+
+        def new_context(**options):
+            context = make_context(**options)
+            try:
+                context.tracing.start(screenshots=True, snapshots=True)
+            except Exception:
+                pass
+            return context
+
+        b.new_context = new_context
+        _BROWSER = b
         yield b
+        _BROWSER = None
         b.close()
+
+
+_BROWSER = None
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """When a test fails, keep a screenshot of every open page and the
+    recorded trace in tests/output/failures/ (CI uploads that folder). Open a
+    trace with:  python -m playwright show-trace <file>.zip"""
+    report = (yield).get_result()
+    if not report.failed or _BROWSER is None:
+        return
+    name = re.sub(r"[^A-Za-z0-9_.-]+", "_", item.nodeid.split("::", 1)[-1])[:90]
+    try:
+        FAILURES.mkdir(parents=True, exist_ok=True)
+        for c, context in enumerate(_BROWSER.contexts):
+            for n, page in enumerate(context.pages):
+                try:
+                    page.screenshot(path=str(FAILURES / f"{name}-window{c}-page{n}.png"))
+                except Exception:
+                    pass
+            try:
+                context.tracing.stop(path=str(FAILURES / f"{name}-window{c}-trace.zip"))
+                context.tracing.start(screenshots=True, snapshots=True)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 LOCATION = "Buduburam, Block 4 near the clinic"
@@ -352,9 +471,10 @@ def mobile(browser):
     # the bar shows. (Since the catalogue phase the bar steps aside while the
     # estimate panel itself is on screen.)
     page.evaluate("scrollTo({top: 0, behavior: 'instant'})")
-    page.wait_for_timeout(300)
+    wait_bar(page, True)
     page.click("#barBtn")
-    page.wait_for_timeout(300)
+    _until(page, "() => document.querySelector('#est').classList.contains('open')", must=False)
+    settle(page)
     s.estimate_open = page.evaluate(
         "document.querySelector('#est').classList.contains('open')")
     s.estimate_box = page.locator("#est").bounding_box()

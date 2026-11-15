@@ -25,7 +25,7 @@ import urllib.request
 
 import pytest
 
-from conftest import ROOT, SITE_URL, open_site
+from conftest import ROOT, SITE_URL, open_site, wait_bar, wait_slide
 
 SECTIONS = json.loads((ROOT / "tests" / "baseline" / "page-sections.json").read_text(encoding="utf-8"))
 
@@ -54,13 +54,14 @@ def test_t01_phone_estimate_bar_shows_total_and_opens_estimate(browser):
     # price list. (Catalogue phase: it now steps aside once the estimate
     # panel itself is on screen, so this scrolls a short way only.)
     page.mouse.wheel(0, 100)
-    page.wait_for_timeout(300)
+    page.wait_for_function("scrollY > 50", timeout=8000)
+    wait_bar(page, True)
     box = bar.bounding_box()
     assert abs(box["y"] + box["height"] - 844) <= 1, f"bar is not docked at the bottom: {box}"
     # "View estimate" opens the full-screen estimate; "Back to products" closes it.
     # (Back at the top first, where neither version's estimate panel is on screen.)
     page.evaluate("scrollTo({top: 0, behavior: 'instant'})")
-    page.wait_for_timeout(300)
+    wait_bar(page, True)
     page.click("#barBtn")
     assert "open" in page.get_attribute("#est", "class")
     est = page.locator("#est").bounding_box()
@@ -84,7 +85,7 @@ def test_t02_sliding_the_price_list_switches_the_tab(browser):
     assert len(tabs) >= 2
     for i, cat in enumerate(tabs):
         page.evaluate("i => { const L = document.querySelector('#list'); L.scrollTo({left: i * L.clientWidth}); }", i)
-        page.wait_for_timeout(500)
+        wait_slide(page, i, must=False)  # the assertion below reports a failure
         selected = page.evaluate(
             "[...document.querySelectorAll('#tabs button')].filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.dataset.cat)")
         assert selected == [cat], f"after sliding to slide {i + 1}, selected tab is {selected}, expected {cat}"
