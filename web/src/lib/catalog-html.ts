@@ -126,9 +126,17 @@ const label = (p: EngineProduct) =>
 /** Width a tab banner is shown at. Mirrors the engine's BANNER_SIZES. */
 const BANNER_SIZES = "(min-width:1100px) 652px, (min-width:900px) calc(100vw - 448px), calc(100vw - 32px)";
 
-/** One product row. Mirrors `rowHTML()`. */
-function rowHTML(p: EngineProduct, currency: string): string {
-  return `<div class="row${p.img ? " has-img" : ""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="pr">${money(p.price, currency)}</div>${addButton(p)}</div>`;
+/** One product row. Mirrors `rowHTML()`. With `shared`, the tab's single
+    price is shown once under the heading; the row's own price stays in the
+    page for screen readers and search engines but is hidden from view. */
+function rowHTML(p: EngineProduct, currency: string, shared = false): string {
+  return `<div class="row${p.img ? " has-img" : ""}${shared ? " one" : ""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="pr">${shared ? `<span class="vh">${money(p.price, currency)}</span>` : money(p.price, currency)}</div>${addButton(p)}</div>`;
+}
+
+/** The product whose price the whole tab shares (same price and unit for
+    every item, and more than one item), or null. Mirrors `sharedPrice()`. */
+function sharedPrice(list: EngineProduct[]): EngineProduct | null {
+  return list.length > 1 && list.every((p) => p.price === list[0].price && p.unit === list[0].unit) ? list[0] : null;
 }
 
 /** One category: optional banner, heading (h3), optional note, optional
@@ -137,13 +145,14 @@ function sectionHTML(category: string, list: EngineProduct[], currency: string, 
   const subgroups = [...new Set(list.map((p) => p.sub || ""))];
   const extra = info[category] || {};
   const b = extra.banner;
+  const one = sharedPrice(list);
   const body = subgroups
     .map(
       (sub) =>
         (sub ? `<h4>${sub}</h4>` : "") +
         list
           .filter((p) => (p.sub || "") === sub)
-          .map((p) => rowHTML(p, currency))
+          .map((p) => rowHTML(p, currency, !!one))
           .join(""),
     )
     .join("");
@@ -154,6 +163,7 @@ function sectionHTML(category: string, list: EngineProduct[], currency: string, 
       : "") +
     `<h3>${ICON[category] || ""}${category}</h3>` +
     (extra.note ? `<p class="cat-note">${extra.note}</p>` : "") +
+    (one ? `<p class="cat-price"><b>${money(one.price, currency)}</b> per ${one.unit}, all sizes</p>` : "") +
     `${body}</section>`
   );
 }

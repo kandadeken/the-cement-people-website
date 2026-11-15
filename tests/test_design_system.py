@@ -22,7 +22,7 @@ old look), so they are skipped when the single file is under test.
 """
 import pytest
 
-from conftest import SITE_URL, open_site
+from conftest import SITE_URL, open_site, settle
 
 TAP = 44  # minimum height in CSS pixels for anything a customer taps
 
@@ -98,6 +98,7 @@ def test_d04_one_content_width(browser):
     context = browser.new_context(viewport={"width": 1440, "height": 900})
     page = context.new_page()
     page.goto(SITE_URL, wait_until="load")
+    settle(page)
     _skip_unless_astro(page)
     lefts = page.evaluate("""() => {
         const x = s => { const e = document.querySelector(s); if (!e) return null;
@@ -134,6 +135,7 @@ def test_d07_hero_buttons_side_by_side_on_wide_screens(browser, width):
     context = browser.new_context(viewport={"width": width, "height": 800})
     page = context.new_page()
     page.goto(SITE_URL, wait_until="load")
+    settle(page)
     _skip_unless_astro(page)
     tops = page.evaluate("[...document.querySelectorAll('.ctas a')].map(a => Math.round(a.getBoundingClientRect().top))")
     assert len(tops) == 2 and tops[0] == tops[1], f"hero buttons are stacked at {width} px: {tops}"

@@ -68,8 +68,18 @@ const money=n=>CURRENCY+n.toLocaleString(undefined,{minimumFractionDigits:2,maxi
 // ---- Quantity controls ------------------------------------------------------
 // A product not yet in the estimate shows an "Add" button; once added it shows
 // a − / number / + stepper. Clicks are handled further down by data-inc/data-dec.
-const ctrl=p=>{const n=qty[p.id]||0;return n
-?`<div class="step"><button data-dec="${p.id}" aria-label="Remove one ${p.name}">−</button><input type="number" min="0" inputmode="numeric" value="${n}" data-qty="${p.id}" aria-label="Quantity of ${p.name}"><button data-inc="${p.id}" aria-label="Add one ${p.name}">+</button></div>`
+// Rods sold by the ton (unit "ton") go up and down in half tons (decided
+// 14 Nov 2026: only 0.5-ton steps, smallest amount half a ton); "Add"
+// starts at 1 ton. Everything else counts in whole items.
+const TON=p=>p.unit==="ton";
+const STEP=p=>TON(p)?0.5:1;
+// The small word shown beside the quantity box so the unit is never in
+// doubt: "ton"/"tons" for rods by the ton, "pc"/"pcs" for single rods
+// (unit "30 ft rod"; added 15 Nov 2026). Other products show no word.
+const PIECE=p=>/\brod$/.test(p.unit);
+const unitWord=(p,n)=>TON(p)?(n===1?"ton":"tons"):PIECE(p)?(n===1?"pc":"pcs"):"";
+const ctrl=p=>{const n=qty[p.id]||0,t=TON(p),one=t?"half a ton of":"one";return n
+?`<div class="qty"><div class="step"><button data-dec="${p.id}" aria-label="Remove ${one} ${p.name}">−</button><input type="number" min="0" step="${STEP(p)}" inputmode="${t?"decimal":"numeric"}" value="${n}" data-qty="${p.id}" aria-label="Quantity of ${p.name}${t?" in tons":PIECE(p)?" in pieces":""}"><button data-inc="${p.id}" aria-label="Add ${one} ${p.name}">+</button></div>${unitWord(p,n)?`<span class="u">${unitWord(p,n)}</span>`:""}</div>`
 :`<button class="add" data-inc="${p.id}" aria-label="Add ${p.name} to estimate">Add</button>`};
 
 
@@ -107,17 +117,22 @@ for(const [c,info] of Object.entries(TCP.categoryInfo||{}))CAT_INFO[c]={note:inf
 // Width the banner is shown at: the price list column on large screens,
 // the screen width minus the side margins on phones.
 const BANNER_SIZES="(min-width:1100px) 652px, (min-width:900px) calc(100vw - 448px), calc(100vw - 32px)";
-const rowHTML=p=>`<div class="row${p.img?" has-img":""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="pr">${money(p.price)}</div>${ctrl(p)}</div>`;
+// "shared": the whole tab has one price (today: rods by the ton, all
+// GH₵7,000), shown once under the heading. The row keeps its price for
+// screen readers and search engines, but hidden from view (class "vh"). If prices ever differ, each row shows its own price again.
+const rowHTML=(p,shared)=>`<div class="row${p.img?" has-img":""}${shared?" one":""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="pr">${shared?`<span class="vh">${money(p.price)}</span>`:money(p.price)}</div>${ctrl(p)}</div>`;
+const sharedPrice=l=>l.length>1&&l.every(p=>p.price===l[0].price&&p.unit===l[0].unit)?l[0]:null;
 // One category section. "browse" is true for the swipeable tabs and false for
 // search results; banner photos are only shown when browsing. If the banner
 // fails to load, the section gets class "nobanner" and the photo is hidden;
 // the heading always stays. Loaded with the page at low priority, so it is
 // usually ready before the customer opens a rod tab.
-const sec=(g,l,browse)=>{const subs=[...new Set(l.map(p=>p.sub||""))],info=CAT_INFO[g]||{},b=browse&&info.banner;
+const sec=(g,l,browse)=>{const subs=[...new Set(l.map(p=>p.sub||""))],info=CAT_INFO[g]||{},b=browse&&info.banner,one=browse&&sharedPrice(l);
 return `<section>`
 +(b?`<img class="banner" src="${b.src}" srcset="${b.srcset}" sizes="${BANNER_SIZES}" alt="" width="${b.w}" height="${b.h}" fetchpriority="low" onerror="this.closest('section').classList.add('nobanner')">`:"")
 +`<h3>${ICON[g]||""}${g}</h3>`+(info.note?`<p class="cat-note">${info.note}</p>`:"")
-+`${subs.map(x=>(x?`<h4>${x}</h4>`:"")+l.filter(p=>(p.sub||"")===x).map(rowHTML).join("")).join("")}</section>`;};
++(one?`<p class="cat-price"><b>${money(one.price)}</b> per ${one.unit}, all sizes</p>`:"")
++`${subs.map(x=>(x?`<h4>${x}</h4>`:"")+l.filter(p=>(p.sub||"")===x).map(p=>rowHTML(p,!!one)).join("")).join("")}</section>`;};
 function fit(){const L=$("#list");if(q||!L.children.length)return;const s=L.children[cats.indexOf(cat)];if(s)L.style.height=s.offsetHeight+"px";}
 // Re-measure the visible tab when a picture finishes loading or fails, so the
 // price list is never cut short or left with a gap.
@@ -155,7 +170,8 @@ function renderEst(){
 const rows=P.filter(p=>qty[p.id]>0);
 const sub=rows.reduce((s,p)=>s+p.price*qty[p.id],0);
 const tax=sub*TAX_RATE,total=sub+tax;
-$("#lines").innerHTML=rows.length?rows.map(p=>`<div class="ln"><div class="nm">${p.name}<small>${money(p.price)} per ${p.unit}</small></div>${ctrl(p)}<div class="amt">${money(p.price*qty[p.id])}</div></div>`).join(""):`<p class="mute empty">Your estimate is empty. Add materials from the price list.</p>`;
+if(rows.length&&undoSnap){undoSnap=null;clearTimeout(undoT);}
+$("#lines").innerHTML=rows.length?rows.map(p=>`<div class="ln"><div class="nm">${p.name}<small>${money(p.price)} per ${p.unit}</small></div>${ctrl(p)}<div class="amt">${money(p.price*qty[p.id])}</div></div>`).join(""):(undoSnap?`<p class="mute empty" role="status">Estimate cleared. <button class="ghost undo" id="undo">Undo</button></p>`:`<p class="mute empty">Your estimate is empty. Add materials from the price list.</p>`);
 $("#tot").innerHTML=`<div><span>Materials</span><span>${money(sub)}</span></div><div><span>Delivery</span><span>Quoted separately</span></div>`+(TAX_RATE?`<div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")+`<div class="gt"><span>Total before delivery</span><span>${money(total)}</span></div>`;
 $("#bar").classList.toggle("on",rows.length>0);
 $("#barTxt").textContent=`Estimate: ${money(total)} (${rows.length} ${rows.length===1?"item":"items"})`;
@@ -203,7 +219,13 @@ addEventListener("beforeprint",()=>{renderEst();document.title=`The Cement Peopl
 addEventListener("afterprint",()=>{document.title=PAGE_TITLE;});
 
 // ---- Changing a quantity: every Add, +, − and typed number goes through set() --
+// Looked up each time (not once at start), so products added later are found too.
+const byId=id=>P.find(p=>p.id===id);
 function set(id,n){
+// Whole items: cut to a whole number, as before. Half tons: round to the
+// nearest half; a typed amount above zero never rounds down to nothing.
+const s=STEP(byId(id));n=Number.isFinite(n)?n:0;
+n=s===1?Math.trunc(n):Math.round(n/s)*s;if(s!==1&&n<=0&&arguments[2])n=s;
 n=Math.max(0,Math.min(9999,n));
 if(n)qty[id]=n;else delete qty[id];
 renderList();renderEst();
@@ -214,22 +236,42 @@ renderList();renderEst();
 document.addEventListener("click",e=>{
 const b=e.target.closest("button");if(!b)return;
 const d=b.dataset;
-if(d.inc)set(d.inc,(qty[d.inc]||0)+1);
-else if(d.dec)set(d.dec,(qty[d.dec]||0)-1);
+if(d.inc)set(d.inc,qty[d.inc]?qty[d.inc]+STEP(byId(d.inc)):1);
+else if(d.dec)set(d.dec,(qty[d.dec]||0)-STEP(byId(d.dec)));
 else if(d.cat!==undefined)goCat(d.cat);
 });
 document.addEventListener("change",e=>{
-const i=e.target;if(i.dataset&&i.dataset.qty)set(i.dataset.qty,parseInt(i.value,10)||0);
+const i=e.target;if(i.dataset&&i.dataset.qty){const v=parseFloat(String(i.value).replace(",","."));set(i.dataset.qty,v||0,v>0);}
 });
 $("#q").addEventListener("input",e=>{q=e.target.value.trim().toLowerCase();renderList();});
 $("#print").addEventListener("click",()=>window.print());
-$("#clear").addEventListener("click",()=>{qty={};newQuote();renderList();renderEst();});
+// "Clear estimate" empties the estimate and starts a new reference, but for
+// 10 seconds an "Undo" button brings everything back: items, drop-off
+// location, reference and date (added 14 Nov 2026). Adding anything, or the
+// 10 seconds running out, removes the Undo.
+let undoSnap=null,undoT;
+function dropUndo(){if(!undoSnap)return;undoSnap=null;clearTimeout(undoT);renderEst();}
+$("#clear").addEventListener("click",()=>{
+if(!Object.keys(qty).length){dropUndo();newQuote();renderList();renderEst();return;} // nothing to undo: just a fresh reference, as before
+undoSnap={qty:{...qty},loc:$("#loc").value,REF,DATE};
+qty={};newQuote();renderList();renderEst();
+clearTimeout(undoT);undoT=setTimeout(dropUndo,10000);
+const u=$("#undo");if(u)u.focus();
+});
+document.addEventListener("click",e=>{if(!e.target.closest("#undo")||!undoSnap)return;
+const u=undoSnap;undoSnap=null;clearTimeout(undoT);
+qty=u.qty;$("#loc").value=u.loc;REF=u.REF;DATE=u.DATE;$("#ref").textContent="Ref "+REF;$("#date").textContent=DATE;
+renderList();renderEst();$("#clear").focus();});
 
 // ---- Phones: the estimate opens as a full-screen view -------------------------
 const mq=matchMedia("(max-width:899px)");
 function openEst(){const e=$("#est");e.classList.add("open");e.scrollTop=0;document.body.style.overflow="hidden";$("#dclose").focus({preventScroll:true});}
 function closeEst(){$("#est").classList.remove("open");document.body.style.overflow="";}
 $("#barBtn").addEventListener("click",openEst);
+// Phones: hide the bar while the estimate panel is on screen, so it never
+// covers the panel's last lines (the panel counts as on screen once its top
+// is 120 px above the bottom of the screen).
+if("IntersectionObserver"in window)new IntersectionObserver(es=>{$("#bar").classList.toggle("away",es[0].isIntersecting)},{rootMargin:"0px 0px -120px 0px"}).observe($("#est"));
 $("#dclose").addEventListener("click",closeEst);
 document.addEventListener("click",e=>{if(mq.matches&&e.target.closest('a[href="#est"]')){e.preventDefault();openEst();}});
 mq.addEventListener("change",()=>{if(!mq.matches)closeEst();});

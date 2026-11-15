@@ -49,7 +49,9 @@ jobs:
           TCP_SITE_URL: ${{ inputs.site_url }}
         run: python -m pytest tests -v
 
-      - name: Keep the generated PDF quotations
+      # tests/output/ also holds failures/: a screenshot and a trace for
+      # every test that failed (see conftest.py).
+      - name: Keep the generated PDF quotations and any failure captures
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -149,7 +151,9 @@ jobs:
           TCP_SITE_URL: http://127.0.0.1:4321/
         run: python -m pytest tests -v
 
-      - name: Keep the generated PDF quotations
+      # tests/output/ also holds failures/: a screenshot and a trace for
+      # every test that failed (see conftest.py).
+      - name: Keep the generated PDF quotations and any failure captures
         if: always()
         uses: actions/upload-artifact@v4
         with:

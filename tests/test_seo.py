@@ -217,8 +217,11 @@ def image_size(data):
 # (class "row has-img" + <img class="thumb">), and a rod's name holds its size
 # as a bold tag ("Iron rod <b class="sz">16 mm</b>"). The name is read with
 # its tags removed, so it must still say exactly "Iron rod 16 mm".
-ROW = re.compile(r'<div class="row(?: has-img)?">(?:<img class="thumb"[^>]*>)?<div class="nm">(.+?)<small>per ([^<]+)</small></div>'
-                 r'<div class="pr">([^<]+)</div>')
+# Catalogue phase: where a whole tab shares one price (rods by the ton), the
+# row's price is still in the HTML but wrapped in <span class="vh"> (hidden
+# from view, shown once under the heading instead).
+ROW = re.compile(r'<div class="row(?: has-img)?(?: one)?">(?:<img class="thumb"[^>]*>)?<div class="nm">(.+?)<small>per ([^<]+)</small></div>'
+                 r'<div class="pr">(?:<span class="vh">)?([^<]+)(?:</span>)?</div>')
 TAGS = re.compile(r"<[^>]+>")
 
 
