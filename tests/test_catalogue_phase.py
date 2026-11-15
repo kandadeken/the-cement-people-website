@@ -188,13 +188,19 @@ def test_c06_phone_bar_steps_aside_for_the_estimate(browser):
     page.evaluate("document.querySelector('#est').scrollIntoView({block: 'end', behavior: 'instant'})")
     assert wait_bar(page, False, must=False), "bar should step aside while the estimate is on screen"
     assert page.evaluate("getComputedStyle(document.querySelector('#bar')).visibility") == "hidden"
-    # Wait for the scroll itself to finish before measuring.
-    try:
-        page.wait_for_function("document.querySelector('#est .fine').getBoundingClientRect().bottom <= innerHeight + 1", timeout=8000)
-    except Exception:
-        pass  # the assertion below reports it
-    fine = page.locator("#est .fine").bounding_box()
-    assert fine["y"] + fine["height"] <= 844 + 1, "the estimate's last lines should be fully visible"
+    # The point of the fix: nothing covers the estimate's last lines. Bring
+    # the very bottom of the small print exactly to the bottom edge of the
+    # screen (where the bar used to sit), then check what is on top there.
+    # (Measured from the element itself, not from "scroll into view", which
+    # can land a pixel or two differently from one machine to another.)
+    page.evaluate("""() => { const r = document.querySelector('#est .fine').getBoundingClientRect();
+        scrollBy({top: r.bottom - innerHeight, behavior: 'instant'}); }""")
+    page.wait_for_function("Math.abs(document.querySelector('#est .fine').getBoundingClientRect().bottom - innerHeight) <= 1", timeout=8000)
+    assert wait_bar(page, False, must=False), "bar should stay away while the estimate's last lines are on screen"
+    on_top = page.evaluate("""() => { const r = document.querySelector('#est .fine').getBoundingClientRect();
+        const e = document.elementFromPoint(r.left + r.width / 2, r.bottom - 6);
+        return e ? (e.closest('#bar') ? 'bar' : e.closest('#est') ? 'estimate' : e.tagName) : 'nothing'; }""")
+    assert on_top == "estimate", f"the estimate's last line is covered by: {on_top}"
     page.evaluate("scrollTo({top: 0, behavior: 'instant'})")
     assert wait_bar(page, True, must=False), "bar should come back when scrolling up to the price list"
     assert not errors, errors
