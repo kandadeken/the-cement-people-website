@@ -15,6 +15,12 @@ Catalogue and estimate phase checks (added 14 Nov 2026).
        quotation use the half-ton amounts; cement still counts whole bags
   C06  on a phone the black estimate bar slides away while the estimate
        panel is on screen, and comes back when you scroll up
+  C08  estimate totals: label left, amount right, with a clear gap, and the
+       amount never wraps, on narrow phones even with a large total
+  C09  the "tons" word stays on the same line as its quantity box, in the
+       price list and in the estimate, at every width
+  C10  around the 900 px change-over (860 to 940 px) nothing sticks out past
+       the edge of the screen, with items in the estimate
   C07  "Clear estimate" can be undone for 10 seconds: items, drop-off
        location, reference and date all come back
 
@@ -221,3 +227,81 @@ def test_c07_undo_clear_estimate(browser):
     page.click('#est [data-dec="c3"]')
     assert page.locator("#undo").count() == 0
     context.close()
+
+
+def _fresh(browser, width, height=800, touch=False):
+    context = browser.new_context(viewport={"width": width, "height": height}, is_mobile=touch, has_touch=touch)
+    page = context.new_page()
+    page.goto(SITE_URL, wait_until="load")
+    page.wait_for_selector("#list .row")
+    return page
+
+
+def _add_rods(page):
+    """3 single rods and 2.5 tons, giving a long total (GH₵17,806.00)."""
+    _goto_tab(page, "Single Piece")
+    for _ in range(3):
+        page.click('#list [data-inc="i1"]')
+    _goto_tab(page, "Per Ton")
+    for _ in range(4):
+        page.click('#list [data-inc="j3"]')
+
+
+@pytest.mark.parametrize("width", [320, 360, 375, 414])
+def test_c08_estimate_totals_have_room(browser, width):
+    page = _fresh(browser, width, touch=True)
+    _skip_unless_astro(page)
+    _add_rods(page)
+    rows = page.evaluate("""() => [...document.querySelectorAll('#tot div')].map(d => {
+        const [a, b] = d.children, ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(), rd = d.getBoundingClientRect();
+        // right edge of the label's actual text (a wrapped label is narrower than its box)
+        const r = document.createRange(); r.selectNodeContents(a);
+        const textRight = Math.max(...[...r.getClientRects()].map(c => c.right));
+        return {label: a.innerText, amount: b.innerText, gap: Math.round(rb.left - textRight),
+                amountLines: Math.round(rb.height / parseFloat(getComputedStyle(b).lineHeight)),
+                flushRight: Math.abs(rb.right - (rd.right - parseFloat(getComputedStyle(d).paddingRight))) < 1.5}; })""")
+    assert rows[-1]["label"] == "Total before delivery" and rows[-1]["amount"] == "GH₵17,806.00", rows
+    for r in rows:
+        assert r["gap"] >= 12, f"{width} px: label and amount too close: {r}"
+        assert r["amountLines"] == 1 and r["flushRight"], f"{width} px: amount should be one line, right-aligned: {r}"
+    page.context.close()
+
+
+@pytest.mark.parametrize("width", [320, 375, 560, 900, 1024, 1440])
+def test_c09_tons_label_stays_with_its_stepper(browser, width):
+    page = _fresh(browser, width, touch=width < 600)
+    _skip_unless_astro(page)
+    _add_rods(page)
+    pairs = page.evaluate("""() => [...document.querySelectorAll('.qty')].filter(q => q.querySelector('.u')).map(q => {
+        const s = q.querySelector('.step').getBoundingClientRect(), u = q.querySelector('.u').getBoundingClientRect();
+        return {where: q.closest('#est') ? 'estimate' : 'list', text: q.querySelector('.u').innerText,
+                gap: Math.round(u.left - s.right), sameLine: u.top >= s.top - 1 && u.bottom <= s.bottom + 1,
+                // must not run into the line amount beside it (estimate)
+                clear: (() => { const m = q.parentElement.querySelector('.amt'); if (!m) return true;
+                    const r = m.getBoundingClientRect(); return u.right <= r.left - 4 || r.top >= u.bottom - 1; })()}; })""")
+    assert sorted(p["where"] for p in pairs) == ["estimate", "list"], pairs
+    for p in pairs:
+        assert p["text"] == "tons" and p["sameLine"] and 0 <= p["gap"] <= 12, f"{width} px: {p}"
+        assert p["clear"], f"{width} px: 'tons' runs into the amount: {p}"
+    page.context.close()
+
+
+@pytest.mark.parametrize("width", [860, 880, 899, 900, 910, 940])
+def test_c10_nothing_sticks_out_around_900px(browser, width):
+    page = _fresh(browser, width)
+    _skip_unless_astro(page)
+    _add_rods(page)
+    page.fill("#loc", "Krispol City Road, Kasoa, near the Goil filling station")
+    for tab in ("Cement", "Single Piece", "Per Ton"):
+        _goto_tab(page, tab)
+        w = page.evaluate("[innerWidth, document.documentElement.scrollWidth]")
+        assert w[1] <= w[0], f"{width} px, {tab}: page is wider than the screen: {w}"
+        out = page.evaluate("""() => { const L = document.querySelector('#list').getBoundingClientRect();
+            const vis = e => { const r = e.getBoundingClientRect(); return r.width && r.left >= L.left - 1 && r.left < L.right; };
+            const bad = [];
+            for (const e of document.querySelectorAll('#list .row > *, #list .cat-price, #est .ln > *, #tot div > *, .ctas a, .hin > *'))
+                if (vis(e) || !e.closest('#list')) { const r = e.getBoundingClientRect(), p = e.parentElement.getBoundingClientRect();
+                    if (r.width && r.right > p.right + 1.5) bad.push([e.className || e.tagName, Math.round(r.right - p.right)]); }
+            return bad; }""")
+        assert not out, f"{width} px, {tab}: these stick out of their box: {out}"
+    page.context.close()

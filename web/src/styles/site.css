@@ -171,7 +171,8 @@ section.nobanner .banner{display:none}
 .step input{width:50px;min-height:var(--tap);text-align:center;border:0;border-inline:1px solid var(--line);background:var(--card);color:var(--ink);font-size:var(--t-body);font-weight:var(--w-label);border-radius:0;-moz-appearance:textfield}
 /* Stepper plus its unit word ("tons" for rods sold by the ton). */
 .qty{display:inline-flex;align-items:center;gap:var(--s2);justify-self:start}
-.qty .u{font-size:var(--t-small);color:var(--mute)}
+.qty{white-space:nowrap}
+.qty .u{font-size:var(--t-small);color:var(--mute);flex:none}
 .step input::-webkit-outer-spin-button,.step input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 
 /* ---- 6. Estimate panel ------------------------------------------------------ */
@@ -184,13 +185,21 @@ section.nobanner .banner{display:none}
 .ln{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;padding:var(--s3) 0;border-bottom:1px solid var(--line)}
 .ln .nm{grid-column:1/-1}
 .ln .amt{text-align:right;font-weight:var(--w-strong);align-self:center}
+/* Very narrow phones (under 360 px): in the estimate, the line amount drops
+   under the quantity box, right-aligned, so "tons" never runs into it. */
+@media (max-width:359px){.ln{grid-template-columns:minmax(0,1fr)}}
 .empty{padding:var(--s4) 0;margin:0}
 /* "Undo" after Clear estimate: shown for 10 seconds. */
 .empty .undo{color:var(--ink);font-weight:var(--w-label);padding:var(--s2) var(--s3)}
 .dl{display:block;padding:14px 14px var(--s1);font-weight:var(--w-label);font-size:var(--t-small)}
 #loc{display:block;width:100%;min-height:var(--tap);margin-top:6px;padding:10px;font-size:var(--t-body);border:1px solid var(--line);border-radius:var(--r-control);background:var(--card);color:var(--ink)}
 .tot{padding:var(--s2) 14px 6px}
-.tot div{display:flex;justify-content:space-between;padding:5px 0}
+/* Label left, amount right, always with a gap between them. On narrow
+   phones a long label ("Total before delivery") wraps onto two lines
+   instead of squeezing up against the amount. */
+.tot div{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s4);padding:5px 0}
+.tot div span:first-child{min-width:0}
+.tot div span:last-child{flex:none;text-align:right;white-space:nowrap}
 .tot .gt{border-top:1px solid var(--line);margin-top:6px;padding-top:var(--s3);font-size:var(--t-sub);font-weight:var(--w-strong)}
 .acts{display:grid;gap:6px;padding:var(--s2) 14px var(--s3)}
 .acts .cta{width:100%;padding:var(--s3);font-size:var(--t-body);text-align:center}

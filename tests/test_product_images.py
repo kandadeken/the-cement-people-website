@@ -34,6 +34,10 @@ ROD_TABS = {
     "Iron Rods (Single Piece)": "Sold by the piece. Each rod is 30 ft long.",
     "Iron Rods (Per Ton)": "Sold by the ton, in each size.",
 }
+# Astro build (catalogue phase, 15 Nov 2026): the per-ton price is shown
+# right under this note, so the note no longer repeats "by the ton". The
+# single-file rollback page keeps the old wording.
+PER_TON_NOTE_ASTRO = "Available in all listed sizes."
 
 # Reads one tab: its banner photo, heading and note. Waits for the photo.
 READ_TAB = """async cat => {
@@ -111,6 +115,8 @@ def test_p03_rod_tabs_show_shared_photo_then_visible_heading_and_note(browser):
         assert t["heading"]["text"] == cat
         assert t["heading"]["width"] > 50 and t["heading"]["height"] > 10, f"{cat}: heading not visible"
         assert t["heading"]["top"] >= t["img"]["bottom"] - 1, f"{cat}: heading should sit under the photo"
+        if cat.endswith("(Per Ton)") and page.evaluate("!!document.getElementById('tcp-data')"):
+            note = PER_TON_NOTE_ASTRO
         assert t["note"] == note
         seen.add(t["img"]["src"])
     assert len(seen) == 1, f"both rod tabs should use the same photo, got {seen}"
