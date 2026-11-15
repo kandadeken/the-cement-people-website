@@ -64,7 +64,7 @@ if (existsSync(file("index.html"))) {
 
   // 6. Every local file the page links to exists. Covers src/href/srcset.
   const refs = new Set();
-  for (const m of html.matchAll(/\s(?:src|href)=["'](\/[^"'#?]*)["']/g)) refs.add(m[1]);
+  for (const m of html.matchAll(/\s(?:src|href)=["'](\/[^"'#?]*)(?:\?[^"'#]*)?["']/g)) refs.add(m[1]);
   for (const m of html.matchAll(/\ssrcset=["']([^"']+)["']/g)) {
     for (const part of m[1].split(",")) {
       const url = part.trim().split(/\s+/)[0];

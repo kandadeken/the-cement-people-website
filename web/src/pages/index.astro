@@ -28,6 +28,21 @@ import QuotePieces from "../components/QuotePieces.astro";
 import products from "../data/products.json";
 import categoryData from "../data/categories.json";
 import { business } from "../config/business";
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { join } from "node:path";
+
+/* A short fingerprint of quote-engine.js, added to its address below as
+   "?v=...". Browsers keep a copy of the script for a while; without this, a
+   visitor arriving just after an update could get the NEW page with the OLD
+   script, and the two may not fit together (15 Nov 2026: this made the rod
+   tabs dead on desktop for a few minutes after the design-system update).
+   The fingerprint changes whenever the script changes, so the page always
+   loads the script it was built with. */
+const engineVersion = createHash("sha256")
+  .update(readFileSync(join(process.cwd(), "public/scripts/quote-engine.js")))
+  .digest("hex")
+  .slice(0, 10);
 import { toEngineProducts, toCategoryInfo } from "../lib/catalog-html";
 
 // The products in the short form the quotation engine has always used:
@@ -79,5 +94,5 @@ const engineJson = JSON.stringify(engineData).replace(/</g, "\\u003c");
 <!-- Products and business details for quote-engine.js (read as plain data, never run) -->
 <script is:inline type="application/json" id="tcp-data" set:html={engineJson}></script>
 <!-- The quotation engine, loaded as an ordinary script so its variables stay global -->
-<script is:inline src="/scripts/quote-engine.js"></script>
+<script is:inline src={`/scripts/quote-engine.js?v=${engineVersion}`}></script>
 </Base>
