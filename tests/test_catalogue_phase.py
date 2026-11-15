@@ -21,6 +21,10 @@ Catalogue and estimate phase checks (added 14 Nov 2026).
        price list and in the estimate, at every width
   C10  around the 900 px change-over (860 to 940 px) nothing sticks out past
        the edge of the screen, with items in the estimate
+  C11  single rods show "pc"/"pcs" beside the quantity box in the price list
+       and in the estimate; the printed quotation names the unit on every
+       line ("per 30 ft rod", "per ton"); cement and binding wire show no
+       unit word
   C07  "Clear estimate" can be undone for 10 seconds: items, drop-off
        location, reference and date all come back
 
@@ -279,10 +283,11 @@ def test_c09_tons_label_stays_with_its_stepper(browser, width):
                 // must not run into the line amount beside it (estimate)
                 clear: (() => { const m = q.parentElement.querySelector('.amt'); if (!m) return true;
                     const r = m.getBoundingClientRect(); return u.right <= r.left - 4 || r.top >= u.bottom - 1; })()}; })""")
-    assert sorted(p["where"] for p in pairs) == ["estimate", "list"], pairs
+    assert sorted((p["where"], p["text"]) for p in pairs) == [
+        ("estimate", "pcs"), ("estimate", "tons"), ("list", "pcs"), ("list", "tons")], pairs
     for p in pairs:
-        assert p["text"] == "tons" and p["sameLine"] and 0 <= p["gap"] <= 12, f"{width} px: {p}"
-        assert p["clear"], f"{width} px: 'tons' runs into the amount: {p}"
+        assert p["sameLine"] and 0 <= p["gap"] <= 12, f"{width} px: {p}"
+        assert p["clear"], f"{width} px: unit word runs into the amount: {p}"
     page.context.close()
 
 
@@ -304,4 +309,38 @@ def test_c10_nothing_sticks_out_around_900px(browser, width):
                     if (r.width && r.right > p.right + 1.5) bad.push([e.className || e.tagName, Math.round(r.right - p.right)]); }
             return bad; }""")
         assert not out, f"{width} px, {tab}: these stick out of their box: {out}"
+    page.context.close()
+
+
+@pytest.mark.parametrize("mobile", [True, False], ids=["phone", "computer"])
+def test_c11_single_rods_show_pcs(browser, mobile):
+    page, errors = open_site(browser, mobile=mobile)
+    _skip_unless_astro(page)
+    unit = lambda where, pid: page.evaluate(
+        f"document.querySelector('{where} input[data-qty=\"{pid}\"]')?.closest('.qty').querySelector('.u')?.innerText ?? null")
+    _goto_tab(page, "Single Piece")
+    page.click('#list [data-inc="i1"]')
+    assert unit("#list", "i1") == "pc" and unit("#est", "i1") == "pc", "one rod reads '1 pc'"
+    page.click('#list [data-inc="i1"]')
+    assert unit("#list", "i1") == "pcs" and unit("#est", "i1") == "pcs"
+    # In the list the word sits on the stepper's line, right beside it.
+    box = page.evaluate("""() => { const q = document.querySelector('#list input[data-qty="i1"]').closest('.qty');
+        const s = q.querySelector('.step').getBoundingClientRect(), u = q.querySelector('.u').getBoundingClientRect();
+        return {gap: Math.round(u.left - s.right), sameLine: u.top >= s.top - 1 && u.bottom <= s.bottom + 1,
+                fits: u.right <= document.documentElement.clientWidth}; }""")
+    assert box["sameLine"] and 0 <= box["gap"] <= 12 and box["fits"], box
+    # Binding wire (same tab) and cement show no unit word.
+    page.click('#list [data-inc="i8"]')
+    assert unit("#list", "i8") is None and unit("#est", "i8") is None
+    _goto_tab(page, "Cement")
+    page.click('#list [data-inc="c1"]')
+    assert unit("#est", "c1") is None
+    _goto_tab(page, "Per Ton")
+    page.click('#list [data-inc="j3"]')
+    # Printed quotation: every line names its unit under the description.
+    page.evaluate("dispatchEvent(new Event('beforeprint'))")
+    lines = page.evaluate("[...document.querySelectorAll('#quote tbody tr')].map(r => [r.children[1].firstChild.textContent.trim(), r.children[1].querySelector('small').textContent.trim(), r.children[2].textContent.trim()])")
+    assert ["Iron rod 16 mm", "Iron Rods (Single Piece), per 30 ft rod", "2"] in lines, lines
+    assert ["Iron rod 12 mm", "Iron Rods (Per Ton), per ton", "1"] in lines, lines
+    assert not errors, errors
     page.context.close()

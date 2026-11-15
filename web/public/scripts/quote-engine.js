@@ -73,8 +73,13 @@ const money=n=>CURRENCY+n.toLocaleString(undefined,{minimumFractionDigits:2,maxi
 // starts at 1 ton. Everything else counts in whole items.
 const TON=p=>p.unit==="ton";
 const STEP=p=>TON(p)?0.5:1;
+// The small word shown beside the quantity box so the unit is never in
+// doubt: "ton"/"tons" for rods by the ton, "pc"/"pcs" for single rods
+// (unit "30 ft rod"; added 15 Nov 2026). Other products show no word.
+const PIECE=p=>/\brod$/.test(p.unit);
+const unitWord=(p,n)=>TON(p)?(n===1?"ton":"tons"):PIECE(p)?(n===1?"pc":"pcs"):"";
 const ctrl=p=>{const n=qty[p.id]||0,t=TON(p),one=t?"half a ton of":"one";return n
-?`<div class="qty"><div class="step"><button data-dec="${p.id}" aria-label="Remove ${one} ${p.name}">−</button><input type="number" min="0" step="${STEP(p)}" inputmode="${t?"decimal":"numeric"}" value="${n}" data-qty="${p.id}" aria-label="Quantity of ${p.name}${t?" in tons":""}"><button data-inc="${p.id}" aria-label="Add ${one} ${p.name}">+</button></div>${t?`<span class="u">${n===1?"ton":"tons"}</span>`:""}</div>`
+?`<div class="qty"><div class="step"><button data-dec="${p.id}" aria-label="Remove ${one} ${p.name}">−</button><input type="number" min="0" step="${STEP(p)}" inputmode="${t?"decimal":"numeric"}" value="${n}" data-qty="${p.id}" aria-label="Quantity of ${p.name}${t?" in tons":PIECE(p)?" in pieces":""}"><button data-inc="${p.id}" aria-label="Add ${one} ${p.name}">+</button></div>${unitWord(p,n)?`<span class="u">${unitWord(p,n)}</span>`:""}</div>`
 :`<button class="add" data-inc="${p.id}" aria-label="Add ${p.name} to estimate">Add</button>`};
 
 
