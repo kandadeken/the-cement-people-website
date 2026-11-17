@@ -246,6 +246,9 @@ section.nobanner .banner{display:none}
 .etools[hidden]{display:none}
 .etool{display:inline-flex;align-items:center;gap:6px;min-height:var(--tap);padding:0 2px;background:none;border:0;color:var(--ink);font-size:var(--t-small);font-weight:var(--w-label);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .etool svg{width:18px;height:18px;flex:none}
+/* Each link stays on one line (at 360 px they wrapped, 17 Nov 2026). */
+.etool{white-space:nowrap}
+@media (max-width:399px){.etools{padding-inline:var(--s3)}.etool{font-size:var(--t-label);gap:4px}.etool svg{width:16px;height:16px}}
 #clear{margin-left:auto;color:var(--mute)}
 /* "Remove everything from this estimate?" */
 .eask{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2);margin:var(--s2) var(--s4);padding:10px var(--s3);background:var(--bg);border-radius:var(--r-control);font-size:var(--t-small);flex:none}

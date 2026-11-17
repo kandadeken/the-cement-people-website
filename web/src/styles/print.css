@@ -54,7 +54,7 @@ body::before,body>*:not(#quote){display:none!important}
 #quote .q-st.all td{background:#f4f4f4;border-bottom:0}
 #quote .q-empty td{text-align:center;color:#5a5a5a;padding:6mm}
 /* Bottom: terms left, totals right */
-.q-close{display:grid;grid-template-columns:minmax(0,1fr) 84mm;gap:10mm;align-items:start;margin-top:4mm;break-inside:avoid;page-break-inside:avoid}
+.q-close{display:grid;grid-template-columns:minmax(0,1fr) 98mm;gap:8mm;align-items:start;margin-top:4mm;break-inside:avoid;page-break-inside:avoid}
 .q-terms{font-size:7.5pt;line-height:1.4;color:#333}
 .q-terms h2{margin:0 0 1.5mm;font-size:7.5pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5a5a}
 .q-terms ul{margin:0 0 3mm;padding-left:3.5mm}
@@ -67,5 +67,7 @@ body::before,body>*:not(#quote){display:none!important}
 .q-sum .q-mat{font-weight:700}
 /* "Total (excl. delivery)": white on charcoal with an ochre edge. In black
    and white it prints as white on black. */
-.q-sum .gt{margin-top:1.5mm;padding:3mm 2.5mm;background:#131514;color:#fff;border-left:1.5mm solid #ff9802;font-size:11.5pt;font-weight:800}
+.q-sum .gt{margin-top:1.5mm;padding:3mm 2.5mm;background:#131514;color:#fff;border-left:1.5mm solid #ff9802;font-size:11pt;font-weight:800}
+/* Room for totals up to GH₵99,999,999.00 on one line (17 Nov 2026: a
+   six-figure total was cut off at the right edge). */
 }

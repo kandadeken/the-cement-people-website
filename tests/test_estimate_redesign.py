@@ -288,7 +288,32 @@ def test_e10_branded_pdf_quotation(browser):
     assert squash(f"Delivery To be confirmed") in text
     assert squash(f"Total (excl. delivery) {money(_expected_total())}") in text
     assert pdf.printed_blocks == ["quote"] and pdf.controls == 0
+    # Nothing in the totals box is cut off, even for a large order
+    # (a six-figure total was clipped on 17 Nov 2026).
+    page.evaluate("() => { qty.c4 = 50000; qty.j1 = 500; renderEst(); }")
+    page.emulate_media(media="print")
+    page.evaluate("dispatchEvent(new Event('beforeprint'))")
+    clipped = page.evaluate("""() => [...document.querySelectorAll('#quote .q-sum div')].flatMap(d => [...d.children].map(c => {
+        const r = c.getBoundingClientRect(), D = d.getBoundingClientRect();
+        return c.scrollWidth > c.clientWidth + 1 || r.right > D.right - 1 ? c.innerText : null; })).filter(Boolean)""")
+    assert not clipped, f"cut off in the PDF totals: {clipped}"
+    page.emulate_media(media="screen")
     assert not errors, errors
+    page.context.close()
+
+
+# ---- E06b ------------------------------------------------------------------
+# "View full estimate" and "Clear estimate" each stay on one line on phones.
+@pytest.mark.parametrize("width", [360, 390])
+def test_e06b_estimate_tools_on_one_line(browser, width):
+    page, errors = _open(browser, width, 800, mobile=True)
+    page.click('#list [data-inc="c1"]')
+    heights = page.evaluate("[...document.querySelectorAll('#etools .etool')].map(e => Math.round(e.getBoundingClientRect().height))")
+    # Lines of text in each link (a range over the text gives one box per line).
+    lines = page.evaluate("""[...document.querySelectorAll('#etools .etool span')].map(s => {
+        const r = document.createRange(); r.selectNodeContents(s);
+        return new Set([...r.getClientRects()].map(c => Math.round(c.top))).size; })""")
+    assert lines == [1, 1], f"{width} px: the links wrap ({lines}, heights {heights})"
     page.context.close()
 
 
