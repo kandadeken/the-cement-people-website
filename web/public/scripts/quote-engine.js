@@ -114,8 +114,14 @@ const ctrl=p=>{const n=qty[p.id]||0,t=TON(p),one=t?"half a ton of":"one";return 
 
 
 // ---- Price list: category tabs, swipeable slides and search -----------------
+// Category tiles (17 Nov 2026): a number, the material in bold and how it
+// is sold, so both kinds of iron rods stand out. Phones: a 2 x 2 grid, all
+// four visible at once; computers: one row. Must match tabsHTML() in
+// src/lib/catalog-html.ts.
+const TAB_LABEL={"Cement":["Cement","Bags"],"Iron Rods (Single Piece)":["Iron rods","Single pieces"],"Iron Rods (Per Ton)":["Iron rods","Per ton"],"Binding Wire":["Binding wire","Rolls"]};
+const tabHTML=(c,i,on)=>{const[l,s]=TAB_LABEL[c]||[c,""];return `<button data-cat="${c}" aria-pressed="${on}"><span class="tno">${String(i+1).padStart(2,"0")}</span><b>${l}</b>${s?`<small>${s}</small>`:""}</button>`;};
 function renderTabs(){
-$("#tabs").innerHTML=cats.map(c=>`<button data-cat="${c}" aria-pressed="${c===cat}">${c}</button>`).join("");
+$("#tabs").innerHTML=cats.map((c,i)=>tabHTML(c,i,c===cat)).join("");
 }
 // ---- Product photos, rod size tags and tab banners (Phase 3: carried over
 // from the live index.html, product-images and responsive-thumbnails work) ----

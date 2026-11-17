@@ -171,9 +171,20 @@ function sectionHTML(category: string, list: EngineProduct[], currency: string, 
 }
 
 /** The category tabs, first one selected. Mirrors `renderTabs()` on first load. */
+/** Tile labels: material and how it is sold (17 Nov 2026). Mirrors TAB_LABEL. */
+const TAB_LABEL: Record<string, [string, string]> = {
+  "Cement": ["Cement", "Bags"],
+  "Iron Rods (Single Piece)": ["Iron rods", "Single pieces"],
+  "Iron Rods (Per Ton)": ["Iron rods", "Per ton"],
+  "Binding Wire": ["Binding wire", "Rolls"],
+};
+function tabHTML(c: string, i: number, on: boolean): string {
+  const [l, s] = TAB_LABEL[c] || [c, ""];
+  return `<button data-cat="${c}" aria-pressed="${on}"><span class="tno">${String(i + 1).padStart(2, "0")}</span><b>${l}</b>${s ? `<small>${s}</small>` : ""}</button>`;
+}
 export function tabsHTML(P: EngineProduct[]): string {
   const cats = categories(P);
-  return cats.map((c) => `<button data-cat="${c}" aria-pressed="${c === cats[0]}">${c}</button>`).join("");
+  return cats.map((c, i) => tabHTML(c, i, c === cats[0])).join("");
 }
 
 /** The whole price list, one swipeable slide per category. Mirrors `renderList()` with no search. */
