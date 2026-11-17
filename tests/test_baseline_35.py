@@ -102,8 +102,9 @@ def test_b13_pdf_quantities_are_plain_numbers(short):
         expected_row(1, BY_ID["c2"], 9),
         expected_row(2, BY_ID["i3"], 24),
     ]
-    # And the quantity cells contain only digits: no input boxes or buttons.
-    assert short.pdf.qty_cells == ["9", "24"]
+    # And the quantity cells contain only text (no input boxes or buttons):
+    # the number, and on the Astro site its unit word (17 Nov 2026).
+    assert short.pdf.qty_cells == (["9 bags", "24 pcs"] if short.astro else ["9", "24"])
 
 
 def test_b14_pdf_has_reference_date_location(short):
@@ -217,7 +218,9 @@ def test_b29_last_page_number_and_closing_section(long):
 
 def test_b30_totals_block_intact_on_last_page(long):
     last = long.pdf.pages[-1]
-    assert f"Materials {money(long.materials_total)}" in last
+    # Astro site since 17 Nov 2026: no "Materials" line without tax (it
+    # repeated the total); the single-file site keeps it.
+    assert (f"Materials {money(long.materials_total)}" in last) != long.astro
     if long.astro:
         assert "Delivery To be confirmed" in last
         assert f"Total (excl. delivery) {money(long.materials_total)}" in last

@@ -162,7 +162,7 @@ def test_c05_half_ton_steps(browser):
     assert "2.5 × GH₵7,000.00 = GH₵17,500.00" in msg, msg
     page.evaluate("dispatchEvent(new Event('beforeprint'))")
     # The quotation now has section rows ("01 · Iron rods"); read the item row.
-    assert page.evaluate("[...document.querySelectorAll('#quote tbody tr')].filter(r => r.cells.length === 5)[0].cells[2].innerText.trim()") == "2.5"
+    assert page.evaluate("[...document.querySelectorAll('#quote tbody tr')].filter(r => r.cells.length === 5)[0].cells[2].innerText.trim()") == "2.5 tons"
     for _ in range(5):
         page.click('#est [data-dec="j3"]')
         if _qty(page, "j3") is None:
@@ -364,7 +364,8 @@ def test_c11_single_rods_show_pcs(browser, mobile):
     # Printed quotation: every line names its unit under the description.
     page.evaluate("dispatchEvent(new Event('beforeprint'))")
     lines = page.evaluate("[...document.querySelectorAll('#quote tbody tr')].filter(r => r.cells.length === 5 && !r.classList.length).map(r => [r.children[1].firstChild.textContent.trim(), r.children[1].querySelector('small').textContent.trim(), r.children[2].textContent.trim()])")
-    assert ["Iron rod 16 mm", "per 30 ft rod", "2"] in lines, lines
-    assert ["Iron rod 12 mm", "per ton", "1"] in lines, lines
+    # (and since 17 Nov 2026 the quantity carries the same unit word as on screen)
+    assert ["Iron rod 16 mm", "per 30 ft rod", "2 pcs"] in lines, lines
+    assert ["Iron rod 12 mm", "per ton", "1 ton"] in lines, lines
     assert not errors, errors
     page.context.close()

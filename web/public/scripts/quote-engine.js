@@ -247,7 +247,7 @@ if(!rows.length){$("#clearAsk").hidden=true;}
 $("#lines").innerHTML=rows.length?S.map((x,i)=>`<section class="es${SHUT[x.k]?" shut":""}" data-g="${x.k}"><button type="button" class="esh" data-sec="${x.k}" aria-expanded="${!SHUT[x.k]}">${CHEV}<span class="eno">${String(i+1).padStart(2,"0")}</span><span class="enm"><b>${x.name}</b><span>${x.parts.map(y=>howMany(y.k,y.n)).join(" · ")}</span></span><span class="esx">${money(x.sum)}</span></button><div class="esb">`
 +x.parts.map(y=>(x.parts.length>1||PART_SHORT[y.k]&&x.k==="rod"?`<h4 class="esub">${PART_SHORT[y.k]||PART_NAME[y.k]}<span>${howMany(y.k,y.n)}</span></h4>`:"")+y.rows.map(lineHTML).join("")+(x.k==="rod"&&x.parts.length>1?`<div class="est"><span>${PART_SHORT[y.k]} subtotal</span><b>${money(y.sum)}</b></div>`:"")).join("")
 +`<div class="est all"><span>${x.name} subtotal</span><b>${money(x.sum)}</b></div></div></section>`).join(""):(undoSnap?`<p class="mute empty" role="status">Estimate cleared. <button class="ghost undo" id="undo">Undo</button></p>`:`<p class="mute empty">Your estimate is empty. Add materials from the price list.</p>`);
-$("#tot").innerHTML=(TAX_RATE?`<div><span>Materials</span><span>${money(sub)}</span></div><div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")+`<div><span>Delivery</span><span class="tbc">To be confirmed</span></div><div class="gt${total>=1e6?" lg":""}"><span>Total (excl. delivery)</span><span>${money(total)}</span></div>`;
+$("#tot").innerHTML=(TAX_RATE?`<div><span>Materials</span><span>${money(sub)}</span></div><div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")+`<div class="tdl"><span>Delivery</span><span class="tbc">To be confirmed</span></div><div class="gt${total>=1e6?" lg":""}"><span>Total (excl. delivery)</span><span>${money(total)}</span></div>`;
 $("#bar").classList.toggle("on",rows.length>0);
 $("#barTxt").innerHTML=`<small>${rows.length} ${rows.length===1?"item":"items"}<span class="bl"> in your estimate</span></small>${money(total)}`;
 const loc=$("#loc").value.trim();
@@ -268,6 +268,10 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-sec]");if(
 // ---- The printable A4 quotation ---------------------------------------------
 // Fills the hidden <section id="quote">. print.css hides everything else when
 // printing. esc() makes the customer's typed location safe to display.
+// Refinements (17 Nov 2026): the quantity carries the same unit word as
+// beside the quantity box on screen ("120 bags", "24 pcs", "2.5 tons"); the contact details are one per line; "Materials" only shows
+// when there is tax (otherwise it repeats the total); section rows and
+// subtotals stay on the same page as their items (print.css).
 // Brand identity V1.1 (17 Nov 2026): the horizontal logo (copied from the
 // #q-logo drawing in QuotePieces.astro), the same sections as the estimate
 // with quantities and subtotals, and "Total (excl. delivery)". Each row
@@ -281,19 +285,19 @@ function renderQuote(S,sub,tax,total,loc){
 let n=0;
 const body=S.length?S.map((x,i)=>`<tr class="q-sec"><td colspan="5">${String(i+1).padStart(2,"0")} · ${x.name}<span>${x.parts.map(y=>howMany(y.k,y.n)).join(" · ")}</span></td></tr>`
 +x.parts.map(y=>(x.k==="rod"?`<tr class="q-sub"><td colspan="5">${PART_SHORT[y.k]}</td></tr>`:"")
-+y.rows.map(p=>`<tr><td class="n">${++n}</td><td>${p.name} <small>per ${p.unit}</small></td><td class="r">${fmtQ(qty[p.id])}</td><td class="r">${money(p.price)}</td><td class="r">${money(p.price*qty[p.id])}</td></tr>`).join("")
++y.rows.map(p=>`<tr><td class="n">${++n}</td><td>${p.name} <small>per ${p.unit}</small></td><td class="r">${fmtQ(qty[p.id])} ${unitWord(p,qty[p.id])}</td><td class="r">${money(p.price)}</td><td class="r">${money(p.price*qty[p.id])}</td></tr>`).join("")
 +(x.k==="rod"&&x.parts.length>1?`<tr class="q-st"><td></td><td colspan="3">${PART_NAME[y.k]} subtotal</td><td class="r">${money(y.sum)}</td></tr>`:"")).join("")
 +`<tr class="q-st all"><td></td><td colspan="3">${x.name} subtotal</td><td class="r">${money(x.sum)}</td></tr>`).join(""):`<tr class="q-empty"><td colspan="5">No items added yet.</td></tr>`;
 $("#quote").innerHTML=`<header class="q-head"><svg class="q-logo" viewBox="0 0 592.329 100" role="img" aria-label="The Cement People">${LOGO}</svg>`
 +`<div class="q-doc"><h1>Estimate</h1><dl><dt>Reference</dt><dd>${REF}</dd><dt>Date</dt><dd>${DATE}</dd></dl></div></header>`
-+`<div class="q-to"><div><small>Drop-off location</small><p>${loc?esc(loc):"Not provided"}</p></div><div><small>Delivery</small><p>To be confirmed after you send this estimate</p></div><div><small>Contact</small><p>${TCP.business.phone} (call or WhatsApp)<br>${TCP.business.website} · ${TCP.business.town}</p></div></div>`
++`<div class="q-to"><div><small>Drop-off location</small><p>${loc?esc(loc):"Not provided"}</p></div><div><small>Delivery</small><p>To be confirmed after you send this estimate</p></div><div><small>Contact</small><p>${TCP.business.phone} (call or WhatsApp)<br>${TCP.business.website}<br>${TCP.business.town}</p></div></div>`
 +`<table><thead><tr><th class="n">#</th><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>${body}</tbody></table>`
 +`<div class="q-close"><div class="q-terms"><h2>Delivery and terms</h2><ul>`
 +`<li>We deliver to your drop-off location. The delivery cost depends on your order and location, and is agreed with you before delivery.</li>`
 +`<li>This estimate is indicative. Final prices and availability are confirmed when you order.</li>`
 +`<li>All prices are in Ghana cedis (GH₵).</li></ul>`
 +`<h2>To order</h2><p>WhatsApp or call ${TCP.business.phone} and quote reference <b>${REF}</b>.</p></div>`
-+`<div class="q-sum"><div class="q-mat"><span>Materials</span><span>${money(sub)}</span></div>`
++`<div class="q-sum">`+(TAX_RATE?`<div class="q-mat"><span>Materials</span><span>${money(sub)}</span></div>`:"")
 +(TAX_RATE?`<div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")
 +`<div><span>Delivery</span><span>To be confirmed</span></div>`
 +`<div class="gt"><span>Total (excl. delivery)</span><span>${money(total)}</span></div></div></div>`;
@@ -389,6 +393,7 @@ function fullEst(on){const e=$("#est"),b=$("#full");e.classList.toggle("full",on
 b.querySelector("span").textContent=on?"Back to the price list":"View full estimate";b.setAttribute("aria-expanded",on);if(on)$("#escroll").scrollTop=0;}
 $("#full").addEventListener("click",()=>{if(mq.matches)openEst();else fullEst(!$("#est").classList.contains("full"));});
 $("#escrim").addEventListener("click",()=>fullEst(false));
+$("#fullX").addEventListener("click",()=>{fullEst(false);$("#full").focus();});
 document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("#est").classList.contains("full")){fullEst(false);$("#full").focus();}else if(!$("#clearAsk").hidden){askClear(false);$("#clear").focus();}});
 mq.addEventListener("change",()=>{if(!mq.matches)closeEst();else fullEst(false);});
 

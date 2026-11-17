@@ -246,7 +246,9 @@ def estimate_lines(page):
 # --------------------------------------------------------------------------
 # PDF helpers
 # --------------------------------------------------------------------------
-# One item row of the PDF, as read back out of it. Two layouts:
+# One item row of the PDF, as read back out of it. Since 17 Nov 2026 the
+# Astro site's quantity carries its unit word ("9 bags", "24 pcs"), the same
+# word as beside the quantity box on screen. Two layouts:
 # - Astro site since 17 Nov 2026, one line:
 #   "3 Iron rod 16 mm per 30 ft rod 12 GH₵102.00 GH₵1,224.00"
 #   (the material's kind is in the section heading above it)
@@ -254,7 +256,7 @@ def estimate_lines(page):
 #   site), three lines: "3 Iron rod 16 mm" / "Iron Rods (Single Piece), per
 #   30 ft rod" / "12 GH₵102.00 GH₵1,224.00"
 ROW = re.compile(
-    r"^(\d+) (.+?) per (.+) (\d{1,3}(?:,\d{3})*(?:\.\d+)?) " + re.escape(SYMBOL) + r"([\d,]+\.\d{2}) "
+    r"^(\d+) (.+?) per (.+) (\d{1,3}(?:,\d{3})*(?:\.\d+)?)(?: [a-z]+)? " + re.escape(SYMBOL) + r"([\d,]+\.\d{2}) "
     + re.escape(SYMBOL) + r"([\d,]+\.\d{2})$", re.M)
 ROW_SINGLE_FILE = re.compile(
     r"^(\d+) (.+)\n.+, per (.+)\n(\d+) " + re.escape(SYMBOL) + r"([\d,]+\.\d{2}) "

@@ -51,6 +51,11 @@ body::before,body>*:not(#quote){display:none!important}
 #quote .q-sec span{float:right;letter-spacing:0;text-transform:none;font-weight:600;color:#5a5a5a}
 #quote .q-sub td{padding:2mm 2.5mm 1mm;font-size:7.5pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5a5a5a;break-after:avoid;page-break-after:avoid}
 #quote .q-st td{font-weight:700;border-bottom:.25mm solid #dcdcdc}
+/* A section heading never ends a page, and a subtotal never starts one:
+   both stay with their items (a large order once left "Iron rods
+   subtotal" alone at the top of page 2; 17 Nov 2026). */
+#quote tr.q-sec,#quote tr.q-sub{break-after:avoid;page-break-after:avoid}
+#quote tr.q-st{break-before:avoid;page-break-before:avoid}
 #quote .q-st.all td{background:#f4f4f4;border-bottom:0}
 #quote .q-empty td{text-align:center;color:#5a5a5a;padding:6mm}
 /* Bottom: terms left, totals right */

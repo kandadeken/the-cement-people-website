@@ -147,6 +147,13 @@ nav a:hover{border-bottom-color:var(--y)}
 .enq-menu[hidden]{display:none}
 .enq-menu a{display:flex;align-items:center;gap:var(--s3);min-height:52px;padding:var(--s2) var(--s3);border-radius:var(--r-control);color:var(--ink);text-decoration:none;font-weight:var(--w-label)}
 .enq-menu a:hover,.enq-menu a:focus-visible{background:var(--fill)}
+/* Contact (17 Nov 2026): the phone/WhatsApp number first and large, the
+   Enquire button straight after it, the other details below. */
+.cphone{display:flex;flex-direction:column;gap:2px;margin:var(--s4) 0 var(--s3)}
+.cphone span{font-size:var(--t-label);font-weight:var(--w-strong);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.cphone a{font-size:clamp(26px,5vw,34px);font-weight:var(--w-strong);color:var(--ink);text-decoration:none;letter-spacing:-.01em}
+.cphone a:hover{text-decoration:underline}
+.cdetails{margin-top:var(--s5)}
 .enq-menu a svg{width:22px;height:22px;flex:none}
 .enq-menu small{display:block;font-weight:var(--w-text);font-size:var(--t-small);color:var(--mute)}
 .enq-menu .grab{display:none}
@@ -236,7 +243,9 @@ section.nobanner .banner{display:none}
 .add:hover,.add:focus-visible{background:var(--y-soft);border-color:var(--y)}
 /* A product already in the estimate: ochre edge, faint ochre wash and
    "In your estimate" over its name (17 Nov 2026). */
-.row.in{background:var(--y-tint);box-shadow:inset 4px 0 0 var(--y);border-radius:var(--r-control);padding-inline:var(--s3)}
+/* Selected products: a fainter wash than before (17 Nov 2026), keeping the
+   ochre edge and "✓ In your estimate" so the state stays clear. */
+.row.in{background:var(--sel);box-shadow:inset 4px 0 0 var(--y);border-radius:var(--r-control);padding-inline:var(--s3)}
 .row.in .nm::before{content:"✓ In your estimate";display:block;font-size:12px;font-weight:var(--w-strong);letter-spacing:.02em;margin-bottom:2px}
 /* Quantity stepper (in the list and the estimate). justify-self:start keeps
    it as wide as its buttons; before, it stretched into an empty white strip. */
@@ -269,6 +278,16 @@ section.nobanner .banner{display:none}
 .etool{white-space:nowrap}
 @media (max-width:399px){.etools{padding-inline:var(--s3)}.etool{font-size:var(--t-label);gap:4px}.etool svg{width:16px;height:16px}}
 #clear{margin-left:auto;color:var(--mute)}
+/* Full view controls (17 Nov 2026): in the full view the left link reads
+   "Back to the price list" with a back arrow, and a ✕ sits in the heading. */
+.dh #ref{margin-left:auto}
+.xclose{display:none}
+#full .i-back{display:none}
+#est.full #full .i-open{display:none}
+#est.full #full .i-back{display:block}
+#est.full .xclose{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;margin:-6px -8px -6px 4px;background:none;border:0;border-radius:var(--r-control);color:var(--on-dark);cursor:pointer}
+#est.full .xclose:hover{background:rgba(255,255,255,.12)}
+.xclose svg{width:22px;height:22px}
 /* "Remove everything from this estimate?" */
 .eask{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2);margin:var(--s2) var(--s4);padding:10px var(--s3);background:var(--fill);border-radius:var(--r-control);font-size:var(--t-small);flex:none}
 .eask[hidden]{display:none}
@@ -293,10 +312,13 @@ section.nobanner .banner{display:none}
    quantity and subtotal in the heading (visible when folded). The heading
    sticks to the top of the list while you scroll through that section. */
 #lines{padding:0}
-.es{margin:14px 0;border-radius:var(--r-panel);box-shadow:0 0 0 1px var(--line)}
-.esh{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:16px auto minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;padding:var(--s3);border:0;border-radius:var(--r-panel) var(--r-panel) 0 0;background:var(--sec-a);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+/* Material sections (17 Nov 2026): a thin ochre rule marks where each
+   begins, instead of a grey box around it. An open section's heading shows
+   only its name; a folded one also shows its quantity and total. */
+.es{margin:18px 0;border-top:2px solid var(--y)}
+.esh{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:16px auto minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;padding:10px 0;border:0;background:var(--card);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
 .es:not(.shut) .esh{border-bottom:1px solid var(--line)}
-.es.shut .esh{border-radius:var(--r-panel)}
+.es:not(.shut) .enm span,.es:not(.shut) .esx{display:none}
 .esh .chev{width:16px;height:16px;transition:transform .15s}
 .es.shut .esh .chev{transform:rotate(-90deg)}
 .eno{background:var(--y);color:var(--on-y);border-radius:4px;padding:2px 6px;font-size:12px;font-weight:var(--w-strong)}
@@ -304,15 +326,15 @@ section.nobanner .banner{display:none}
 .enm b{font-size:var(--t-body);font-weight:var(--w-strong);text-transform:uppercase;letter-spacing:.05em}
 .enm span{font-size:var(--t-small);color:var(--mute)}
 .esx{font-size:var(--t-body);font-weight:var(--w-strong);white-space:nowrap}
-.esb{padding:0 var(--s3);background:var(--sec-a-body);border-radius:0 0 var(--r-panel) var(--r-panel)}
+.esb{padding:0}
 .es.shut .esb{display:none}
-.es:nth-of-type(even) .esh{background:var(--sec-b)}
-.es:nth-of-type(even) .esb{background:var(--sec-b-body)}
+
 .esub{display:flex;justify-content:space-between;gap:10px;margin:var(--s3) 0 0;padding-bottom:var(--s1);border-bottom:1px solid var(--line);font-size:var(--t-label);font-weight:var(--w-strong);letter-spacing:.06em;text-transform:uppercase}
 .esub span{letter-spacing:0;text-transform:none;font-weight:var(--w-label);color:var(--mute)}
-.est{display:flex;justify-content:space-between;gap:10px;padding:10px 0;font-size:var(--t-small);font-weight:var(--w-label)}
-.est b{font-weight:var(--w-strong);white-space:nowrap}
-.est.all{border-top:2px solid var(--ink);font-size:var(--t-body)}
+.est{display:flex;justify-content:space-between;gap:10px;padding:10px 0;font-size:var(--t-small);font-weight:var(--w-label);color:var(--mute)}
+.est b{font-weight:var(--w-strong);white-space:nowrap;color:var(--ink)}
+/* The section's closing subtotal: kept, but quiet (17 Nov 2026). */
+.est.all{border-top:1px solid var(--line)}
 /* One product: name and unit price; then quantity and line total. Where
    the line total does not fit beside the quantity (narrow phones, large
    amounts) it moves under it, on the right, so the two never touch. */
@@ -320,7 +342,6 @@ section.nobanner .banner{display:none}
 .ln .nm{flex:1 1 100%;min-width:0;font-weight:var(--w-label);line-height:1.3}
 .ln .nm small{margin-top:2px}
 .ln .amt{margin-left:auto;text-align:right;font-weight:var(--w-strong);font-size:var(--t-price);white-space:nowrap}
-.ln .amt::before{content:"Line total";display:block;font-size:12px;font-weight:var(--w-text);color:var(--mute);line-height:1.2}
 /* Phones: a little less side padding, so the line total usually fits
    beside the quantity on a 390 px phone. */
 @media (max-width:599px){.escroll{padding:0 12px}.esb{padding:0 10px}.ln .amt{font-size:17px}}
@@ -381,7 +402,6 @@ main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;gap:var(--s6)}
 #est.full #glance .tiles{grid-template-columns:repeat(4,1fr)}
 #est.full .ln{display:grid;grid-template-columns:minmax(0,1fr) auto 150px;align-items:center}
 #est.full .ln .nm{grid-column:1}
-#est.full .ln .amt::before{display:none}
 #est.full .acts{grid-template-columns:1fr 280px}
 /* Side panel: slightly slimmer quantity box, so the line total sits beside
    it (17 Nov 2026). From 1100 px the panel is 420 px wide, which leaves
@@ -396,6 +416,23 @@ main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;gap:var(--s6)}
 #est.open{position:fixed;inset:0;z-index:30;height:100dvh;border:0;border-radius:0;box-shadow:none;padding-top:env(safe-area-inset-top,0px)}
 #est.open .escroll{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
 #est.open .efoot{padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+/* Phones, full screen (17 Nov 2026): more room for the list. "Clear
+   estimate" moves into the dark heading, beside the date, instead of
+   taking a row of its own; the fixed bottom keeps just the total and the
+   two buttons (delivery is explained in the Delivery box). At 360 px the
+   list now gets over 60% of the screen (was 50%). */
+#est.open{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto auto auto minmax(0,1fr) auto}
+#est.open>*{grid-column:1/-1}
+#est.open .dclose{grid-row:1}
+#est.open .dh{grid-row:2}
+#est.open .dm{grid-row:3;grid-column:1}
+#est.open .etools{grid-row:3;grid-column:2;background:var(--dark);border:0;padding:0 var(--s4) 4px 0;align-self:stretch;align-items:flex-start}
+#est.open .etool{color:var(--on-dark-mute);min-height:32px}
+#est.open .eask{grid-row:4}
+#est.open .escroll{grid-row:5}
+#est.open .efoot{grid-row:6;padding-top:8px}
+#est.open .tdl{display:none}
+#est.open .tot .gt{border-top:0;margin-top:0;padding-top:0}
 #est.open #full{display:none}
 #est.open .dclose{display:flex;align-items:center;gap:10px;flex:none;width:100%;min-height:var(--tap);text-align:left;padding:var(--s3) var(--s4);background:var(--card);border:0;border-bottom:1px solid var(--line);color:var(--ink);font-size:var(--t-body);font-weight:var(--w-label);cursor:pointer}
 }
