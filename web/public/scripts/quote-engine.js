@@ -88,9 +88,9 @@ const money=n=>CURRENCY+n.toLocaleString(undefined,{minimumFractionDigits:2,maxi
 // 14 Nov 2026: only 0.5-ton steps, smallest amount half a ton); "Add"
 // starts at 1 ton. Everything else counts in whole items.
 // The most of any one product a customer can put in the estimate. Raised
-// from 9,999 to 20,000 on 17 Nov 2026 (Daniel). A bigger typed number is
+// from 9,999 to 50,000 on 17 Nov 2026 (Daniel). A bigger typed number is
 // lowered to this.
-const MAX_QTY=20000;
+const MAX_QTY=50000;
 const TON=p=>p.unit==="ton";
 const STEP=p=>TON(p)?0.5:1;
 // The small word shown beside the quantity box so the unit is never in

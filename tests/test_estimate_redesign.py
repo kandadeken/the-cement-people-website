@@ -316,25 +316,25 @@ def test_e11_price_never_touches_the_stepper(browser, width, scale):
 
 
 # ---- E12 -------------------------------------------------------------------
-# The most of one product is 20,000 (was 9,999; Daniel, 17 Nov 2026). Typing
-# more is lowered to 20,000, and five digits fit in the quantity box.
+# The most of one product is 50,000 (was 9,999; Daniel, 17 Nov 2026). Typing
+# more is lowered to 50,000, and five digits fit in the quantity box.
 @pytest.mark.parametrize("mobile", [False, True], ids=["computer", "phone"])
-def test_e12_up_to_20000_of_one_product(browser, mobile):
+def test_e12_up_to_50000_of_one_product(browser, mobile):
     page, errors = _open(browser, 390 if mobile else 1280, 900, mobile)
     page.fill("#q", "Supacem 32.5R")
     page.click('#list [data-inc="c1"]')
-    for typed, expect in (("20000", "20000"), ("12345", "12345"), ("25000", "20000")):
+    for typed, expect in (("50000", "50000"), ("12345", "12345"), ("60000", "50000")):
         box = page.locator('#list input[data-qty="c1"]')
         box.fill(typed)
         box.press("Tab")
         assert page.input_value('#est input[data-qty="c1"]') == expect, typed
-    page.click('#est [data-inc="c1"]')  # + at the limit stays at 20,000
-    assert page.input_value('#est input[data-qty="c1"]') == "20000"
-    assert page.inner_text("#tot .gt").split("\n")[1] == money(75 * 20000)
+    page.click('#est [data-inc="c1"]')  # + at the limit stays at 50,000
+    assert page.input_value('#est input[data-qty="c1"]') == "50000"
+    assert page.inner_text("#tot .gt").split("\n")[1] == money(75 * 50000)
     fits = page.evaluate("""() => [...document.querySelectorAll('input[data-qty="c1"]')].map(i => {
         const c = document.createElement('canvas').getContext('2d'), s = getComputedStyle(i);
         c.font = `${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
         return c.measureText(i.value).width <= i.clientWidth - 2; })""")
-    assert fits and all(fits), f"20000 does not fit in the quantity box: {fits}"
+    assert fits and all(fits), f"50000 does not fit in the quantity box: {fits}"
     assert not errors, errors
     page.context.close()
