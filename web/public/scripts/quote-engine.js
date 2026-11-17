@@ -91,6 +91,11 @@ const money=n=>CURRENCY+n.toLocaleString(undefined,{minimumFractionDigits:2,maxi
 // from 9,999 to 50,000 on 17 Nov 2026 (Daniel). A bigger typed number is
 // lowered to this.
 const MAX_QTY=50000;
+// A quantity as people read it: 50,000 and 2.5 (17 Nov 2026). Used in the
+// estimate's summary and headings, the WhatsApp message and the PDF. The
+// boxes you type in stay plain digits, because a comma typed there means a
+// decimal point ("2,5" tons = 2.5).
+const fmtQ=n=>(+n).toLocaleString("en-US",{maximumFractionDigits:2});
 const TON=p=>p.unit==="ton";
 const STEP=p=>TON(p)?0.5:1;
 // The small word shown beside the quantity box so the unit is never in
@@ -207,7 +212,7 @@ const PART_NAME={cem:"Cement",pc:"Iron rods, single pieces",ton:"Iron rods, by t
 const PART_SHORT={pc:"Single pieces",ton:"By the ton"};
 // How a part's quantity is written: "205 bags", "85 rods", "5.5 tons", "6 rolls".
 const COUNT={cem:["bag","bags"],pc:["rod","rods"],ton:["ton","tons"],wire:["roll","rolls"]};
-const howMany=(k,n)=>COUNT[k]?`${+n.toFixed(2)} ${COUNT[k][n===1?0:1]}`:`${+n.toFixed(2)}`;
+const howMany=(k,n)=>COUNT[k]?`${fmtQ(n)} ${COUNT[k][n===1?0:1]}`:fmtQ(n);
 // Groups the products in the estimate: [{k, name, parts:[{k, rows, n, sum}], n, sum}]
 function sections(rows){
 const extra=[...new Set(rows.map(PART).filter(k=>k.startsWith("x:")))].map(k=>({k,name:k.slice(2),parts:[k]}));
@@ -226,7 +231,7 @@ const tax=sub*TAX_RATE,total=sub+tax;
 if(rows.length&&undoSnap){undoSnap=null;clearTimeout(undoT);}
 const S=sections(rows);
 // "Your order at a glance": one tile per part, quantities only.
-$("#glance").innerHTML=rows.length?`<h3>Your order at a glance</h3><div class="tiles">`+S.flatMap(x=>x.parts).map(x=>`<div><b>${+x.n.toFixed(2)}</b> ${{cem:x.n===1?"bag of cement":"bags of cement",pc:x.n===1?"individual rod":"individual rods",ton:x.n===1?"ton of rods":"tons of rods",wire:x.n===1?"roll of binding wire":"rolls of binding wire"}[x.k]||PART_NAME[x.k]||x.k.slice(2)}</div>`).join("")+`</div>`:"";
+$("#glance").innerHTML=rows.length?`<h3>Your order at a glance</h3><div class="tiles">`+S.flatMap(x=>x.parts).map(x=>`<div><b>${fmtQ(x.n)}</b> ${{cem:x.n===1?"bag of cement":"bags of cement",pc:x.n===1?"individual rod":"individual rods",ton:x.n===1?"ton of rods":"tons of rods",wire:x.n===1?"roll of binding wire":"rolls of binding wire"}[x.k]||PART_NAME[x.k]||x.k.slice(2)}</div>`).join("")+`</div>`:"";
 $("#start").hidden=rows.length>0||!!undoSnap;
 $("#etools").hidden=!rows.length;
 if(!rows.length){$("#clearAsk").hidden=true;}
@@ -239,7 +244,7 @@ $("#barTxt").innerHTML=`<small>${rows.length} ${rows.length===1?"item":"items"} 
 const loc=$("#loc").value.trim();
 const msg=`Hello The Cement People,\n\nI would like a quote for *Estimate ${REF}* (${DATE}).\n`
 +(loc?`\n*Drop-off location:* ${loc}\n`:"")
-+"\n*Items*\n"+rows.map((p,i)=>`${i+1}. ${p.name} (${p.unit})\n   ${qty[p.id]} × ${money(p.price)} = ${money(p.price*qty[p.id])}`).join("\n")
++"\n*Items*\n"+rows.map((p,i)=>`${i+1}. ${p.name} (${p.unit})\n   ${fmtQ(qty[p.id])} × ${money(p.price)} = ${money(p.price*qty[p.id])}`).join("\n")
 +`\n\n*Materials total: ${money(sub)}*`
 +(TAX_RATE?`\nTax (${+(TAX_RATE*100).toFixed(2)}%): ${money(tax)}\nTotal (excl. delivery): ${money(total)}`:"")
 +"\n\nPlease confirm availability and the delivery cost"+(loc?" to this location.":".");
@@ -267,7 +272,7 @@ function renderQuote(S,sub,tax,total,loc){
 let n=0;
 const body=S.length?S.map((x,i)=>`<tr class="q-sec"><td colspan="5">${String(i+1).padStart(2,"0")} · ${x.name}<span>${x.parts.map(y=>howMany(y.k,y.n)).join(" · ")}</span></td></tr>`
 +x.parts.map(y=>(x.k==="rod"?`<tr class="q-sub"><td colspan="5">${PART_SHORT[y.k]}</td></tr>`:"")
-+y.rows.map(p=>`<tr><td class="n">${++n}</td><td>${p.name} <small>per ${p.unit}</small></td><td class="r">${+qty[p.id]}</td><td class="r">${money(p.price)}</td><td class="r">${money(p.price*qty[p.id])}</td></tr>`).join("")
++y.rows.map(p=>`<tr><td class="n">${++n}</td><td>${p.name} <small>per ${p.unit}</small></td><td class="r">${fmtQ(qty[p.id])}</td><td class="r">${money(p.price)}</td><td class="r">${money(p.price*qty[p.id])}</td></tr>`).join("")
 +(x.k==="rod"&&x.parts.length>1?`<tr class="q-st"><td></td><td colspan="3">${PART_NAME[y.k]} subtotal</td><td class="r">${money(y.sum)}</td></tr>`:"")).join("")
 +`<tr class="q-st all"><td></td><td colspan="3">${x.name} subtotal</td><td class="r">${money(x.sum)}</td></tr>`).join(""):`<tr class="q-empty"><td colspan="5">No items added yet.</td></tr>`;
 $("#quote").innerHTML=`<header class="q-head"><svg class="q-logo" viewBox="0 0 592.329 100" role="img" aria-label="The Cement People">${LOGO}</svg>`

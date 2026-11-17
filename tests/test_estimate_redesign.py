@@ -331,6 +331,14 @@ def test_e12_up_to_50000_of_one_product(browser, mobile):
     page.click('#est [data-inc="c1"]')  # + at the limit stays at 50,000
     assert page.input_value('#est input[data-qty="c1"]') == "50000"
     assert page.inner_text("#tot .gt").split("\n")[1] == money(75 * 50000)
+    # Read with a thousands separator everywhere it is shown (the typing box
+    # stays plain digits: a comma typed there means a decimal point).
+    assert page.inner_text("#glance .tiles div") == "50,000 bags of cement"
+    assert "50,000 bags" in page.inner_text("#lines .es[data-g=cem] .enm span")
+    import urllib.parse
+    assert "   50,000 × GH₵75.00 = GH₵3,750,000.00" in urllib.parse.unquote(page.get_attribute("#send", "href"))
+    page.evaluate("dispatchEvent(new Event('beforeprint'))")
+    assert page.evaluate("[...document.querySelectorAll('#quote tbody tr')].filter(r => r.cells.length === 5 && !r.classList.length)[0].cells[2].innerText") == "50,000"
     fits = page.evaluate("""() => [...document.querySelectorAll('input[data-qty="c1"]')].map(i => {
         const c = document.createElement('canvas').getContext('2d'), s = getComputedStyle(i);
         c.font = `${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
