@@ -191,13 +191,16 @@ section.nobanner .banner{display:none}
 /* position:relative keeps a hidden price (.vh) inside its own row; without
    it, hidden prices on off-screen slides made the phone page too wide. */
 .pr{position:relative;font-weight:var(--w-strong);font-size:var(--t-price);text-align:right}
+/* Price + Add/stepper. No box of its own (its two parts are laid out by the
+   row), except on phones, below. */
+.buy{display:contents}
 /* "Add": neutral so the yellow stays for the main actions; turns light
    yellow on hover and keyboard focus (decided 14 Nov 2026). */
 .add{min-height:var(--tap);padding:var(--s2) 18px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-control);font-size:var(--t-small);font-weight:var(--w-label);cursor:pointer}
 .add:hover,.add:focus-visible{background:var(--y-soft);border-color:var(--y)}
 /* A product already in the estimate: ochre edge, faint ochre wash and
    "In your estimate" over its name (17 Nov 2026). */
-.row.in{background:var(--y-tint);box-shadow:inset 4px 0 0 var(--y);border-radius:var(--r-control);padding-left:var(--s3)}
+.row.in{background:var(--y-tint);box-shadow:inset 4px 0 0 var(--y);border-radius:var(--r-control);padding-inline:var(--s3)}
 .row.in .nm::before{content:"✓ In your estimate";display:block;font-size:12px;font-weight:var(--w-strong);letter-spacing:.02em;margin-bottom:2px}
 /* Quantity stepper (in the list and the estimate). justify-self:start keeps
    it as wide as its buttons; before, it stretched into an empty white strip. */
@@ -378,6 +381,12 @@ nav a{padding:var(--s3) 0;border-bottom:1px solid var(--line)}
 .row.has-img{grid-template-columns:80px minmax(0,1fr) auto}
 .row.has-img .thumb{width:80px;height:80px;grid-row:span 2;align-self:start}
 .row.has-img .nm{grid-column:2/-1}
+/* Phones: price and stepper share one line when they fit; otherwise the
+   stepper moves under the price, on the right, so they never touch (seen
+   on an Android phone with large text, 17 Nov 2026). */
+.row.has-img:not(.one) .buy{grid-column:2/-1;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s2) 10px;min-width:0}
+.row.has-img:not(.one) .buy .pr{white-space:nowrap}
+.row.has-img:not(.one) .buy>:last-child{margin-left:auto}
 .banner{margin-top:18px}
 }
 

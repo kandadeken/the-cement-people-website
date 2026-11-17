@@ -132,7 +132,7 @@ const BANNER_SIZES = "(min-width:1100px) 652px, (min-width:900px) calc(100vw - 4
     price is shown once under the heading; the row's own price stays in the
     page for screen readers and search engines but is hidden from view. */
 function rowHTML(p: EngineProduct, currency: string, shared = false): string {
-  return `<div class="row${p.img ? " has-img" : ""}${shared ? " one" : ""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="pr">${shared ? `<span class="vh">${money(p.price, currency)}</span>` : money(p.price, currency)}</div>${addButton(p)}</div>`;
+  return `<div class="row${p.img ? " has-img" : ""}${shared ? " one" : ""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="buy"><div class="pr">${shared ? `<span class="vh">${money(p.price, currency)}</span>` : money(p.price, currency)}</div>${addButton(p)}</div></div>`;
 }
 
 /** The product whose price the whole tab shares (same price and unit for

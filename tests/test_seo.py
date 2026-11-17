@@ -232,7 +232,7 @@ def image_size(data):
 # row's price is still in the HTML but wrapped in <span class="vh"> (hidden
 # from view, shown once under the heading instead).
 ROW = re.compile(r'<div class="row(?: has-img)?(?: one)?">(?:<img class="thumb"[^>]*>)?<div class="nm">(.+?)<small>per ([^<]+)</small></div>'
-                 r'<div class="pr">(?:<span class="vh">)?([^<]+)(?:</span>)?</div>')
+                 r'(?:<div class="buy">)?<div class="pr">(?:<span class="vh">)?([^<]+)(?:</span>)?</div>')
 TAGS = re.compile(r"<[^>]+>")
 
 

@@ -290,3 +290,26 @@ def test_e10_branded_pdf_quotation(browser):
     assert pdf.printed_blocks == ["quote"] and pdf.controls == 0
     assert not errors, errors
     page.context.close()
+
+
+# ---- E11 -------------------------------------------------------------------
+# Reported by Daniel from his Android phone (17 Nov 2026): with larger text,
+# the price ran into the stepper's "–" button on products in the estimate.
+# Here every font is made 15% larger (like the phone's text-size setting) and
+# the price's actual text must stay clear of the stepper.
+@pytest.mark.parametrize("width,scale", [(360, 1), (390, 1), (412, 1), (380, 1.15), (412, 1.15)])
+def test_e11_price_never_touches_the_stepper(browser, width, scale):
+    page, errors = _open(browser, width, 900, mobile=True)
+    page.evaluate("() => { qty.c1 = 1699; qty.c2 = 5; qty.c3 = 364; qty.c4 = 6; renderList(); renderEst(); }")
+    if scale != 1:
+        page.evaluate("""s => { const all = [...document.querySelectorAll('body *')];
+            const sizes = all.map(e => parseFloat(getComputedStyle(e).fontSize));
+            all.forEach((e, i) => { e.style.fontSize = sizes[i] * s + 'px'; }); }""", scale)
+    rows = page.evaluate("""() => [...document.querySelectorAll('#list .slide:first-child .row')].map(r => {
+        const range = document.createRange(); range.selectNodeContents(r.querySelector('.pr'));
+        const t = range.getBoundingClientRect(), s = r.querySelector('.qty, .add').getBoundingClientRect(),
+              R = r.getBoundingClientRect();
+        const apart = t.right <= s.left - 8 || s.top >= t.bottom - 1;
+        return {apart, inside: s.right <= R.right + 0.5}; })""")
+    assert rows and all(r["apart"] and r["inside"] for r in rows), f"{width} px x{scale}: {rows}"
+    page.context.close()

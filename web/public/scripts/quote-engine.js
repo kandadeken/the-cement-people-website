@@ -140,7 +140,10 @@ const BANNER_SIZES="(min-width:1100px) 652px, (min-width:900px) calc(100vw - 448
 // screen readers and search engines, but hidden from view (class "vh"). If prices ever differ, each row shows its own price again.
 // Class "in": the product is in the estimate (shown with an ochre edge and
 // "In your estimate"; added 17 Nov 2026).
-const rowHTML=(p,shared)=>`<div class="row${p.img?" has-img":""}${shared?" one":""}${qty[p.id]?" in":""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="pr">${shared?`<span class="vh">${money(p.price)}</span>`:money(p.price)}</div>${ctrl(p)}</div>`;
+// Price and Add/stepper sit together in "buy" (17 Nov 2026): on phones the
+// stepper moves under the price when the two do not fit side by side (large
+// text settings), instead of running into it. Elsewhere "buy" has no box.
+const rowHTML=(p,shared)=>`<div class="row${p.img?" has-img":""}${shared?" one":""}${qty[p.id]?" in":""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="buy"><div class="pr">${shared?`<span class="vh">${money(p.price)}</span>`:money(p.price)}</div>${ctrl(p)}</div></div>`;
 const sharedPrice=l=>l.length>1&&l.every(p=>p.price===l[0].price&&p.unit===l[0].unit)?l[0]:null;
 // One category section. "browse" is true for the swipeable tabs and false for
 // search results; banner photos are only shown when browsing. If the banner
