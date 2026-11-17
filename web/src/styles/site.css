@@ -189,8 +189,6 @@ input[type=search]{width:100%;min-height:var(--tap);padding:10px var(--s3);font-
 .tabs button[aria-pressed="true"] .tno{color:var(--on-y);background:var(--y);border-radius:4px;padding:0 5px}
 /* Phones: 2 x 2, all four materials in view without sliding. */
 @media (max-width:599px){.tabs{grid-template-columns:1fr 1fr}.tabs button{min-height:68px}}
-.hint{display:none;margin:6px 0 0;font-size:var(--t-small);color:var(--mute)}
-@media (hover:none){.hint{display:block}}
 /* The list of slides (one per tab) that slides sideways on phones. */
 #list{touch-action:auto}
 #list.snap{display:flex;align-items:flex-start;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;transition:height .28s ease}
