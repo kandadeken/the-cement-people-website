@@ -153,7 +153,7 @@ nav a:hover{border-bottom-color:var(--y)}
 .cphone span{font-size:var(--t-label);font-weight:var(--w-strong);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
 .cphone a{font-size:clamp(26px,5vw,34px);font-weight:var(--w-strong);color:var(--ink);text-decoration:none;letter-spacing:-.01em}
 .cphone a:hover{text-decoration:underline}
-.cdetails{margin-top:var(--s5)}
+#contact .cdetails{margin-top:var(--s5)}
 .enq-menu a svg{width:22px;height:22px;flex:none}
 .enq-menu small{display:block;font-weight:var(--w-text);font-size:var(--t-small);color:var(--mute)}
 .enq-menu .grab{display:none}
