@@ -463,3 +463,25 @@ def test_e15_total_label_and_amount_share_a_line(browser, width, big):
         assert row["same"] and row["gap"] >= 12 and row["inside"], f"{width} px, {mode}: {row}"
     assert not errors, errors
     page.context.close()
+
+
+# ---- E16 -------------------------------------------------------------------
+# Category tiles (Daniel and ChatGPT, 17 Nov 2026): "Iron rods" is named on
+# both rod tiles, every tile says how it is sold, and all four are visible
+# at once: 2 x 2 on phones, one row on computers. The chosen tile is ochre.
+@pytest.mark.parametrize("width,mobile,cols", [(360, True, 2), (390, True, 2), (1024, False, 4), (1440, False, 4)])
+def test_e16_category_tiles(browser, width, mobile, cols):
+    page, errors = _open(browser, width, 800, mobile)
+    tiles = page.evaluate("""() => [...document.querySelectorAll('#tabs button')].map(b => {
+        const r = b.getBoundingClientRect();
+        return {cat: b.dataset.cat, text: b.innerText.replace(/\\s+/g, ' ').trim(), x: Math.round(r.left), y: Math.round(r.top),
+                right: r.right, h: r.height, on: b.getAttribute('aria-pressed') === 'true',
+                border: getComputedStyle(b).borderTopColor}; })""")
+    assert [t["text"] for t in tiles] == ["01 Cement Bags", "02 Iron rods Single pieces", "03 Iron rods Per ton", "04 Binding wire Rolls"], tiles
+    assert len({t["y"] for t in tiles}) == 4 // cols, f"{width} px: expected {cols} per row: {tiles}"
+    assert all(t["right"] <= width and t["h"] >= 44 for t in tiles), tiles
+    assert tiles[0]["on"] and tiles[0]["border"] == "rgb(255, 152, 2)"
+    page.locator("#tabs button").nth(2).click()
+    assert page.get_attribute('#tabs button[data-cat="Iron Rods (Per Ton)"]', "aria-pressed") == "true"
+    assert not errors, errors
+    page.context.close()

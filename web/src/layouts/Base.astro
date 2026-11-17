@@ -51,6 +51,19 @@ const structuredData = JSON.stringify(
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Dark mode (17 Nov 2026): light mode is the default for everyone; dark
+     mode is an option the customer turns on with the moon/sun button
+     (remembered on this device). Applied before anything is drawn, so the
+     page never flashes the wrong colours. -->
+<script is:inline>
+(()=>{const d=document.documentElement;
+const saved=()=>{try{return localStorage.getItem("tcp-theme")==="dark"?"dark":"light"}catch(e){return "light"}};
+const apply=()=>{const t=saved();d.dataset.theme=t;const c=document.querySelector('meta[name="theme-color"]');if(c)c.content=t==="dark"?"#232725":"#ffffff";};
+apply();
+window.tcpTheme={get:()=>d.dataset.theme,set:t=>{try{localStorage.setItem("tcp-theme",t)}catch(e){}apply()}};})();
+</script>
+<meta name="theme-color" content="#ffffff">
+<meta name="color-scheme" content="light">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{title}</title>
 <meta name="description" content={description}>

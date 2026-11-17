@@ -8,6 +8,8 @@
    markup and from then on handles search, swiping and the Add buttons.
 
    class="snap" on #list is the swipeable layout the engine also sets.
+   (The "Swipe left or right" hint was removed on 17 Nov 2026: the four
+   category tiles are all visible and tappable, so it was redundant.)
    The IDs #q, #tabs and #list are used by quote-engine.js and the tests.
 
    Props:
@@ -25,7 +27,6 @@ const { products, categoryInfo } = Astro.props;
 <div class="tools">
 <input type="search" id="q" placeholder="Search materials" aria-label="Search materials">
 <div class="tabs" id="tabs" set:html={tabsHTML(products)}></div>
-<p class="hint">Swipe left or right to switch category.</p>
 </div>
 <div id="list" class="snap" set:html={listHTML(products, business.currencySymbol, categoryInfo)}></div>
 </div>

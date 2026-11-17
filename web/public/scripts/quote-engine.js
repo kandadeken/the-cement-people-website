@@ -114,8 +114,14 @@ const ctrl=p=>{const n=qty[p.id]||0,t=TON(p),one=t?"half a ton of":"one";return 
 
 
 // ---- Price list: category tabs, swipeable slides and search -----------------
+// Category tiles (17 Nov 2026): a number, the material in bold and how it
+// is sold, so both kinds of iron rods stand out. Phones: a 2 x 2 grid, all
+// four visible at once; computers: one row. Must match tabsHTML() in
+// src/lib/catalog-html.ts.
+const TAB_LABEL={"Cement":["Cement","Bags"],"Iron Rods (Single Piece)":["Iron rods","Single pieces"],"Iron Rods (Per Ton)":["Iron rods","Per ton"],"Binding Wire":["Binding wire","Rolls"]};
+const tabHTML=(c,i,on)=>{const[l,s]=TAB_LABEL[c]||[c,""];return `<button data-cat="${c}" aria-pressed="${on}"><span class="tno">${String(i+1).padStart(2,"0")}</span><b>${l}</b>${s?`<small>${s}</small>`:""}</button>`;};
 function renderTabs(){
-$("#tabs").innerHTML=cats.map(c=>`<button data-cat="${c}" aria-pressed="${c===cat}">${c}</button>`).join("");
+$("#tabs").innerHTML=cats.map((c,i)=>tabHTML(c,i,c===cat)).join("");
 }
 // ---- Product photos, rod size tags and tab banners (Phase 3: carried over
 // from the live index.html, product-images and responsive-thumbnails work) ----
@@ -430,9 +436,26 @@ document.querySelectorAll("[data-wa]").forEach(a=>{if(WA_NUMBER)a.href="https://
 // (Nov 2026). The tabs above the price list do the same job, and without the
 // tiles the first prices appear sooner. goCat() is still used by the tabs.
 
+// ---- Dark mode button ------------------------------------------------------------
+// The moon/sun button in the header (17 Nov 2026). Light mode is the
+// default; Base.astro applies any saved choice (window.tcpTheme). This
+// button switches and remembers the choice on this device.
+const themeBtn=$("#theme");
+function showTheme(){if(!themeBtn)return;const dark=document.documentElement.dataset.theme==="dark";themeBtn.setAttribute("aria-pressed",dark);themeBtn.title=dark?"Switch to light mode":"Switch to dark mode";}
+if(themeBtn&&window.tcpTheme){themeBtn.addEventListener("click",()=>{tcpTheme.set(tcpTheme.get()==="dark"?"light":"dark");showTheme();});
+showTheme();}
+
 // ---- Mobile menu ---------------------------------------------------------------
-$("#menu").addEventListener("click",()=>{const o=$("#nav").classList.toggle("open");$("#menu").setAttribute("aria-expanded",o)});
-$("#nav").addEventListener("click",e=>{if(e.target.closest("a"))$("#nav").classList.remove("open")});
+// Since 17 Nov 2026 the open menu dims and covers the page behind it (a
+// backdrop, like the Enquire sheet); tapping the backdrop, choosing a link,
+// Escape or ☰ again closes it. "Dark mode" keeps the menu open.
+const navScrim=document.createElement("div");navScrim.className="nav-scrim";navScrim.hidden=true;document.body.appendChild(navScrim);
+function menu(open){$("#nav").classList.toggle("open",open);$("#menu").setAttribute("aria-expanded",open);navScrim.hidden=!open;}
+$("#menu").addEventListener("click",()=>menu(!$("#nav").classList.contains("open")));
+$("#nav").addEventListener("click",e=>{if(e.target.closest("a"))menu(false)});
+navScrim.addEventListener("click",()=>menu(false));
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#nav").classList.contains("open")){menu(false);$("#menu").focus();}});
+mq.addEventListener("change",()=>{if(!matchMedia("(max-width:819px)").matches)menu(false);});
 
 // ---- Swiping between category slides keeps the tabs in step --------------------
 const RM=matchMedia("(prefers-reduced-motion: reduce)").matches;

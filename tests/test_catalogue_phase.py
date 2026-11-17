@@ -43,7 +43,7 @@ STATE = """() => { const L = document.querySelector('#list'), l = L.getBoundingC
   const i = [...L.children].findIndex(s => Math.abs(s.getBoundingClientRect().left - l.left) < 2);
   return {shown: i, heading: i < 0 ? null : L.children[i].querySelector('h3').innerText.trim(),
           pressed: [...document.querySelectorAll('#tabs button')].findIndex(b => b.getAttribute('aria-pressed') === 'true'),
-          names: [...document.querySelectorAll('#tabs button')].map(b => b.innerText.trim())}; }"""
+          names: [...document.querySelectorAll('#tabs button')].map(b => b.dataset.cat)}; }"""
 
 
 def _settled(page, i):

@@ -48,6 +48,16 @@
   --sec-a:#ebebeb; --sec-a-body:#fff;     /* estimate sections, alternating tones */
   --sec-b:#e0e0e0; --sec-b-body:#f7f7f7;
   --footer-text:#d9d9d6; /* light grey text on the charcoal footer */
+  --dark:#131514;    /* surfaces that stay dark in both modes: estimate heading, phone bar, footer, rod size tags */
+  --on-dark:#fff;    /* text on those dark surfaces */
+  --on-dark-mute:#cfcac0; /* secondary text on them */
+  --on-y:#131514;    /* text on ochre buttons (charcoal in both modes, 8.5:1) */
+  --thumb-bg:#fff;   /* product photos keep their white background in both modes */
+  --panel:#f4f4f4;   /* the price-list panel (the page colour in light mode) */
+  --fill:#f4f4f4;    /* inner fills: stepper buttons, order-summary tiles, delivery box, help box */
+  --field:#fff;      /* boxes you type in, and Add / secondary buttons */
+  --field-line:#dcdcdc; /* their border */
+  --tex-size:512px;
 
   /* ---- Type: one fixed scale (desktop sizes; phones below) ---- */
   --font:Montserrat,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
@@ -69,6 +79,38 @@
   --r-panel:8px;             /* panels, banner photo */
   --shadow:0 6px 24px rgba(0,0,0,.06); /* the one shadow: the estimate panel */
   --tap:44px;                /* minimum height of anything you tap */
+}
+/* ---- Dark mode (17 Nov 2026; revised for readability the same day) ----
+   An option the customer turns on with the moon/sun button in the header
+   (remembered on that device); light mode is the default for everyone
+   (Daniel and ChatGPT, 17 Nov 2026). A small script in Base.astro applies
+   the choice before the page is drawn.
+   Built in clear tonal layers so the eye can follow the page:
+     page          #0D0F0E  darkest, with the concrete grain
+     surfaces      #262A28  header, price-list panel, estimate, menus (1.32x lighter than the page)
+     fills         #363B38  stepper buttons, order-summary tiles, delivery box, section headings
+     typing boxes  #2F3431  with a clearly visible border, #7A817D (3.6:1, WCAG 1.4.11)
+   Text #F3F4F2 (13.2:1 on surfaces), secondary text #C6CAC6 (8.8:1;
+   6.9:1 on fills), ochre only for actions and emphasis (6.8:1). Only
+   colours change; layout, sizes and the PDF quotation stay the same. */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0d0f0e;
+  --tex:url(/images/texture/concrete-dark.webp);
+  --card:#262a28;
+  --panel:#262a28;
+  --fill:#363b38;
+  --field:#2f3431;
+  --field-line:#7a817d;
+  --ink:#f3f4f2;
+  --mute:#c6cac6;
+  --line:#434a46;
+  --y-soft:#5a3f12;
+  --y-tint:#3d301a;
+  --sec-a:#363b38; --sec-a-body:#262a28;
+  --sec-b:#3b403d; --sec-b-body:#2b2f2d;
+  --dark:#070807;
+  --shadow:0 6px 24px rgba(0,0,0,.55);
 }
 @media (max-width:899px){
   :root{--t-display:clamp(34px,9.5vw,44px);--t-heading:24px;--t-sub:17px;--gap-section:40px}

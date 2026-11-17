@@ -6,10 +6,15 @@
    logo (emblem 65 px tall); phones and narrow tablets show the full
    horizontal logo, emblem and THE CEMENT PEOPLE on one line. Both are the
    approved files in public/brand/. No Enquire button up here any more
-   (decided 16 Nov 2026): enquiries are in the hero and Contact. */
+   (decided 16 Nov 2026): enquiries are in the hero and Contact.
+
+   Dark mode (17 Nov 2026): each logo comes twice, charcoal wordmark (.lg-l)
+   and white wordmark (.lg-d); site.css shows the one for the current mode.
+   The moon/sun button (#theme) switches mode: an icon on computers, a
+   "Dark mode" line in the ☰ menu on phones. */
 ---
 <header><div class="hin">
-<a class="brand" href="#home"><picture><source media="(max-width:899px)" srcset="/brand/tcp-logo-horizontal-on-light.svg" width="592" height="100"><img src="/brand/tcp-logo-primary-on-light.svg" alt="The Cement People" width="734" height="275"></picture></a>
-<nav id="nav"><a href="#home">Home</a><a href="#products">Products</a><a href="#about">About</a><a href="#contact">Contact</a></nav>
+<a class="brand" href="#home"><picture class="lg-l"><source media="(max-width:899px)" srcset="/brand/tcp-logo-horizontal-on-light.svg" width="592" height="100"><img src="/brand/tcp-logo-primary-on-light.svg" alt="The Cement People" width="734" height="275"></picture><picture class="lg-d"><source media="(max-width:899px)" srcset="/brand/tcp-logo-horizontal-on-dark.svg" width="592" height="100"><img src="/brand/tcp-logo-primary-on-dark.svg" alt="The Cement People" width="734" height="275"></picture></a>
+<nav id="nav"><a href="#home">Home</a><a href="#products">Products</a><a href="#about">About</a><a href="#contact">Contact</a><button type="button" id="theme" class="theme" aria-pressed="false" aria-label="Dark mode"><svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span class="tl">Dark mode</span><span class="sw" aria-hidden="true"></span></button></nav>
 <button id="menu" aria-label="Menu" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
 </div></header>

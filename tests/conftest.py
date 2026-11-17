@@ -114,7 +114,7 @@ def goto_tab(page, category=None, text=None, must=True):
     for the list to finish sliding there."""
     index = page.evaluate(
         """([c, t]) => [...document.querySelectorAll('#tabs button')]
-            .findIndex(b => c ? b.dataset.cat === c : b.innerText.includes(t))""", [category, text])
+            .findIndex(b => c ? b.dataset.cat === c : (b.dataset.cat + ' ' + b.innerText).includes(t))""", [category, text])
     assert index >= 0, f"no tab for {category or text!r}"
     page.locator("#tabs button").nth(index).click()
     return wait_slide(page, index, must)
