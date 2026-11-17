@@ -87,6 +87,10 @@ const money=n=>CURRENCY+n.toLocaleString(undefined,{minimumFractionDigits:2,maxi
 // Rods sold by the ton (unit "ton") go up and down in half tons (decided
 // 14 Nov 2026: only 0.5-ton steps, smallest amount half a ton); "Add"
 // starts at 1 ton. Everything else counts in whole items.
+// The most of any one product a customer can put in the estimate. Raised
+// from 9,999 to 20,000 on 17 Nov 2026 (Daniel). A bigger typed number is
+// lowered to this.
+const MAX_QTY=20000;
 const TON=p=>p.unit==="ton";
 const STEP=p=>TON(p)?0.5:1;
 // The small word shown beside the quantity box so the unit is never in
@@ -97,7 +101,7 @@ const PIECE=p=>/\brod$/.test(p.unit);
 const BAG=p=>/\bbag$/.test(p.unit),ROLL=p=>/\broll$/.test(p.unit);
 const unitWord=(p,n)=>TON(p)?(n===1?"ton":"tons"):PIECE(p)?(n===1?"pc":"pcs"):BAG(p)?(n===1?"bag":"bags"):ROLL(p)?(n===1?"roll":"rolls"):"";
 const ctrl=p=>{const n=qty[p.id]||0,t=TON(p),one=t?"half a ton of":"one";return n
-?`<div class="qty"><div class="step"><button data-dec="${p.id}" aria-label="Remove ${one} ${p.name}">−</button><input type="number" min="0" step="${STEP(p)}" inputmode="${t?"decimal":"numeric"}" value="${n}" data-qty="${p.id}" aria-label="Quantity of ${p.name}${t?" in tons":PIECE(p)?" in pieces":BAG(p)?" in bags":ROLL(p)?" in rolls":""}"><button data-inc="${p.id}" aria-label="Add ${one} ${p.name}">+</button></div>${unitWord(p,n)?`<span class="u">${unitWord(p,n)}</span>`:""}</div>`
+?`<div class="qty"><div class="step"><button data-dec="${p.id}" aria-label="Remove ${one} ${p.name}">−</button><input type="number" min="0" max="${MAX_QTY}" step="${STEP(p)}" inputmode="${t?"decimal":"numeric"}" value="${n}" data-qty="${p.id}" aria-label="Quantity of ${p.name}${t?" in tons":PIECE(p)?" in pieces":BAG(p)?" in bags":ROLL(p)?" in rolls":""}"><button data-inc="${p.id}" aria-label="Add ${one} ${p.name}">+</button></div>${unitWord(p,n)?`<span class="u">${unitWord(p,n)}</span>`:""}</div>`
 :`<button class="add" data-inc="${p.id}" aria-label="Add ${p.name} to estimate">Add</button>`};
 
 
@@ -299,7 +303,7 @@ function set(id,n){
 // nearest half; a typed amount above zero never rounds down to nothing.
 const s=STEP(byId(id));n=Number.isFinite(n)?n:0;
 n=s===1?Math.trunc(n):Math.round(n/s)*s;if(s!==1&&n<=0&&arguments[2])n=s;
-n=Math.max(0,Math.min(9999,n));
+n=Math.max(0,Math.min(MAX_QTY,n));
 if(n)qty[id]=n;else delete qty[id];
 renderList();renderEst();
 }
