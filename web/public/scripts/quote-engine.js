@@ -91,11 +91,14 @@ const money=n=>CURRENCY+n.toLocaleString(undefined,{minimumFractionDigits:2,maxi
 // from 9,999 to 50,000 on 17 Nov 2026 (Daniel). A bigger typed number is
 // lowered to this.
 const MAX_QTY=50000;
-// A quantity as people read it: 50,000 and 2.5 (17 Nov 2026). Used in the
-// estimate's summary and headings, the WhatsApp message and the PDF. The
-// boxes you type in stay plain digits, because a comma typed there means a
-// decimal point ("2,5" tons = 2.5).
+// A quantity as people read it: 50,000 and 2.5 (17 Nov 2026). Used
+// everywhere a quantity is shown: the quantity boxes, the estimate's
+// summary and headings, the WhatsApp message and the PDF.
 const fmtQ=n=>(+n).toLocaleString("en-US",{maximumFractionDigits:2});
+// Reading a typed quantity. Commas that group thousands are ignored
+// ("50,000" = 50000, "1,234.5" = 1234.5); any other comma is a decimal
+// point, as many phones type it ("2,5" tons = 2.5).
+function parseQ(v){v=String(v).replace(/\s/g,"");if(/^\d{1,3}(,\d{3})+(\.\d*)?$/.test(v))v=v.replace(/,/g,"");else v=v.replace(",",".");return parseFloat(v);}
 const TON=p=>p.unit==="ton";
 const STEP=p=>TON(p)?0.5:1;
 // The small word shown beside the quantity box so the unit is never in
@@ -106,7 +109,7 @@ const PIECE=p=>/\brod$/.test(p.unit);
 const BAG=p=>/\bbag$/.test(p.unit),ROLL=p=>/\broll$/.test(p.unit);
 const unitWord=(p,n)=>TON(p)?(n===1?"ton":"tons"):PIECE(p)?(n===1?"pc":"pcs"):BAG(p)?(n===1?"bag":"bags"):ROLL(p)?(n===1?"roll":"rolls"):"";
 const ctrl=p=>{const n=qty[p.id]||0,t=TON(p),one=t?"half a ton of":"one";return n
-?`<div class="qty"><div class="step"><button data-dec="${p.id}" aria-label="Remove ${one} ${p.name}">−</button><input type="number" min="0" max="${MAX_QTY}" step="${STEP(p)}" inputmode="${t?"decimal":"numeric"}" value="${n}" data-qty="${p.id}" aria-label="Quantity of ${p.name}${t?" in tons":PIECE(p)?" in pieces":BAG(p)?" in bags":ROLL(p)?" in rolls":""}"><button data-inc="${p.id}" aria-label="Add ${one} ${p.name}">+</button></div>${unitWord(p,n)?`<span class="u">${unitWord(p,n)}</span>`:""}</div>`
+?`<div class="qty"><div class="step"><button data-dec="${p.id}" aria-label="Remove ${one} ${p.name}">−</button><input type="text" autocomplete="off" inputmode="${t?"decimal":"numeric"}" value="${fmtQ(n)}" data-qty="${p.id}" aria-label="Quantity of ${p.name}${t?" in tons":PIECE(p)?" in pieces":BAG(p)?" in bags":ROLL(p)?" in rolls":""}"><button data-inc="${p.id}" aria-label="Add ${one} ${p.name}">+</button></div>${unitWord(p,n)?`<span class="u">${unitWord(p,n)}</span>`:""}</div>`
 :`<button class="add" data-inc="${p.id}" aria-label="Add ${p.name} to estimate">Add</button>`};
 
 
@@ -238,7 +241,7 @@ if(!rows.length){$("#clearAsk").hidden=true;}
 $("#lines").innerHTML=rows.length?S.map((x,i)=>`<section class="es${SHUT[x.k]?" shut":""}" data-g="${x.k}"><button type="button" class="esh" data-sec="${x.k}" aria-expanded="${!SHUT[x.k]}">${CHEV}<span class="eno">${String(i+1).padStart(2,"0")}</span><span class="enm"><b>${x.name}</b><span>${x.parts.map(y=>howMany(y.k,y.n)).join(" · ")}</span></span><span class="esx">${money(x.sum)}</span></button><div class="esb">`
 +x.parts.map(y=>(x.parts.length>1||PART_SHORT[y.k]&&x.k==="rod"?`<h4 class="esub">${PART_SHORT[y.k]||PART_NAME[y.k]}<span>${howMany(y.k,y.n)}</span></h4>`:"")+y.rows.map(lineHTML).join("")+(x.k==="rod"&&x.parts.length>1?`<div class="est"><span>${PART_SHORT[y.k]} subtotal</span><b>${money(y.sum)}</b></div>`:"")).join("")
 +`<div class="est all"><span>${x.name} subtotal</span><b>${money(x.sum)}</b></div></div></section>`).join(""):(undoSnap?`<p class="mute empty" role="status">Estimate cleared. <button class="ghost undo" id="undo">Undo</button></p>`:`<p class="mute empty">Your estimate is empty. Add materials from the price list.</p>`);
-$("#tot").innerHTML=(TAX_RATE?`<div><span>Materials</span><span>${money(sub)}</span></div><div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")+`<div><span>Delivery</span><span class="tbc">To be confirmed</span></div><div class="gt"><span>Total (excl. delivery)</span><span>${money(total)}</span></div>`;
+$("#tot").innerHTML=(TAX_RATE?`<div><span>Materials</span><span>${money(sub)}</span></div><div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")+`<div><span>Delivery</span><span class="tbc">To be confirmed</span></div><div class="gt${total>=1e6?" lg":""}"><span>Total (excl. delivery)</span><span>${money(total)}</span></div>`;
 $("#bar").classList.toggle("on",rows.length>0);
 $("#barTxt").innerHTML=`<small>${rows.length} ${rows.length===1?"item":"items"}<span class="bl"> in your estimate</span></small>${money(total)}`;
 const loc=$("#loc").value.trim();
@@ -322,8 +325,14 @@ if(d.inc)set(d.inc,qty[d.inc]?qty[d.inc]+STEP(byId(d.inc)):1);
 else if(d.dec)set(d.dec,(qty[d.dec]||0)-STEP(byId(d.dec)));
 else if(d.cat!==undefined)goCat(d.cat);
 });
+// While a quantity box is being edited it shows plain digits ("50000"),
+// so deleting or adding a digit can never leave a misplaced comma; leaving
+// the box shows it formatted again ("50,000").
+// The whole number is selected, so typing replaces it (as before).
+document.addEventListener("focusin",e=>{const i=e.target;if(i.dataset&&i.dataset.qty){const raw=String(qty[i.dataset.qty]||0);if(i.value!==raw){i.value=raw;i.select();}}});
+document.addEventListener("focusout",e=>{const i=e.target;if(i.dataset&&i.dataset.qty&&i.isConnected&&parseQ(i.value)===(qty[i.dataset.qty]||0))i.value=fmtQ(qty[i.dataset.qty]||0);});
 document.addEventListener("change",e=>{
-const i=e.target;if(i.dataset&&i.dataset.qty){const v=parseFloat(String(i.value).replace(",","."));set(i.dataset.qty,v||0,v>0);}
+const i=e.target;if(i.dataset&&i.dataset.qty){const v=parseQ(i.value);set(i.dataset.qty,v||0,v>0);}
 });
 $("#q").addEventListener("input",e=>{q=e.target.value.trim().toLowerCase();renderList();});
 $("#print").addEventListener("click",()=>window.print());
