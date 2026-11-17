@@ -2,7 +2,8 @@
 Dark mode (17 Nov 2026)
 =======================
 
-  K01  the site follows the phone's or computer's own setting: light or dark
+  K01  light mode is the default, even when the phone or computer is set to
+       dark (Daniel and ChatGPT, 17 Nov 2026: dark mode is an option)
   K02  the moon/sun button switches mode and the choice is remembered after
        reloading the page (on this device)
   K03  dark mode shows the logos with the white wordmark, on phones and computers
@@ -17,9 +18,12 @@ from conftest import SITE_URL, print_pdf, settle
 
 
 def _open(browser, scheme, width=1280, height=900, mobile=False, context=None):
-    context = context or browser.new_context(viewport={"width": width, "height": height}, color_scheme=scheme,
+    """Open the site; scheme "dark" means the customer has switched dark mode on."""
+    context = context or browser.new_context(viewport={"width": width, "height": height}, color_scheme=scheme.replace("-device", ""),
                                              is_mobile=mobile, has_touch=mobile)
     page = context.new_page()
+    if scheme == "dark":
+        page.add_init_script("try { if (!sessionStorage.getItem('k')) { localStorage.setItem('tcp-theme', 'dark'); sessionStorage.setItem('k', 1); } } catch (e) {}")
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(SITE_URL, wait_until="load")
@@ -35,11 +39,11 @@ bg = lambda page, sel: page.evaluate(f"getComputedStyle(document.querySelector('
 
 
 @pytest.mark.parametrize("scheme", ["light", "dark"])
-def test_k01_follows_the_device_setting(browser, scheme):
-    page, errors = _open(browser, scheme)
-    assert theme(page) == scheme
-    assert (bg(page, "header") == "rgb(255, 255, 255)") == (scheme == "light")
-    assert page.get_attribute("#theme", "aria-pressed") == ("true" if scheme == "dark" else "false")
+def test_k01_light_by_default_whatever_the_device_setting(browser, scheme):
+    page, errors = _open(browser, scheme + "-device")
+    assert theme(page) == "light"
+    assert bg(page, "header") == "rgb(255, 255, 255)"
+    assert page.get_attribute("#theme", "aria-pressed") == "false"
     assert not errors, errors
     page.context.close()
 
@@ -116,5 +120,36 @@ def test_k06_phone_menu_has_the_dark_mode_switch(browser):
     page.click("#theme")
     assert theme(page) == "dark"
     assert page.evaluate("document.documentElement.scrollWidth") == 390
+    assert not errors, errors
+    page.context.close()
+
+
+# ---- K07 -------------------------------------------------------------------
+# Dark mode is built in visible layers (revised 17 Nov 2026 for readability):
+# page < surfaces (header, price list, estimate) < fills (stepper buttons,
+# summary tiles, section headings); boxes you type in have a border that
+# stands out at least 3:1 (WCAG 1.4.11), on phones and computers.
+@pytest.mark.parametrize("width,mobile", [(390, True), (1280, False)])
+def test_k07_dark_mode_has_clear_layers(browser, width, mobile):
+    page, errors = _open(browser, "dark", width, 844, mobile)
+    page.evaluate("() => { qty.c1 = 3; qty.j3 = 1.5; renderList(); renderEst(); }")
+    r = page.evaluate("""() => { const rgb = c => c.match(/[\\d.]+/g).slice(0, 3).map(Number);
+        const lum = c => { const [r, g, b] = rgb(c).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
+            return .2126 * r + .7152 * g + .0722 * b; };
+        const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return +((x + .05) / (y + .05)).toFixed(2); };
+        const cs = s => getComputedStyle(document.querySelector(s));
+        const page = cs('body').backgroundColor, surface = cs('#catalog').backgroundColor;
+        return {pageVsSurface: ratio(page, surface), surfaceVsHeader: ratio(surface, cs('header').backgroundColor),
+                surfaceVsFill: ratio(surface, cs('#est .step button').backgroundColor),
+                searchBorder: ratio(cs('#q').borderTopColor, surface),
+                stepperBorder: ratio(cs('#est .step').borderTopColor, cs('#est .esb').backgroundColor),
+                locBorder: ratio(cs('#loc').borderTopColor, cs('.edeliv').backgroundColor),
+                addBorder: ratio(cs('#list .add').borderTopColor, surface)}; }""")
+    assert r["pageVsSurface"] >= 1.25, r
+    assert r["surfaceVsHeader"] == 1, r
+    assert r["surfaceVsFill"] >= 1.2, r
+    for k in ("searchBorder", "stepperBorder", "addBorder"):
+        assert r[k] >= 3, f"{k}: {r}"
+    assert r["locBorder"] >= 2.4, r
     assert not errors, errors
     page.context.close()

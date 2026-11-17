@@ -49,9 +49,9 @@ h2{font-size:17px;font-weight:800;margin:26px 0 2px;display:flex;align-items:cen
    Secondary: white with a dark border ("Enquire" in the hero, "Print or
    save as PDF"). "Add": neutral, see 5. */
 .cta,.bar button{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--tap);background:var(--y);color:var(--on-y);border:1px solid var(--y);border-radius:var(--r-control);font-weight:var(--w-label);text-decoration:none;cursor:pointer}
-.btn2{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--tap);background:var(--card);color:var(--ink);border:1px solid var(--ink);border-radius:var(--r-control);font-weight:var(--w-label);text-decoration:none}
+.btn2{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--tap);background:var(--field);color:var(--ink);border:1px solid var(--ink);border-radius:var(--r-control);font-weight:var(--w-label);text-decoration:none}
 .cta:hover,.bar button:hover{border-color:var(--ink)}
-.btn2:hover{background:var(--bg)}
+.btn2:hover{background:var(--fill)}
 
 /* ---- 2. Header ------------------------------------------------------------ */
 header{position:sticky;top:env(safe-area-inset-top,0px);z-index:11;background:var(--card);color:var(--ink);border-bottom:1px solid var(--line)}
@@ -74,9 +74,15 @@ nav a:hover{border-bottom-color:var(--y)}
 :root[data-theme="dark"] .brand .lg-l{display:none}
 :root[data-theme="dark"] .brand .lg-d{display:block}
 .theme{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-width:var(--tap);min-height:var(--tap);padding:0;background:none;border:0;border-radius:var(--r-control);color:var(--ink);font:inherit;font-weight:var(--w-label);cursor:pointer}
-.theme:hover{background:var(--bg)}
+.theme:hover{background:var(--fill)}
 .theme svg{width:22px;height:22px;flex:none}
 .theme .sun,:root[data-theme="dark"] .theme .moon{display:none}
+/* Dark mode readability (17 Nov 2026): product names a step bolder (thin
+   light text on dark looks weaker than dark text on light), placeholder
+   text clearly visible, and focus rings in ochre. */
+:root[data-theme="dark"] .row .nm,:root[data-theme="dark"] .ln .nm{font-weight:var(--w-label)}
+:root[data-theme="dark"] ::placeholder{color:#9ea39f;opacity:1}
+:root[data-theme="dark"] :focus-visible{outline:2px solid var(--y);outline-offset:2px}
 :root[data-theme="dark"] .theme .sun{display:block}
 /* Computers: the icon only (its name is read out by screen readers). */
 .theme .tl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -133,7 +139,7 @@ nav a:hover{border-bottom-color:var(--y)}
 .enq-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:20;min-width:270px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-panel);box-shadow:0 10px 30px rgba(0,0,0,.14);padding:6px}
 .enq-menu[hidden]{display:none}
 .enq-menu a{display:flex;align-items:center;gap:var(--s3);min-height:52px;padding:var(--s2) var(--s3);border-radius:var(--r-control);color:var(--ink);text-decoration:none;font-weight:var(--w-label)}
-.enq-menu a:hover,.enq-menu a:focus-visible{background:var(--bg)}
+.enq-menu a:hover,.enq-menu a:focus-visible{background:var(--fill)}
 .enq-menu a svg{width:22px;height:22px;flex:none}
 .enq-menu small{display:block;font-weight:var(--w-text);font-size:var(--t-small);color:var(--mute)}
 .enq-menu .grab{display:none}
@@ -159,11 +165,11 @@ main{max-width:var(--page);margin:0 auto;padding:var(--gap-section) var(--s4) 0;
 /* ---- 5. Price list ---------------------------------------------------------- */
 /* The price list sits on a flat panel (no concrete grain behind products).
    The panel's edge is drawn with a shadow, so the layout is unchanged. */
-#catalog{min-width:0;background:var(--bg);border-radius:var(--r-panel);box-shadow:0 0 0 20px var(--bg),0 0 0 21px var(--line)}
-@media (max-width:899px){#catalog{border-radius:0;box-shadow:0 0 0 16px var(--bg)}}
+#catalog{min-width:0;background:var(--panel);border-radius:var(--r-panel);box-shadow:0 0 0 20px var(--panel),0 0 0 21px var(--line)}
+@media (max-width:899px){#catalog{border-radius:0;box-shadow:0 0 0 16px var(--panel)}}
 #catalog>.lead{margin:0 0 6px}
 .tools{margin:20px 0 6px;display:grid;gap:10px}
-input[type=search]{width:100%;min-height:var(--tap);padding:10px var(--s3);font-size:var(--t-body);border:1px solid var(--line);border-radius:var(--r-control);background:var(--card);color:var(--ink)}
+input[type=search]{width:100%;min-height:var(--tap);padding:10px var(--s3);font-size:var(--t-body);border:1px solid var(--field-line);border-radius:var(--r-control);background:var(--field);color:var(--ink)}
 .tabs{display:flex;gap:var(--s1);overflow-x:auto;scrollbar-width:none;align-items:stretch}
 .tabs button{flex:1 1 0;min-height:var(--tap);white-space:normal;line-height:1.25;text-align:center;padding:var(--s2) 6px;background:none;border:0;border-bottom:3px solid transparent;color:var(--mute);font-size:var(--t-small);font-weight:var(--w-label);cursor:pointer}
 .tabs button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--y)}
@@ -213,7 +219,7 @@ section.nobanner .banner{display:none}
 .buy{display:contents}
 /* "Add": neutral so the yellow stays for the main actions; turns light
    yellow on hover and keyboard focus (decided 14 Nov 2026). */
-.add{min-height:var(--tap);padding:var(--s2) 18px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-control);font-size:var(--t-small);font-weight:var(--w-label);cursor:pointer}
+.add{min-height:var(--tap);padding:var(--s2) 18px;background:var(--field);color:var(--ink);border:1px solid var(--field-line);border-radius:var(--r-control);font-size:var(--t-small);font-weight:var(--w-label);cursor:pointer}
 .add:hover,.add:focus-visible{background:var(--y-soft);border-color:var(--y)}
 /* A product already in the estimate: ochre edge, faint ochre wash and
    "In your estimate" over its name (17 Nov 2026). */
@@ -221,10 +227,10 @@ section.nobanner .banner{display:none}
 .row.in .nm::before{content:"✓ In your estimate";display:block;font-size:12px;font-weight:var(--w-strong);letter-spacing:.02em;margin-bottom:2px}
 /* Quantity stepper (in the list and the estimate). justify-self:start keeps
    it as wide as its buttons; before, it stretched into an empty white strip. */
-.step{display:inline-flex;justify-self:start;border:1px solid var(--line);border-radius:var(--r-control);overflow:hidden}
-.step button{width:40px;min-height:var(--tap);border:0;background:var(--bg);color:var(--ink);font-size:var(--t-sub);font-weight:var(--w-label);cursor:pointer}
+.step{display:inline-flex;justify-self:start;border:1px solid var(--field-line);border-radius:var(--r-control);overflow:hidden}
+.step button{width:40px;min-height:var(--tap);border:0;background:var(--fill);color:var(--ink);font-size:var(--t-sub);font-weight:var(--w-label);cursor:pointer}
 /* 72 px: room for "50,000", the most allowed (17 Nov 2026). */
-.step input{width:72px;padding:0 2px;min-height:var(--tap);text-align:center;border:0;border-inline:1px solid var(--line);background:var(--card);color:var(--ink);font-size:var(--t-body);font-weight:var(--w-label);border-radius:0;-moz-appearance:textfield}
+.step input{width:72px;padding:0 2px;min-height:var(--tap);text-align:center;border:0;border-inline:1px solid var(--field-line);background:var(--field);color:var(--ink);font-size:var(--t-body);font-weight:var(--w-label);border-radius:0;-moz-appearance:textfield}
 /* Stepper plus its unit word ("tons" for rods by the ton, "pcs" for single rods). */
 .qty{display:inline-flex;align-items:center;gap:var(--s2);justify-self:start}
 .qty{white-space:nowrap}
@@ -251,7 +257,7 @@ section.nobanner .banner{display:none}
 @media (max-width:399px){.etools{padding-inline:var(--s3)}.etool{font-size:var(--t-label);gap:4px}.etool svg{width:16px;height:16px}}
 #clear{margin-left:auto;color:var(--mute)}
 /* "Remove everything from this estimate?" */
-.eask{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2);margin:var(--s2) var(--s4);padding:10px var(--s3);background:var(--bg);border-radius:var(--r-control);font-size:var(--t-small);flex:none}
+.eask{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2);margin:var(--s2) var(--s4);padding:10px var(--s3);background:var(--fill);border-radius:var(--r-control);font-size:var(--t-small);flex:none}
 .eask[hidden]{display:none}
 .eask b{flex:1 1 100%}
 .eask button{min-height:var(--tap);padding:0 var(--s4);border:1px solid var(--ink);border-radius:var(--r-control);background:var(--card);color:var(--ink);font-size:var(--t-small);font-weight:var(--w-label);cursor:pointer}
@@ -262,10 +268,10 @@ section.nobanner .banner{display:none}
 #glance{padding:14px 0 var(--s1)}
 #glance h3{margin:0 0 var(--s2);font-size:var(--t-label);font-weight:var(--w-strong);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
 #glance .tiles{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)}
-#glance .tiles div{background:var(--bg);border-radius:var(--r-control);padding:7px 10px;font-size:var(--t-small);color:var(--mute);line-height:1.3}
+#glance .tiles div{background:var(--fill);border-radius:var(--r-control);padding:7px 10px;font-size:var(--t-small);color:var(--mute);line-height:1.3}
 #glance .tiles b{font-size:var(--t-price);font-weight:var(--w-strong);color:var(--ink);margin-right:2px}
 /* First-time help, shown while the estimate is empty */
-.estart{background:var(--bg);border-radius:var(--r-panel);padding:14px var(--s4);margin:14px 0 var(--s1)}
+.estart{background:var(--fill);border-radius:var(--r-panel);padding:14px var(--s4);margin:14px 0 var(--s1)}
 .estart[hidden]{display:none}
 .estart>b{display:block;margin-bottom:6px}
 .estart ol{margin:0;padding-left:20px;font-size:var(--t-small);color:var(--mute)}
@@ -308,11 +314,11 @@ section.nobanner .banner{display:none}
 .empty{padding:var(--s4) 0;margin:0}
 /* "Undo" after Clear estimate: shown for 10 seconds. */
 .empty .undo{color:var(--ink);font-weight:var(--w-label);padding:var(--s2) var(--s3)}
-.edeliv{margin:var(--s3) 0 0;padding:14px;background:var(--bg);border-radius:var(--r-control)}
+.edeliv{margin:var(--s3) 0 0;padding:14px;background:var(--fill);border-radius:var(--r-control)}
 .edeliv h3{margin:0 0 2px;font-size:var(--t-body);font-weight:var(--w-strong)}
 .edeliv p{margin:0 0 var(--s2);font-size:var(--t-small);color:var(--mute)}
 .dl{display:block;font-weight:var(--w-label);font-size:var(--t-small)}
-#loc{display:block;width:100%;min-height:var(--tap);margin-top:6px;padding:10px;font-size:var(--t-body);border:1px solid var(--line);border-radius:var(--r-control);background:var(--card);color:var(--ink)}
+#loc{display:block;width:100%;min-height:var(--tap);margin-top:6px;padding:10px;font-size:var(--t-body);border:1px solid var(--field-line);border-radius:var(--r-control);background:var(--field);color:var(--ink)}
 .fine{margin:0;padding:var(--s3) 0 var(--s4);font-size:var(--t-label);color:var(--mute)}
 /* The bottom: totals and the two actions. */
 .efoot{flex:none;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -8px 18px rgba(0,0,0,.05);padding:10px var(--s4) 14px}
