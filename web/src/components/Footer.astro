@@ -1,11 +1,11 @@
 ---
-/* Footer.astro - the black strip at the bottom with the logo, the address
-   and a one-line summary of the business. */
-import Logo from "./Logo.astro";
+/* Footer.astro - the charcoal strip at the bottom: the horizontal logo
+   (emblem and THE CEMENT PEOPLE on one line, brand identity V1.1), the
+   address and a one-line summary of the business. */
 import { business } from "../config/business";
 import { addressLine } from "../lib/business-format";
 ---
 <footer class="foot"><div>
-<Logo brick="#d9d9d6" />
-<p><b>{business.name}</b>{addressLine()}. Cement, iron rods and binding wire, delivered to your site. Prices in Ghana cedis ({business.currencySymbol}).</p>
+<img class="flogo" src="/brand/tcp-logo-horizontal-on-dark.svg" alt={business.name} width="592" height="100" loading="lazy">
+<p>{addressLine()}. Cement, iron rods and binding wire, delivered to your site. Prices in Ghana cedis ({business.currencySymbol}).</p>
 </div></footer>

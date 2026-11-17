@@ -115,9 +115,11 @@ def test_d05_hero_buttons_keep_their_hierarchy(browser):
     style = page.evaluate("""() => { const s = e => getComputedStyle(document.querySelector(e));
         return {main: s('.ctas .cta').backgroundColor, second: s('.ctas .btn2').backgroundColor,
                 border: s('.ctas .btn2').borderTopColor}; }""")
-    assert style["main"] == "rgb(242, 195, 0)", f"'View products' should be TCP yellow: {style}"
-    assert style["second"] == "rgb(255, 255, 255)", f"'Call us' should be white: {style}"
-    assert style["border"] == "rgb(17, 17, 17)", f"'Call us' should have a dark border: {style}"
+    # Brand identity V1.1 (17 Nov 2026): interface ochre #FF9802, charcoal #131514;
+    # the second button is "Enquire" (WhatsApp or call) instead of "Call us".
+    assert style["main"] == "rgb(255, 152, 2)", f"'View products' should be TCP ochre: {style}"
+    assert style["second"] == "rgb(255, 255, 255)", f"'Enquire' should be white: {style}"
+    assert style["border"] == "rgb(19, 21, 20)", f"'Enquire' should have a dark border: {style}"
     page.context.close()
 
 
@@ -137,6 +139,7 @@ def test_d07_hero_buttons_side_by_side_on_wide_screens(browser, width):
     page.goto(SITE_URL, wait_until="load")
     settle(page)
     _skip_unless_astro(page)
-    tops = page.evaluate("[...document.querySelectorAll('.ctas a')].map(a => Math.round(a.getBoundingClientRect().top))")
+    # "Enquire" is a button (it opens WhatsApp / call); its menu links are hidden.
+    tops = page.evaluate("[...document.querySelectorAll('.ctas > a, .ctas .enq-btn')].map(a => Math.round(a.getBoundingClientRect().top))")
     assert len(tops) == 2 and tops[0] == tops[1], f"hero buttons are stacked at {width} px: {tops}"
     context.close()

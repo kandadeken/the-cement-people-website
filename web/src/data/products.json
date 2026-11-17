@@ -133,8 +133,7 @@
   },
   {
     "id": "i8",
-    "category": "Iron Rods (Single Piece)",
-    "subgroup": "Binding wire",
+    "category": "Binding Wire",
     "name": "Binding wire",
     "unit": "roll",
     "price": 60,

@@ -47,9 +47,11 @@ def test_t01_phone_estimate_bar_shows_total_and_opens_estimate(browser):
     assert not bar.is_visible(), "the estimate bar should be hidden while the estimate is empty"
     page.click('#list [data-inc="c1"]')  # Supacem 32.5R, GH₵75.00
     assert bar.is_visible(), "the estimate bar should appear once something is added"
-    assert page.inner_text("#barTxt") == "Estimate: GH₵75.00 (1 item)"
+    # The Astro site's bar (17 Nov 2026): "1 item in your estimate" over the total.
+    astro = _is_astro(page)
+    assert page.inner_text("#barTxt") == ("1 item in your estimate\nGH₵75.00" if astro else "Estimate: GH₵75.00 (1 item)")
     page.click('#list [data-inc="c1"]')
-    assert page.inner_text("#barTxt") == "Estimate: GH₵150.00 (1 item)"
+    assert page.inner_text("#barTxt") == ("1 item in your estimate\nGH₵150.00" if astro else "Estimate: GH₵150.00 (1 item)")
     # The bar stays at the bottom of the screen while scrolling through the
     # price list. (Catalogue phase: it now steps aside once the estimate
     # panel itself is on screen, so this scrolls a short way only.)
@@ -102,8 +104,12 @@ def test_t02_sliding_the_price_list_switches_the_tab(browser):
     ("binding", ["i8"]),
 ])
 def test_t03_search_words_find_the_right_products(browser, words, expected):
-    # "iron rods" also finds binding wire: it is listed in the rods tab.
+    # On the original single-file site "iron rods" also finds binding wire,
+    # listed in the rods tab. On the Astro site binding wire has its own
+    # category since 17 Nov 2026, so it no longer matches "iron rods".
     page, errors = open_site(browser)
+    if _is_astro(page) and words == "iron rods":
+        expected = [p for p in expected if p != "i8"]
     page.fill("#q", words)
     found = page.evaluate("[...document.querySelectorAll('#list [data-inc]')].map(b => b.dataset.inc)")
     assert found == expected, f"search {words!r} found {found}"
@@ -113,10 +119,12 @@ def test_t03_search_words_find_the_right_products(browser, words, expected):
 
 def test_t04_page_sections_text_and_links_unchanged(browser):
     page, _ = open_site(browser)
-    for name, sel in [("header", "header"), ("about", "#about")]:
+    for name, sel in [("about", "#about")]:
         assert page.evaluate(READ_SECTION, sel) == SECTIONS["shared"][name], f"{name} text or links changed"
+    # The header differs since 17 Nov 2026: the Astro site has no WhatsApp
+    # button in the header (Enquire is in the hero and Contact instead).
     version = "astro" if _is_astro(page) else "single_file"
-    for name, sel in [("hero", ".hero .htx"), ("contact", "#contact"), ("footer", "footer")]:
+    for name, sel in [("header", "header"), ("hero", ".hero .htx"), ("contact", "#contact"), ("footer", "footer")]:
         assert page.evaluate(READ_SECTION, sel) == SECTIONS[version][name], f"{name} text or links changed ({version})"
     page.context.close()
 
@@ -134,8 +142,11 @@ def test_t05_favicons_are_linked_and_identical(browser):
     for path in FAVICONS:
         reference = (ROOT / path.lstrip("/")).read_bytes()
         assert reference, f"{path} is empty"
-        # The Astro copy must be the same file, byte for byte.
-        assert (ROOT / "web" / "public" / path.lstrip("/")).read_bytes() == reference, f"{path} differs in web/public"
+        # Since brand identity V1.1 (17 Nov 2026) the Astro site has new
+        # favicons; the root files stay as they were, for the rollback site.
+        # So the check is now: the Astro copy exists and is what is served.
+        reference = (ROOT / "web" / "public" / path.lstrip("/")).read_bytes()
+        assert reference, f"{path} is empty in web/public"
         if SITE_URL.startswith("http"):
             with urllib.request.urlopen(SITE_URL.rstrip("/") + path) as r:
                 assert r.read() == reference, f"{path} served by the site differs from the repository copy"

@@ -1,7 +1,7 @@
 ---
 /* Hero.astro - the opening section: one product photograph with the
-   headline, "View products" and "Call us" beside it (computers) or above it
-   (phones).
+   headline, "View products" and "Enquire" (WhatsApp or call, see
+   Enquire.astro) beside it (computers) or above it (phones).
 
    Layout agreed with Daniel and ChatGPT ("Direction A, Refinement 02"):
    - Screens 900 px and wider: the wide photo fills about 65% of the width on
@@ -10,16 +10,17 @@
      first, and the tall photo starts right under the buttons. The top of the
      tall photo is plain wall, so it fades into the panel and text and photo
      read as one picture.
-   - Text left-aligned; no yellow line under the headline; plain button
-     labels (no arrow). The call button says "Call us"; the number itself is
-     read out to screen readers and stays visible in Contact and the footer.
+   - Text left-aligned; plain button labels. "Enquire" opens a choice of
+     WhatsApp or a call (16 Nov 2026); the number stays visible in Contact.
+   - Brand identity V1.1 (17 Nov 2026): the page behind is neutral concrete,
+     so on phones the photo now fades out at the bottom as well as the top.
 
    The photos (Sunburst renders of the real products, Nov 2026) are in
    public/images/hero/, each in several widths: the browser downloads only
    the size the screen needs. Phones get the tall photo, wider screens the
    wide one, via <picture>. width/height give the shape so the browser can
    reserve the space before the photo arrives. */
-import { business } from "../config/business";
+import Enquire from "./Enquire.astro";
 
 /** Description of the hero photo; also used for link previews (Base.astro). */
 export const HERO_ALT =
@@ -37,5 +38,5 @@ const phoneSrcset = [480, 780, 1024]
 <source media="(max-width:899px)" srcset={phoneSrcset} sizes="100vw" width="1024" height="1280">
 <img src="/images/hero/hero-desktop-1440.webp" srcset={desktopSrcset} sizes="(min-width:900px) 65vw, 100vw" width="2560" height="1440" alt={HERO_ALT} fetchpriority="high">
 </picture>
-<div class="htx"><p class="kick">Building materials supplier</p><h1>Materials for stronger construction.</h1><p class="lead">Cement, iron rods and binding wire, delivered to your site.</p><div class="ctas"><a class="cta" href="#products">View products</a><a class="btn2" href={`tel:${business.phoneInternational}`} aria-label={`Call us on ${business.phone}`}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Call us</a></div></div>
+<div class="htx"><p class="kick">Building materials supplier</p><h1>Materials for stronger construction.</h1><p class="lead">Cement, iron rods and binding wire, delivered to your site.</p><div class="ctas"><a class="cta" href="#products">View products</a><Enquire id="enq-hero" variant="secondary" /></div></div>
 </section>

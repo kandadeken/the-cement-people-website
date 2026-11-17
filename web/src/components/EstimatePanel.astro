@@ -1,24 +1,48 @@
 ---
-/* EstimatePanel.astro - the "Estimate" panel beside the price list (on
-   phones it opens full-screen from the bar at the bottom).
+/* EstimatePanel.astro - "Your estimate", beside the price list on computers
+   and under it on phones (where it also opens full-screen).
 
-   quote-engine.js fills in: #ref and #date (reference and date), #lines
-   (one line per product added), #tot (totals) and the #send WhatsApp link.
-   The customer types their drop-off location into #loc.
+   Estimate redesign (approved 17 Nov 2026). Three parts, so the controls
+   never scroll away however long the estimate gets:
+     1. Heading (fixed): title, reference, date, "View full estimate" and
+        "Clear estimate". Clear asks for confirmation first (#clearAsk);
+        Undo is still offered for 10 seconds afterwards.
+     2. Materials (#escroll, the only part that scrolls): "Your order at a
+        glance" (#glance), first-time help (#start), the material sections
+        (#lines), delivery and drop-off location, small print.
+     3. Bottom (fixed): totals (#tot), "Send on WhatsApp" (#send) and
+        "Print or save as PDF" (#print).
+   quote-engine.js fills in #ref, #date, #glance, #lines, #tot and #send.
    "noprint" marks parts never shown on the printed quotation. */
 import WhatsAppIcon from "./WhatsAppIcon.astro";
 ---
 <aside id="est" class="docket" aria-label="Your estimate">
 <button class="dclose noprint" id="dclose"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Back to products</button>
-<div class="dh"><b>Estimate</b><span id="ref"></span></div>
+<div class="dh"><b>Your estimate</b><span id="ref"></span></div>
 <div class="dm" id="date"></div>
+<div class="etools noprint" id="etools">
+<button type="button" class="etool" id="full"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>View full estimate</span></button>
+<button type="button" class="etool" id="clear"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Clear estimate</span></button>
+</div>
+<div class="eask noprint" id="clearAsk" role="alertdialog" aria-labelledby="clearQ" hidden>
+<b id="clearQ">Remove everything from this estimate?</b>
+<button type="button" id="clearNo">Keep estimate</button>
+<button type="button" class="yes" id="clearYes">Clear all</button>
+</div>
+<div class="escroll" id="escroll">
+<div id="glance"></div>
+<div class="estart" id="start"><b>How to build your estimate</b><ol><li>Choose a tab in the price list: Cement, Iron rods or Binding wire.</li><li>Tap <b>Add</b> on each product you need.</li><li>Set the quantity with − and +, or type it. Your total updates as you go.</li></ol></div>
 <div id="lines"></div>
-<label class="dl">Drop-off location<input type="text" id="loc" placeholder="Town or site address" autocomplete="street-address"></label>
+<section class="edeliv"><h3>Delivery</h3><p>Not included in the total. We confirm the delivery cost for your order and location after you send this estimate.</p>
+<label class="dl">Drop-off location<input type="text" id="loc" placeholder="Town or site address" autocomplete="street-address"></label></section>
+<p class="fine">Delivery cost depends on your order and drop-off location, and is agreed with us before delivery. Estimates are indicative; final prices and availability are confirmed with you.</p>
+</div>
+<div class="efoot">
 <div id="tot" class="tot"></div>
 <div class="acts noprint">
-<a class="cta off" id="send" target="_blank" rel="noopener"><WhatsAppIcon />Send my estimate on WhatsApp</a>
-<button class="ghost" id="print">Print or save as PDF</button>
-<button class="ghost" id="clear">Clear estimate</button>
+<a class="cta off" id="send" target="_blank" rel="noopener"><WhatsAppIcon />Send on WhatsApp</a>
+<button type="button" class="btn2" id="print"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Print or save as PDF</button>
 </div>
-<p class="fine">Delivery cost depends on your order and drop-off location, and is agreed with us before delivery. Estimates are indicative; final prices and availability are confirmed with you.</p>
+</div>
 </aside>
+<div class="escrim" id="escrim" hidden></div>

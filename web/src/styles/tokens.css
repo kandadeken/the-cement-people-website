@@ -5,8 +5,8 @@
    named here, once. site.css only uses these names, so changing a value
    here changes it everywhere. Loaded first, before site.css.
    Agreed with Daniel and ChatGPT, 14 Nov 2026 (see the Design-System
-   Proposal). The PDF quotation has its own fixed styles in print.css and is
-   deliberately not affected by these.
+   Proposal). Colours updated to brand identity V1.1 on 17 Nov 2026. The PDF
+   quotation has its own fixed styles in print.css.
    ========================================================================== */
 
 /* ---- Font: Montserrat, hosted with the site (no Google Fonts request) -----
@@ -30,15 +30,24 @@
 @font-face{font-family:Montserrat;font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/montserrat-latin-ext-700-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
 
 :root{
-  /* ---- Colour ---- */
-  --bg:#f7f4ef;      /* warm white: the page, every section */
+  /* ---- Colour ----
+     Brand identity V1.1 and the material language (agreed 16 Nov 2026):
+     neutral concrete page, charcoal structure, one interface ochre.
+     The emblem itself is Ochre A (#D27D02) and lives in the logo files in
+     public/brand/; the interface uses the brighter ochre below. Ochre B
+     (#B97819) is retired. */
+  --bg:#f4f4f4;      /* neutral page (the warm white minus all warmth, same lightness) */
+  --tex:url(/images/texture/concrete-neutral-25.webp); /* 25% concrete grain on the page */
   --card:#fff;       /* white: header, cards, estimate, inputs, product photos */
-  --ink:#111;        /* text, dark buttons, footer (17.2:1 on --bg) */
-  --mute:#5d5a54;    /* secondary text: units, notes (6.3:1 on --bg) */
-  --line:#e2ddd5;    /* thin borders and dividers */
-  --y:#f2c300;       /* TCP yellow: primary buttons, active tab, logo brick */
-  --y-soft:#fbe9a3;  /* light yellow: hover and keyboard focus on "Add" */
-  --footer-text:#d9d9d6; /* light grey text on the black footer */
+  --ink:#131514;     /* charcoal: text, dark surfaces, footer (16.7:1 on --bg) */
+  --mute:#5a5a5a;    /* secondary text: units, notes (6.3:1 on --bg; 5.8:1 on the darkest concrete grain) */
+  --line:#dcdcdc;    /* thin borders and dividers */
+  --y:#ff9802;       /* interface ochre: primary buttons, active tab, accents */
+  --y-soft:#ffe3ba;  /* light ochre: hover and keyboard focus on "Add" */
+  --y-tint:#fff3e3;  /* faint ochre: products already in the estimate */
+  --sec-a:#ebebeb; --sec-a-body:#fff;     /* estimate sections, alternating tones */
+  --sec-b:#e0e0e0; --sec-b-body:#f7f7f7;
+  --footer-text:#d9d9d6; /* light grey text on the charcoal footer */
 
   /* ---- Type: one fixed scale (desktop sizes; phones below) ---- */
   --font:Montserrat,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;

@@ -193,10 +193,11 @@ def test_l09_favicon_is_linked_present_and_the_right_size():
     excluded = re.findall(r"^\s*-\s*(\S+)", (ROOT / "_config.yml").read_text(encoding="utf-8"), re.M)
     for href in expected:
         name = href.lstrip("/")
-        data = (ROOT / name).read_bytes()
+        # Brand identity V1.1 (17 Nov 2026): the Astro site (web/public/) has
+        # the new favicons and is what is published; the root copies stay as
+        # they were for the rollback site, so they are no longer compared.
+        data = (ROOT / "web" / "public" / name).read_bytes()
         assert name not in excluded, f"{name} is excluded from the published site"
-        assert data == (ROOT / "web" / "public" / name).read_bytes(), \
-            f"{name} differs between the live site and web/public/"
         if name.endswith(".png"):
             assert data[:8] == b"\x89PNG\r\n\x1a\n", f"{name} is not a PNG"
             width, height = struct.unpack(">II", data[16:24])

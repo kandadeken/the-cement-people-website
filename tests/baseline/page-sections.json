@@ -1,106 +1,139 @@
 {
- "description": "Reference text and links of the fixed page sections (everything outside the price list and estimate, which have their own tests). Taken from the live site on 14 Nov 2026. Header and About must be identical in both versions. The hero differs since the hero-integration phase (Nov 2026): Astro has the new layout and a \"Call us\" button; the single-file rollback copy keeps the old hero. Contact and footer differ on purpose: the Astro version shows the full confirmed business details added in Phase 2 (SEO), already reviewed and merged; the single-file site still has the shorter text. Change this file only in the same pull request that deliberately changes the page text.",
- "shared": {
-  "header": {
-   "text": "The Cement People Home Products About Contact Enquire on WhatsApp",
-   "links": [
-    {
-     "text": "The Cement People",
-     "href": "#home"
-    },
-    {
-     "text": "Home",
-     "href": "#home"
-    },
-    {
-     "text": "Products",
-     "href": "#products"
-    },
-    {
-     "text": "About",
-     "href": "#about"
-    },
-    {
-     "text": "Contact",
-     "href": "#contact"
-    },
-    {
-     "text": "Enquire on WhatsApp",
-     "href": "https://wa.me/233558463468?text=Hello%2C%20I%20would%20like%20to%20enquire%20about%20your%20materials."
+  "description": "Reference text and links of the fixed page sections (everything outside the price list and estimate, which have their own tests). Taken from the live site on 14 Nov 2026. Header and About must be identical in both versions. The hero differs since the hero-integration phase (Nov 2026): Astro has the new layout and a \"Call us\" button; the single-file rollback copy keeps the old hero. Contact and footer differ on purpose: the Astro version shows the full confirmed business details added in Phase 2 (SEO), already reviewed and merged; the single-file site still has the shorter text. Change this file only in the same pull request that deliberately changes the page text. Since 17 Nov 2026 the header is per version too: the Astro site has no WhatsApp button in the header (one Enquire button with WhatsApp or call sits in the hero and Contact).",
+  "shared": {
+    "about": {
+      "text": "About us Based in Kasoa, The Cement People supplies cement, iron rods and binding wire for building projects of every size. Check prices online, put together an estimate, and we deliver the materials to your site.",
+      "links": []
     }
-   ]
   },
-  "about": {
-   "text": "About us Based in Kasoa, The Cement People supplies cement, iron rods and binding wire for building projects of every size. Check prices online, put together an estimate, and we deliver the materials to your site.",
-   "links": []
+  "single_file": {
+    "contact": {
+      "text": "Contact us Ready to order, or not sure what you need? Send us a message on WhatsApp or give us a call and we will help. Location: Kasoa, Ghana Phone and WhatsApp: 055 846 3468 Enquire on WhatsApp",
+      "links": [
+        {
+          "text": "055 846 3468",
+          "href": "tel:+233558463468"
+        },
+        {
+          "text": "Enquire on WhatsApp",
+          "href": "https://wa.me/233558463468?text=Hello%2C%20I%20would%20like%20to%20enquire%20about%20your%20materials."
+        }
+      ]
+    },
+    "footer": {
+      "text": "The Cement People Kasoa, Ghana. Cement, iron rods and binding wire, delivered to your site. Prices in Ghana cedis (GH₵).",
+      "links": []
+    },
+    "hero": {
+      "text": "BUILDING MATERIALS SUPPLIER Materials for stronger construction. Cement, iron rods and binding wire, delivered to your site. View products Call 055 846 3468",
+      "links": [
+        {
+          "text": "View products",
+          "href": "#products"
+        },
+        {
+          "text": "Call 055 846 3468",
+          "href": "tel:+233558463468"
+        }
+      ]
+    },
+    "header": {
+      "text": "The Cement People Home Products About Contact Enquire on WhatsApp",
+      "links": [
+        {
+          "text": "The Cement People",
+          "href": "#home"
+        },
+        {
+          "text": "Home",
+          "href": "#home"
+        },
+        {
+          "text": "Products",
+          "href": "#products"
+        },
+        {
+          "text": "About",
+          "href": "#about"
+        },
+        {
+          "text": "Contact",
+          "href": "#contact"
+        },
+        {
+          "text": "Enquire on WhatsApp",
+          "href": "https://wa.me/233558463468?text=Hello%2C%20I%20would%20like%20to%20enquire%20about%20your%20materials."
+        }
+      ]
+    }
+  },
+  "astro": {
+    "contact": {
+      "text": "Contact us Ready to order, or not sure what you need? Send us a message on WhatsApp or give us a call and we will help. Address: Krispol City Road, Krispol City, Kasoa, Central Region, Ghana Landmark: Near GOIL Filling Station Plus Code: GGMX+F9 Kasoa Opening hours: Monday–Saturday, 7:00 am–5:00 pm. Sunday closed. Phone and WhatsApp: 055 846 3468 Email: sales@thecementpeople.com Delivery: Kasoa and Greater Accra Enquire",
+      "links": [
+        {
+          "text": "055 846 3468",
+          "href": "tel:+233558463468"
+        },
+        {
+          "text": "sales@thecementpeople.com",
+          "href": "mailto:sales@thecementpeople.com"
+        },
+        {
+          "text": "Chat on WhatsAppSend us a message",
+          "href": "https://wa.me/233558463468?text=Hello%2C%20I%20would%20like%20to%20enquire%20about%20your%20materials."
+        },
+        {
+          "text": "Call 055 846 3468Monday–Saturday, 7:00 am–5:00 pm",
+          "href": "tel:+233558463468"
+        }
+      ]
+    },
+    "footer": {
+      "text": "Krispol City Road, Krispol City, Kasoa, Central Region, Ghana. Cement, iron rods and binding wire, delivered to your site. Prices in Ghana cedis (GH₵).",
+      "links": []
+    },
+    "hero": {
+      "text": "BUILDING MATERIALS SUPPLIER Materials for stronger construction. Cement, iron rods and binding wire, delivered to your site. View products Enquire",
+      "links": [
+        {
+          "text": "View products",
+          "href": "#products"
+        },
+        {
+          "text": "Chat on WhatsAppSend us a message",
+          "href": "https://wa.me/233558463468?text=Hello%2C%20I%20would%20like%20to%20enquire%20about%20your%20materials."
+        },
+        {
+          "text": "Call 055 846 3468Monday–Saturday, 7:00 am–5:00 pm",
+          "href": "tel:+233558463468"
+        }
+      ]
+    },
+    "header": {
+      "text": "Home Products About Contact",
+      "links": [
+        {
+          "text": "",
+          "href": "#home"
+        },
+        {
+          "text": "Home",
+          "href": "#home"
+        },
+        {
+          "text": "Products",
+          "href": "#products"
+        },
+        {
+          "text": "About",
+          "href": "#about"
+        },
+        {
+          "text": "Contact",
+          "href": "#contact"
+        }
+      ]
+    }
   }
- },
- "single_file": {
-  "contact": {
-   "text": "Contact us Ready to order, or not sure what you need? Send us a message on WhatsApp or give us a call and we will help. Location: Kasoa, Ghana Phone and WhatsApp: 055 846 3468 Enquire on WhatsApp",
-   "links": [
-    {
-     "text": "055 846 3468",
-     "href": "tel:+233558463468"
-    },
-    {
-     "text": "Enquire on WhatsApp",
-     "href": "https://wa.me/233558463468?text=Hello%2C%20I%20would%20like%20to%20enquire%20about%20your%20materials."
-    }
-   ]
-  },
-  "footer": {
-   "text": "The Cement People Kasoa, Ghana. Cement, iron rods and binding wire, delivered to your site. Prices in Ghana cedis (GH₵).",
-   "links": []
-  },
-  "hero": {
-   "text": "BUILDING MATERIALS SUPPLIER Materials for stronger construction. Cement, iron rods and binding wire, delivered to your site. View products Call 055 846 3468",
-   "links": [
-    {
-     "text": "View products",
-     "href": "#products"
-    },
-    {
-     "text": "Call 055 846 3468",
-     "href": "tel:+233558463468"
-    }
-   ]
-  }
- },
- "astro": {
-  "contact": {
-   "text": "Contact us Ready to order, or not sure what you need? Send us a message on WhatsApp or give us a call and we will help. Address: Krispol City Road, Krispol City, Kasoa, Central Region, Ghana Landmark: Near GOIL Filling Station Plus Code: GGMX+F9 Kasoa Opening hours: Monday–Saturday, 7:00 am–5:00 pm. Sunday closed. Phone and WhatsApp: 055 846 3468 Email: sales@thecementpeople.com Delivery: Kasoa and Greater Accra Enquire on WhatsApp",
-   "links": [
-    {
-     "text": "055 846 3468",
-     "href": "tel:+233558463468"
-    },
-    {
-     "text": "sales@thecementpeople.com",
-     "href": "mailto:sales@thecementpeople.com"
-    },
-    {
-     "text": "Enquire on WhatsApp",
-     "href": "https://wa.me/233558463468?text=Hello%2C%20I%20would%20like%20to%20enquire%20about%20your%20materials."
-    }
-   ]
-  },
-  "footer": {
-   "text": "The Cement People Krispol City Road, Krispol City, Kasoa, Central Region, Ghana. Cement, iron rods and binding wire, delivered to your site. Prices in Ghana cedis (GH₵).",
-   "links": []
-  },
-  "hero": {
-   "text": "BUILDING MATERIALS SUPPLIER Materials for stronger construction. Cement, iron rods and binding wire, delivered to your site. View products Call us",
-   "links": [
-    {
-     "text": "View products",
-     "href": "#products"
-    },
-    {
-     "text": "Call us",
-     "href": "tel:+233558463468"
-    }
-   ]
-  }
- }
 }

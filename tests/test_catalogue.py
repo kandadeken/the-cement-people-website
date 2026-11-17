@@ -33,8 +33,9 @@ def test_n03_estimate_uses_baseline_prices(catalogue):
         {"name": p["name"], "detail": f"{money(p['price'])} per {p['unit']}", "qty": "1",
          "amount": money(p["price"])}
         for p in PRODUCTS]
-    assert catalogue.totals.split("\n")[1] == money(TOTAL)
-    assert catalogue.totals.split("\n")[-1] == money(TOTAL)
+    # Totals since 17 Nov 2026: "Delivery / To be confirmed", then
+    # "Total (excl. delivery)" with the materials total.
+    assert catalogue.totals.split("\n") == ["Delivery", "To be confirmed", "Total (excl. delivery)", money(TOTAL)]
 
 
 def test_n04_whatsapp_message_uses_baseline_prices(catalogue):
@@ -48,7 +49,7 @@ def test_n04_whatsapp_message_uses_baseline_prices(catalogue):
 def test_n05_pdf_quotation_uses_baseline_prices(catalogue):
     assert catalogue.pdf.rows == [expected_row(i, p, 1)
                                   for i, p in enumerate(PRODUCTS, start=1)]
-    assert f"Total before delivery {money(TOTAL)}" in catalogue.pdf.pages[-1]
+    assert f"Total (excl. delivery) {money(TOTAL)}" in catalogue.pdf.pages[-1]
     assert catalogue.errors == []
 
 

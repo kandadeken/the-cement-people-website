@@ -207,9 +207,20 @@ def webp_size(data):
     raise AssertionError(f"unknown WebP type {kind!r}")
 
 
+def svg_size(data):
+    """Width and height of an SVG drawing, rounded to whole pixels (the V1.1
+    logos are drawn at sizes such as 733.6 x 275)."""
+    svg = ET.fromstring(data)
+    return round(float(svg.get("width"))), round(float(svg.get("height")))
+
+
 def image_size(data):
-    """Width and height of a JPEG or WebP file."""
-    return webp_size(data) if data[:4] == b"RIFF" else jpeg_size(data)
+    """Width and height of a JPEG, WebP or SVG file."""
+    if data[:4] == b"RIFF":
+        return webp_size(data)
+    if b"<svg" in data[:400]:
+        return svg_size(data)
+    return jpeg_size(data)
 
 
 # ---- Products are readable without JavaScript ------------------------------
@@ -230,7 +241,8 @@ def test_s01_all_17_products_are_in_the_html_without_javascript(html, page):
     assert len(rows) == len(PRODUCTS) == 17
     assert sorted(rows) == sorted((p["name"], p["unit"], money(p["price"])) for p in PRODUCTS)
     # Each category is a heading a crawler can read, under "Products and prices".
-    headings = [text for level, text in page.headings if level == 3]
+    # ("Delivery" is the estimate panel's own small heading, 17 Nov 2026.)
+    headings = [text for level, text in page.headings if level == 3 and text != "Delivery"]
     assert headings == list(dict.fromkeys(p["category"] for p in PRODUCTS))
 
 
@@ -354,7 +366,9 @@ def test_s07_heading_outline(page):
     for previous, current in zip(levels, levels[1:]):
         assert current <= previous + 1, f"heading level jumps from h{previous} to h{current}"
     assert (2, "Products and prices") in page.headings
-    assert (4, "Binding wire") in page.headings
+    # Binding wire: its own category heading since 17 Nov 2026 (was an h4
+    # inside the single-piece rods).
+    assert (3, "Binding Wire") in page.headings
 
 
 def test_s08_images_have_descriptions_and_real_dimensions(page):
@@ -425,9 +439,11 @@ def test_s12_logo_file_is_a_real_svg_and_is_the_declared_logo(graph):
     assert store["logo"] == SITE + "/images/logo.svg"
     svg = ET.fromstring(fetch(store["logo"]))
     assert svg.tag == "{http://www.w3.org/2000/svg}svg"
-    assert int(svg.get("width")) >= 112 and int(svg.get("height")) >= 112
-    bricks = list(svg.iter("{http://www.w3.org/2000/svg}rect"))
-    assert len(bricks) == 4, "the brick-stair mark has four bricks"
+    assert float(svg.get("width")) >= 112 and float(svg.get("height")) >= 112
+    # Brand identity V1.1 (17 Nov 2026): the diamond emblem in Ochre A over
+    # the charcoal wordmark (was the four-brick stair mark).
+    fills = [p.get("fill", "").lower() for p in svg.iter("{http://www.w3.org/2000/svg}path")]
+    assert "#d27d02" in fills and "#131514" in fills, fills
 
 
 def test_s13_page_title_is_restored_after_printing(browser):

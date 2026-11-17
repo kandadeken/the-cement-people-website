@@ -6,7 +6,10 @@
    in. This file sets the A4 page, the footer with page numbers on every
    page, and the layout of the quotation itself.
 
-   Copied unchanged from the original site. The footer line below repeats
+   Brand identity V1.1 (17 Nov 2026): horizontal logo at the top, charcoal
+   (#131514), white and the interface ochre (#FF9802) only. Every piece of
+   information is also carried by text, weight or a rule, so the quotation
+   still reads correctly printed in black and white. The footer line below repeats
    the website and phone number from src/config/business.ts (CSS cannot
    read that file); scripts/check-data.mjs fails the build if they differ.
    The "continued" header on pages 2+ is added by quote-engine.js, because
@@ -15,44 +18,54 @@
 /* Printed quotation: hidden on screen, the only thing printed */
 #quote{display:none}
 @page{size:A4;margin:16mm 14mm 15mm;
-@bottom-left{content:"thecementpeople.com  ·  055 846 3468";font:7pt Montserrat,Arial,sans-serif;color:#777}
-@bottom-right{content:"Page " counter(page) " of " counter(pages);font:7pt Montserrat,Arial,sans-serif;color:#777}}
+@bottom-left{content:"thecementpeople.com  ·  055 846 3468";font:7pt Montserrat,Arial,sans-serif;color:#5a5a5a}
+@bottom-right{content:"Page " counter(page) " of " counter(pages);font:7pt Montserrat,Arial,sans-serif;color:#5a5a5a}}
 @media print{
 html,body{background:#fff!important;overflow:visible!important;height:auto!important;padding:0!important}
 body::before,body>*:not(#quote){display:none!important}
-#quote{display:block!important;color:#111;font:9.5pt/1.45 Montserrat,Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.q-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8mm;padding-bottom:5mm;border-bottom:1.2mm solid #f2c300}
-.q-brand{display:flex;gap:3.5mm;align-items:center}
-.q-brand svg{width:15mm;flex:none}
-.q-brand b{display:block;font-size:15pt;font-weight:800;letter-spacing:-.01em;line-height:1.1}
-.q-brand span{display:block;font-size:8.5pt;color:#555;margin-top:1mm}
+#quote{display:block!important;color:#131514;font:9.5pt/1.45 Montserrat,Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+/* Top: logo left; "ESTIMATE", reference and date right; a charcoal rule with an ochre start. */
+.q-head{display:flex;justify-content:space-between;align-items:center;gap:8mm;padding-bottom:4.5mm;border-bottom:.8mm solid #131514;position:relative}
+.q-head::after{content:"";position:absolute;left:0;bottom:-.8mm;width:28mm;height:.8mm;background:#ff9802}
+.q-logo{display:block;height:13mm;width:auto}
 .q-doc{text-align:right}
-.q-doc h1{margin:0;font-size:17pt;font-weight:800;letter-spacing:.06em;text-transform:uppercase;line-height:1}
-.q-doc dl{display:grid;grid-template-columns:auto auto;gap:.6mm 4mm;margin:3mm 0 0;font-size:9pt}
-.q-doc dt{color:#555}.q-doc dd{margin:0;font-weight:700}
-.q-to{display:grid;grid-template-columns:1fr 1fr;gap:8mm;margin:6mm 0 5mm}
-.q-to small{display:block;font-size:7.5pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555;margin-bottom:.8mm}
-.q-to p{margin:0;font-weight:600}
+.q-doc h1{margin:0;font-size:17pt;font-weight:800;letter-spacing:.08em;text-transform:uppercase;line-height:1}
+.q-doc dl{display:grid;grid-template-columns:auto auto;gap:.6mm 4mm;margin:2.5mm 0 0;font-size:9pt}
+.q-doc dt{color:#5a5a5a}.q-doc dd{margin:0;font-weight:700}
+/* Drop-off location, delivery, contact */
+.q-to{display:grid;grid-template-columns:1.5fr 1fr 1.2fr;gap:6mm;margin:4.5mm 0 4.5mm;padding:3mm 3.5mm;background:#f4f4f4;border-left:.8mm solid #ff9802}
+.q-to small{display:block;font-size:7pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5a5a;margin-bottom:.6mm}
+.q-to p{margin:0;font-weight:600;font-size:8.5pt}
+/* The items, in sections */
 #quote table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 #quote thead{display:table-header-group}
-#quote th{font-size:7.5pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;text-align:left;color:#fff;background:#111;padding:2.2mm 2.5mm}
-#quote td{padding:2.4mm 2.5mm;border-bottom:.25mm solid #d6d5d0;vertical-align:top}
+#quote th{font-size:7.5pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;text-align:left;color:#fff;background:#131514;padding:2.2mm 2.5mm}
+#quote td{padding:1.7mm 2.5mm;border-bottom:.25mm solid #dcdcdc;vertical-align:top}
 #quote tr{break-inside:avoid;page-break-inside:avoid}
-#quote .n{width:8mm;color:#555}
+#quote .n{width:8mm;color:#5a5a5a}
 #quote th.n{color:#fff}
 #quote .r{text-align:right;white-space:nowrap}
-#quote td small{display:block;color:#555;font-size:8pt}
-#quote .q-empty td{text-align:center;color:#555;padding:6mm}
-.q-close{display:grid;grid-template-columns:minmax(0,1fr) 84mm;gap:10mm;align-items:start;margin-top:5mm;break-inside:avoid;page-break-inside:avoid}
-.q-terms{font-size:8pt;color:#333}
-.q-terms h2{margin:0 0 1.5mm;font-size:7.5pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555}
-.q-terms h2+*{margin-top:0}
-.q-terms ul{margin:0 0 4mm;padding-left:3.5mm}
-.q-terms li{margin-bottom:1mm}
+#quote td small{color:#5a5a5a;font-size:8pt;margin-left:1.5mm}
+/* Section heading: "01 · Cement", with the quantity on the right */
+#quote .q-sec td{padding:2.8mm 2.5mm 1.4mm;border-bottom:.5mm solid #131514;font-size:9pt;font-weight:800;letter-spacing:.08em;text-transform:uppercase;break-after:avoid;page-break-after:avoid}
+#quote .q-sec span{float:right;letter-spacing:0;text-transform:none;font-weight:600;color:#5a5a5a}
+#quote .q-sub td{padding:2mm 2.5mm 1mm;font-size:7.5pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5a5a5a;break-after:avoid;page-break-after:avoid}
+#quote .q-st td{font-weight:700;border-bottom:.25mm solid #dcdcdc}
+#quote .q-st.all td{background:#f4f4f4;border-bottom:0}
+#quote .q-empty td{text-align:center;color:#5a5a5a;padding:6mm}
+/* Bottom: terms left, totals right */
+.q-close{display:grid;grid-template-columns:minmax(0,1fr) 84mm;gap:10mm;align-items:start;margin-top:4mm;break-inside:avoid;page-break-inside:avoid}
+.q-terms{font-size:7.5pt;line-height:1.4;color:#333}
+.q-terms h2{margin:0 0 1.5mm;font-size:7.5pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5a5a}
+.q-terms ul{margin:0 0 3mm;padding-left:3.5mm}
+.q-terms li{margin-bottom:.6mm}
 .q-terms p{margin:0}
 .q-terms b{white-space:nowrap}
-.q-sum{font-variant-numeric:tabular-nums}
+.q-sum{font-variant-numeric:tabular-nums;border-top:.5mm solid #131514}
 .q-sum div{display:flex;justify-content:space-between;gap:4mm;padding:1.2mm 2.5mm}
 .q-sum span{white-space:nowrap}
-.q-sum .gt{margin-top:1.5mm;padding:2.6mm 2.5mm;background:#f2c300;font-size:11pt;font-weight:800}
+.q-sum .q-mat{font-weight:700}
+/* "Total (excl. delivery)": white on charcoal with an ochre edge. In black
+   and white it prints as white on black. */
+.q-sum .gt{margin-top:1.5mm;padding:3mm 2.5mm;background:#131514;color:#fff;border-left:1.5mm solid #ff9802;font-size:11.5pt;font-weight:800}
 }

@@ -1,0 +1,30 @@
+---
+/* Enquire.astro - one "Enquire" button that offers both ways to reach us:
+   WhatsApp or a phone call (decided 16 Nov 2026; it replaces the separate
+   "Enquire on WhatsApp" and "Call us" buttons). On computers the two choices
+   drop down under the button; on phones they slide up from the bottom of the
+   screen. quote-engine.js opens and closes it ("Enquire menus" section) and
+   points the WhatsApp choice (data-wa) at the business number.
+
+   Props:
+     id       unique id for this menu (the button says which menu it opens)
+     variant  "primary" (ochre), "secondary" (white with a dark border),
+              "big" (ochre, larger: the Contact section) */
+import WhatsAppIcon from "./WhatsAppIcon.astro";
+import PhoneIcon from "./PhoneIcon.astro";
+import { business } from "../config/business";
+import { openingHoursLines } from "../lib/business-format";
+
+interface Props { id: string; variant?: "primary" | "secondary" | "big" }
+const { id, variant = "primary" } = Astro.props;
+const cls = variant === "secondary" ? "btn2" : variant === "big" ? "cta big" : "cta";
+const hours = openingHoursLines().join("; ");
+---
+<div class="enq">
+<button type="button" class={`enq-btn ${cls}`} aria-expanded="false" aria-controls={id}>Enquire<svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
+<div class="enq-menu" id={id} hidden>
+<span class="grab" aria-hidden="true"></span>
+<a data-wa href="#contact" target="_blank" rel="noopener"><WhatsAppIcon /><span>Chat on WhatsApp<small>Send us a message</small></span></a>
+<a href={`tel:${business.phoneInternational}`}><PhoneIcon /><span>Call {business.phone}<small>{hours}</small></span></a>
+</div>
+</div>

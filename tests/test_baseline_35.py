@@ -6,7 +6,7 @@ No original check has been removed.
 """
 import re
 
-from conftest import (A4_POINTS, BY_ID, LOCATION, PRODUCTS, REF_PATTERN, SYNTHETIC,
+from conftest import (A4_POINTS, BY_ID, in_sections, LOCATION, PRODUCTS, REF_PATTERN, SYNTHETIC,
                       expected_row, money, squash)
 
 CONTROL_LABELS = ("Send my estimate", "Clear estimate", "Print or save", "Swipe",
@@ -26,9 +26,10 @@ def test_b01_steppers_typed_quantity_and_totals(short):
         {"name": "Iron rod 12 mm", "detail": f"{money(58)} per 30 ft rod", "qty": "24",
          "amount": money(1392)},
     ]
+    # Estimate redesign (17 Nov 2026): delivery shown first as "To be
+    # confirmed", then "Total (excl. delivery)".
     assert short.totals.split("\n") == [
-        "Materials", money(2292), "Delivery", "Quoted separately",
-        "Total before delivery", money(2292)]
+        "Delivery", "To be confirmed", "Total (excl. delivery)", money(2292)]
 
 
 def test_b02_search_filters(short):
@@ -120,7 +121,7 @@ def test_b17_short_pdf_closing_section(short):
     assert "DELIVERYANDTERMS" in squash(page)
     assert "TOORDER" in squash(page)
     assert squash(f"quote reference {short.ref}.") in squash(page)
-    assert f"Total before delivery {money(2292)}" in page
+    assert f"Total (excl. delivery) {money(2292)}" in page
 
 
 def test_b18_same_reference_on_screen_pdf_and_whatsapp(short):
@@ -174,7 +175,7 @@ def test_b24_column_headings_repeat_on_every_page_with_rows(long):
 
 def test_b25_all_62_rows_printed_exactly(long):
     expected = [expected_row(i, product, qty)
-                for i, (product, qty) in enumerate(long.expected, start=1)]
+                for i, (product, qty) in enumerate(in_sections(long.expected), start=1)]
     assert len(expected) == len(PRODUCTS) + len(SYNTHETIC) == 62
     assert long.pdf.rows == expected
 
@@ -210,8 +211,8 @@ def test_b29_last_page_number_and_closing_section(long):
 def test_b30_totals_block_intact_on_last_page(long):
     last = long.pdf.pages[-1]
     assert f"Materials {money(long.materials_total)}" in last
-    assert "Delivery Quoted separately" in last
-    assert f"Total before delivery {money(long.materials_total)}" in last
+    assert "Delivery To be confirmed" in last
+    assert f"Total (excl. delivery) {money(long.materials_total)}" in last
 
 
 # ---- Mobile and errors ----------------------------------------------------
