@@ -135,7 +135,7 @@ def test_c04_per_ton_price_shown_once(browser):
 
 def _qty(page, pid):
     v = page.evaluate(f"document.querySelector('#est input[data-qty=\"{pid}\"]')?.value ?? null")
-    return None if v is None else float(v)
+    return None if v is None else float(v.replace(",", ""))  # boxes show 1,200 since 17 Nov 2026
 
 
 def test_c05_half_ton_steps(browser):

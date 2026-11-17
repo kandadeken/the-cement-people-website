@@ -348,13 +348,15 @@ def test_e12_up_to_50000_of_one_product(browser, mobile):
     page, errors = _open(browser, 390 if mobile else 1280, 900, mobile)
     page.fill("#q", "Supacem 32.5R")
     page.click('#list [data-inc="c1"]')
-    for typed, expect in (("50000", "50000"), ("12345", "12345"), ("60000", "50000")):
+    # The box shows the quantity with a thousands separator; typing with or
+    # without the comma works, and a decimal comma still means a decimal point.
+    for typed, expect in (("1,200", "1,200"), ("2,5", "2"), ("12345", "12,345"), ("60000", "50,000"), ("50000", "50,000")):
         box = page.locator('#list input[data-qty="c1"]')
         box.fill(typed)
         box.press("Tab")
         assert page.input_value('#est input[data-qty="c1"]') == expect, typed
     page.click('#est [data-inc="c1"]')  # + at the limit stays at 50,000
-    assert page.input_value('#est input[data-qty="c1"]') == "50000"
+    assert page.input_value('#est input[data-qty="c1"]') == "50,000"
     assert page.inner_text("#tot .gt").split("\n")[1] == money(75 * 50000)
     # Read with a thousands separator everywhere it is shown (the typing box
     # stays plain digits: a comma typed there means a decimal point).
@@ -369,5 +371,95 @@ def test_e12_up_to_50000_of_one_product(browser, mobile):
         c.font = `${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
         return c.measureText(i.value).width <= i.clientWidth - 2; })""")
     assert fits and all(fits), f"50000 does not fit in the quantity box: {fits}"
+    assert not errors, errors
+    page.context.close()
+
+
+# ---- E14 -------------------------------------------------------------------
+# Editing a formatted quantity (ChatGPT review, 17 Nov 2026): while the box
+# is being edited it shows plain digits, so removing a digit from "1,200"
+# gives 120, never a broken "1,20"; leaving the box formats it again.
+# A decimal comma still works for half tons.
+@pytest.mark.parametrize("mobile", [False, True], ids=["computer", "phone"])
+def test_e14_editing_a_formatted_quantity(browser, mobile):
+    page, errors = _open(browser, 390 if mobile else 1280, 900, mobile)
+    page.evaluate("() => { qty.c1 = 1200; qty.j3 = 1; renderList(); renderEst(); }")
+    box = page.locator('#est input[data-qty="c1"]')
+    assert box.input_value() == "1,200"
+    box.focus()
+    assert box.input_value() == "1200", "plain digits while editing"
+    box.press("End")
+    box.press("Backspace")
+    box.press("Tab")
+    assert page.input_value('#est input[data-qty="c1"]') == "120"
+    assert page.evaluate("qty.c1") == 120
+    # Focus and leave without changing anything: formatted again, value unchanged.
+    page.evaluate("() => { qty.c1 = 4500; renderList(); renderEst(); }")
+    box = page.locator('#est input[data-qty="c1"]')
+    box.focus()
+    box.press("Tab")
+    assert box.input_value() == "4,500" and page.evaluate("qty.c1") == 4500
+    # Half tons typed with a decimal comma or point.
+    for typed, expect in (("2,5", "2.5"), ("3.5", "3.5")):
+        t = page.locator('#est input[data-qty="j3"]')
+        t.fill(typed)
+        t.press("Tab")
+        assert page.input_value('#est input[data-qty="j3"]') == expect, typed
+    assert not errors, errors
+    page.context.close()
+
+
+# ---- E13 -------------------------------------------------------------------
+# Nothing is hidden for good behind the fixed bottom (totals and buttons):
+# with a long estimate, scrolling the list to the end brings the last
+# section (Binding wire), its subtotal, the delivery box and the small print
+# fully into view above the fixed bottom. (ChatGPT review, 17 Nov 2026.)
+@pytest.mark.parametrize("where", ["360px", "390px", "computer", "computer-full"])
+def test_e13_last_content_scrolls_clear_of_the_fixed_bottom(browser, where):
+    mobile = where.endswith("px")
+    width = int(where[:3]) if mobile else 1440
+    page, errors = _open(browser, width, 740 if width == 360 else 844 if mobile else 900, mobile)
+    page.evaluate("() => { P.push({id: 'zz', cat: 'Cement', name: 'Extra-long test product name for wrapping checks 42.5R premium grade', unit: '50 kg bag', price: 99}); }")
+    _fill_everything(page)
+    if mobile:
+        page.evaluate("openEst()")
+    elif where == "computer-full":
+        page.click("#full")
+    else:
+        page.evaluate("scrollTo({top: document.querySelector('#products').offsetTop, behavior: 'instant'})")
+    page.wait_for_timeout(150)
+    page.evaluate("document.querySelector('#escroll').scrollTop = 1e6")
+    page.wait_for_timeout(150)
+    check = page.evaluate("""() => { const L = document.querySelector('#escroll').getBoundingClientRect(),
+            F = document.querySelector('.efoot').getBoundingClientRect();
+        const box = s => document.querySelector(s).getBoundingClientRect();
+        return {listBottom: L.bottom, footTop: F.top,
+                parts: ['#lines .es[data-g=wire] .esh', '#lines .es[data-g=wire] .est.all', '.edeliv', '#loc', '.fine']
+                    .map(s => [s, Math.round(box(s).top), Math.round(box(s).bottom)])}; }""")
+    assert check["listBottom"] <= check["footTop"] + 1, check
+    hidden = [p for p in check["parts"] if p[2] > check["footTop"] + 1 or p[1] < 0]
+    assert not hidden, f"{where}: still behind the fixed bottom: {hidden} (bottom starts at {check['footTop']})"
+    assert not errors, errors
+    page.context.close()
+
+
+# ---- E15 -------------------------------------------------------------------
+# "Total (excl. delivery)" and its amount share one line on phones, in the
+# page and in the full-screen estimate, for a six-figure total and for one
+# over a million cedis. (At 360 px the amount used to drop under the label.)
+@pytest.mark.parametrize("width", [360, 390])
+@pytest.mark.parametrize("big", [False, True], ids=["GH₵161,684", "GH₵6,161,684"])
+def test_e15_total_label_and_amount_share_a_line(browser, width, big):
+    page, errors = _open(browser, width, 800, mobile=True)
+    page.evaluate("""big => { const q = {c1: 1200, c3: 364, i1: 12, i3: 30, i5: 8, j2: 2.5, j3: 1.5, i8: 6};
+        if (big) q.c4 = 50000; for (const k in q) qty[k] = q[k]; renderList(); renderEst(); }""", big)
+    for mode in ("in the page", "full screen"):
+        if mode == "full screen":
+            page.evaluate("openEst()")
+        row = page.evaluate("""() => { const g = document.querySelector('#tot .gt'), [a, b] = g.children;
+            const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(), rg = g.getBoundingClientRect();
+            return {same: rb.top < ra.bottom - 2, gap: Math.round(rb.left - ra.right), inside: rb.right <= rg.right + 0.5,
+                    amount: b.innerText}; }""")
+        assert row["same"] and row["gap"] >= 12 and row["inside"], f"{width} px, {mode}: {row}"
     assert not errors, errors
     page.context.close()

@@ -211,8 +211,8 @@ section.nobanner .banner{display:none}
    it as wide as its buttons; before, it stretched into an empty white strip. */
 .step{display:inline-flex;justify-self:start;border:1px solid var(--line);border-radius:var(--r-control);overflow:hidden}
 .step button{width:40px;min-height:var(--tap);border:0;background:var(--bg);color:var(--ink);font-size:var(--t-sub);font-weight:var(--w-label);cursor:pointer}
-/* 62 px: room for five digits ("50000", the most allowed), 17 Nov 2026. */
-.step input{width:62px;padding:0 2px;min-height:var(--tap);text-align:center;border:0;border-inline:1px solid var(--line);background:var(--card);color:var(--ink);font-size:var(--t-body);font-weight:var(--w-label);border-radius:0;-moz-appearance:textfield}
+/* 72 px: room for "50,000", the most allowed (17 Nov 2026). */
+.step input{width:72px;padding:0 2px;min-height:var(--tap);text-align:center;border:0;border-inline:1px solid var(--line);background:var(--card);color:var(--ink);font-size:var(--t-body);font-weight:var(--w-label);border-radius:0;-moz-appearance:textfield}
 /* Stepper plus its unit word ("tons" for rods by the ton, "pcs" for single rods). */
 .qty{display:inline-flex;align-items:center;gap:var(--s2);justify-self:start}
 .qty{white-space:nowrap}
@@ -315,6 +315,17 @@ section.nobanner .banner{display:none}
    under it, on the right. */
 .tot .gt span:first-child{flex:none;white-space:nowrap}
 .tot .gt span:last-child{margin-left:auto;font-size:19px}
+/* Phones under 400 px: a slightly smaller label and amount, so they share
+   one line at 360 px (ChatGPT review, 17 Nov 2026). For a total of a
+   million cedis or more ("lg", set by quote-engine.js) a step smaller
+   again. Only in extreme cases does the amount still move under the label. */
+@media (max-width:399px){
+.efoot{padding-inline:var(--s3)}
+.tot .gt{font-size:var(--t-small)}
+.tot .gt span:last-child{font-size:18px}
+.tot .gt.lg{font-size:var(--t-label)}
+.tot .gt.lg span:last-child{font-size:16px}
+}
 .acts{display:grid;gap:6px;padding:10px 0 0}
 .acts .cta{width:100%;min-height:48px;padding:var(--s3);font-size:var(--t-body);text-align:center}
 .acts .btn2{width:100%;font-size:var(--t-small);cursor:pointer}
