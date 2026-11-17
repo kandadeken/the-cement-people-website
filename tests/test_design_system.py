@@ -142,4 +142,10 @@ def test_d07_hero_buttons_side_by_side_on_wide_screens(browser, width):
     # "Enquire" is a button (it opens WhatsApp / call); its menu links are hidden.
     tops = page.evaluate("[...document.querySelectorAll('.ctas > a, .ctas .enq-btn')].map(a => Math.round(a.getBoundingClientRect().top))")
     assert len(tops) == 2 and tops[0] == tops[1], f"hero buttons are stacked at {width} px: {tops}"
+    # And with room to spare: text is drawn a pixel or two wider on some
+    # computers (GitHub's test machines), so 1 px of slack is not enough.
+    slack = page.evaluate("""() => { const c = document.querySelector('.ctas'), k = [...c.children];
+        return c.clientWidth - k.reduce((a, e) => a + e.getBoundingClientRect().width, 0)
+               - (parseFloat(getComputedStyle(c).columnGap) || 0) * (k.length - 1); }""")
+    assert slack >= 12, f"only {slack:.0f} px to spare beside the hero buttons at {width} px"
     context.close()

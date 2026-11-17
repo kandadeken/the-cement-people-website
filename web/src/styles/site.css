@@ -104,6 +104,11 @@ nav a:hover{border-bottom-color:var(--y)}
 .ctas{gap:var(--s2)}
 .ctas a,.ctas .enq-btn{padding-inline:var(--s3)}
 }
+/* 900-1023 px: a little less side padding around the hero text too. At
+   900 px the two buttons had only 1 px to spare, and on GitHub's test
+   computers (slightly different text drawing) "Enquire" dropped onto a
+   second line. This leaves about 17 px to spare. 17 Nov 2026. */
+@media (min-width:900px) and (max-width:1023px){.htx{padding-inline:var(--s4)}}
 
 /* ---- Enquire: one button, two choices (WhatsApp or call) -------------------
    Computers: a small menu drops down under the button. Phones (under 600 px):

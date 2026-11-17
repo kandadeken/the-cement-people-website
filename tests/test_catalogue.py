@@ -5,7 +5,7 @@ as published at commit d3f0e86 (tag v1-single-file). These tests fail if any
 of them differs anywhere a customer can see it: the price list, the on-screen
 estimate, the WhatsApp message or the PDF quotation.
 """
-from conftest import BASELINE, PRODUCTS, add_item, expected_row, money, open_site
+from conftest import BASELINE, PRODUCTS, add_item, category_on, expected_row, money, open_site
 
 TOTAL = sum(p["price"] for p in PRODUCTS)
 
@@ -23,7 +23,7 @@ def test_n01_baseline_file_is_sound():
 def test_n02_price_list_matches_baseline(catalogue):
     shown = sorted((r["category"], r["name"], r["unit"], r["price"])
                    for r in catalogue.price_list)
-    expected = sorted((p["category"], p["name"], p["unit"], money(p["price"]))
+    expected = sorted((category_on(p, catalogue.astro), p["name"], p["unit"], money(p["price"]))
                       for p in PRODUCTS)
     assert shown == expected
 
@@ -35,7 +35,12 @@ def test_n03_estimate_uses_baseline_prices(catalogue):
         for p in PRODUCTS]
     # Totals since 17 Nov 2026: "Delivery / To be confirmed", then
     # "Total (excl. delivery)" with the materials total.
-    assert catalogue.totals.split("\n") == ["Delivery", "To be confirmed", "Total (excl. delivery)", money(TOTAL)]
+    # The single-file site keeps its original totals ("Materials" first).
+    if catalogue.astro:
+        assert catalogue.totals.split("\n") == ["Delivery", "To be confirmed", "Total (excl. delivery)", money(TOTAL)]
+    else:
+        assert catalogue.totals.split("\n")[1] == money(TOTAL)
+        assert catalogue.totals.split("\n")[-1] == money(TOTAL)
 
 
 def test_n04_whatsapp_message_uses_baseline_prices(catalogue):
@@ -49,7 +54,8 @@ def test_n04_whatsapp_message_uses_baseline_prices(catalogue):
 def test_n05_pdf_quotation_uses_baseline_prices(catalogue):
     assert catalogue.pdf.rows == [expected_row(i, p, 1)
                                   for i, p in enumerate(PRODUCTS, start=1)]
-    assert f"Total (excl. delivery) {money(TOTAL)}" in catalogue.pdf.pages[-1]
+    label = "Total (excl. delivery)" if catalogue.astro else "Total before delivery"
+    assert f"{label} {money(TOTAL)}" in catalogue.pdf.pages[-1]
     assert catalogue.errors == []
 
 
