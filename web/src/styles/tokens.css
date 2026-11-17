@@ -81,10 +81,11 @@
   --tap:44px;                /* minimum height of anything you tap */
 }
 /* ---- Dark mode (17 Nov 2026; revised for readability the same day) ----
-   An option the customer turns on with the moon/sun button in the header
-   (remembered on that device); light mode is the default for everyone
-   (Daniel and ChatGPT, 17 Nov 2026). A small script in Base.astro applies
-   the choice before the page is drawn.
+   Follows the phone's or computer's own light/dark setting (Daniel, 17
+   Nov 2026, after seeing the Soul browser force its own dimmed dark mode
+   on the light site); the moon/sun button in the header overrides it and
+   is remembered on that device. A small script in Base.astro applies this
+   before the page is drawn.
    Built in clear tonal layers so the eye can follow the page:
      page          #0D0F0E  darkest, with the concrete grain
      surfaces      #262A28  header, price-list panel, estimate, menus (1.32x lighter than the page)

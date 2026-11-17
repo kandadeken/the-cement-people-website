@@ -2,8 +2,9 @@
 Dark mode (17 Nov 2026)
 =======================
 
-  K01  light mode is the default, even when the phone or computer is set to
-       dark (Daniel and ChatGPT, 17 Nov 2026: dark mode is an option)
+  K01  the site follows the phone's or computer's own light/dark setting
+       (Daniel, 17 Nov 2026), and declares its own dark design so browsers
+       don't force their own dimmed dark mode on it
   K02  the moon/sun button switches mode and the choice is remembered after
        reloading the page (on this device)
   K03  dark mode shows the logos with the white wordmark, on phones and computers
@@ -39,11 +40,31 @@ bg = lambda page, sel: page.evaluate(f"getComputedStyle(document.querySelector('
 
 
 @pytest.mark.parametrize("scheme", ["light", "dark"])
-def test_k01_light_by_default_whatever_the_device_setting(browser, scheme):
+def test_k01_follows_the_device_setting(browser, scheme):
     page, errors = _open(browser, scheme + "-device")
+    assert theme(page) == scheme
+    assert (bg(page, "header") == "rgb(255, 255, 255)") == (scheme == "light")
+    assert page.get_attribute("#theme", "aria-pressed") == ("true" if scheme == "dark" else "false")
+    # "light dark": browsers that force pages dark leave this one alone.
+    assert "dark" in page.get_attribute('meta[name="color-scheme"]', "content")
+    assert "dark" in page.evaluate("getComputedStyle(document.documentElement).colorScheme")
+    # The device switching mode while the page is open is followed too.
+    # (The browser reports the change a moment later: wait for it, up to 2 s.)
+    other = "light" if scheme == "dark" else "dark"
+    page.emulate_media(color_scheme=other)
+    page.wait_for_function("t => document.documentElement.dataset.theme === t", arg=other, timeout=2000)
+    page.context.close()
+
+
+def test_k01b_saved_choice_beats_the_device_setting(browser):
+    page, errors = _open(browser, "dark-device")
+    page.click("#theme")  # dark device, customer picks light
+    page.reload(wait_until="load")
     assert theme(page) == "light"
-    assert bg(page, "header") == "rgb(255, 255, 255)"
-    assert page.get_attribute("#theme", "aria-pressed") == "false"
+    page.emulate_media(color_scheme="light")
+    page.emulate_media(color_scheme="dark")
+    page.wait_for_timeout(300)  # give a (wrong) switch the chance to happen
+    assert theme(page) == "light"
     assert not errors, errors
     page.context.close()
 
