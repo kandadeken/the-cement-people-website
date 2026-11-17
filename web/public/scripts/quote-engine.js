@@ -440,8 +440,16 @@ if(themeBtn&&window.tcpTheme){themeBtn.addEventListener("click",()=>{tcpTheme.se
 showTheme();}
 
 // ---- Mobile menu ---------------------------------------------------------------
-$("#menu").addEventListener("click",()=>{const o=$("#nav").classList.toggle("open");$("#menu").setAttribute("aria-expanded",o)});
-$("#nav").addEventListener("click",e=>{if(e.target.closest("a"))$("#nav").classList.remove("open")});
+// Since 17 Nov 2026 the open menu dims and covers the page behind it (a
+// backdrop, like the Enquire sheet); tapping the backdrop, choosing a link,
+// Escape or ☰ again closes it. "Dark mode" keeps the menu open.
+const navScrim=document.createElement("div");navScrim.className="nav-scrim";navScrim.hidden=true;document.body.appendChild(navScrim);
+function menu(open){$("#nav").classList.toggle("open",open);$("#menu").setAttribute("aria-expanded",open);navScrim.hidden=!open;}
+$("#menu").addEventListener("click",()=>menu(!$("#nav").classList.contains("open")));
+$("#nav").addEventListener("click",e=>{if(e.target.closest("a"))menu(false)});
+navScrim.addEventListener("click",()=>menu(false));
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#nav").classList.contains("open")){menu(false);$("#menu").focus();}});
+mq.addEventListener("change",()=>{if(!matchMedia("(max-width:819px)").matches)menu(false);});
 
 // ---- Swiping between category slides keeps the tabs in step --------------------
 const RM=matchMedia("(prefers-reduced-motion: reduce)").matches;

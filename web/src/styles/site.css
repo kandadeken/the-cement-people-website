@@ -69,6 +69,10 @@ nav a{display:inline-flex;align-items:center;min-height:var(--tap);color:var(--i
 nav a:hover{border-bottom-color:var(--y)}
 #menu{display:none;min-width:var(--tap);min-height:var(--tap);background:none;border:0;color:var(--ink);padding:var(--s2);cursor:pointer}
 #menu svg{width:28px;height:28px;display:block}
+/* Phones: the page behind the open ☰ menu is dimmed and can't be tapped
+   (17 Nov 2026); it sits just under the sticky header (z-index 11). */
+.nav-scrim{position:fixed;inset:0;z-index:10;background:rgba(10,11,10,.55)}
+.nav-scrim[hidden]{display:none}
 /* Dark mode: the logo with the white wordmark, and the moon/sun button. */
 .brand .lg-d{display:none}
 :root[data-theme="dark"] .brand .lg-l{display:none}
@@ -314,7 +318,9 @@ section.nobanner .banner{display:none}
 .empty{padding:var(--s4) 0;margin:0}
 /* "Undo" after Clear estimate: shown for 10 seconds. */
 .empty .undo{color:var(--ink);font-weight:var(--w-label);padding:var(--s2) var(--s3)}
-.edeliv{margin:var(--s3) 0 0;padding:14px;background:var(--fill);border-radius:var(--r-control)}
+.edeliv{margin:var(--s3) 0 0;padding:14px;background:var(--fill);border-radius:var(--r-control);border:1px solid var(--y)}
+/* Delivery: a thin ochre outline so it is noticed (Daniel, 17 Nov 2026),
+   in both light and dark mode; the drop-off box is inside it. */
 .edeliv h3{margin:0 0 2px;font-size:var(--t-body);font-weight:var(--w-strong)}
 .edeliv p{margin:0 0 var(--s2);font-size:var(--t-small);color:var(--mute)}
 .dl{display:block;font-weight:var(--w-label);font-size:var(--t-small)}
@@ -358,6 +364,7 @@ section.nobanner .banner{display:none}
 .escrim[hidden]{display:none}
 @media (min-width:900px){
 main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;gap:var(--s6)}
+@media (min-width:1100px){main{grid-template-columns:minmax(0,1fr) 420px}}
 .docket{position:sticky;top:calc(env(safe-area-inset-top,0px) + 108px);max-height:calc(100vh - 132px)}
 .escroll{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
 /* "View full estimate": the same estimate, large, in the middle of the screen. */
@@ -367,6 +374,12 @@ main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;gap:var(--s6)}
 #est.full .ln .nm{grid-column:1}
 #est.full .ln .amt::before{display:none}
 #est.full .acts{grid-template-columns:1fr 280px}
+/* Side panel: slightly slimmer quantity box, so the line total sits beside
+   it (17 Nov 2026). From 1100 px the panel is 420 px wide, which leaves
+   room for totals up to GH₵9,999,999.99 on one line. */
+#est:not(.full) .step button{width:36px}
+#est:not(.full) .step input{width:64px}
+@media (max-width:1099px){#est:not(.full) .step button{width:32px}#est:not(.full) .step input{width:60px}#est:not(.full) .ln{column-gap:10px}}
 }
 /* Phones and narrow tablets: the estimate sits under the price list, and
    opens full-screen from the bar at the bottom or "View full estimate". */
@@ -405,7 +418,7 @@ main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;gap:var(--s6)}
 /* ---- 9. Phones ---------------------------------------------------------------- */
 @media (max-width:819px){
 nav{display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border-bottom:1px solid var(--line);flex-direction:column;align-items:stretch;gap:0;padding:6px var(--s4) var(--s3)}
-nav.open{display:flex}
+nav.open{display:flex;box-shadow:0 12px 24px rgba(0,0,0,.25)}
 nav a{padding:var(--s3) 0;border-bottom:1px solid var(--line)}
 /* Phones: "Dark mode" is the last line of the ☰ menu, with an on/off switch. */
 .theme{justify-content:flex-start;width:100%;padding:var(--s3) 0;font-size:var(--t-body);border-radius:0}

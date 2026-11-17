@@ -153,3 +153,60 @@ def test_k07_dark_mode_has_clear_layers(browser, width, mobile):
     assert r["locBorder"] >= 2.4, r
     assert not errors, errors
     page.context.close()
+
+
+# ---- K08 -------------------------------------------------------------------
+# The Delivery block has a thin ochre outline in both themes, with the
+# drop-off box inside it (Daniel, 17 Nov 2026).
+@pytest.mark.parametrize("scheme", ["light-device", "dark"])
+def test_k08_delivery_block_has_an_ochre_outline(browser, scheme):
+    page, errors = _open(browser, scheme, 390, 844, True)
+    page.evaluate("() => { qty.c1 = 3; renderList(); renderEst(); }")
+    d = page.evaluate("""() => { const e = document.querySelector('.edeliv'), s = getComputedStyle(e);
+        const r = e.getBoundingClientRect(), l = document.querySelector('#loc').getBoundingClientRect();
+        return {colour: s.borderTopColor, width: s.borderTopWidth, style: s.borderTopStyle,
+                same: ['Right', 'Bottom', 'Left'].every(k => s['border' + k + 'Color'] === s.borderTopColor),
+                locInside: l.top >= r.top && l.bottom <= r.bottom}; }""")
+    assert d == {"colour": "rgb(255, 152, 2)", "width": "1px", "style": "solid", "same": True, "locInside": True}, d
+    page.context.close()
+
+
+# ---- K09 -------------------------------------------------------------------
+# Phones: the open ☰ menu covers the page behind it with a dimmed backdrop
+# (nothing can be tapped through it); the backdrop, a link or Escape closes it.
+@pytest.mark.parametrize("scheme", ["light-device", "dark"])
+@pytest.mark.parametrize("width", [360, 390])
+def test_k09_phone_menu_covers_the_page(browser, scheme, width):
+    page, errors = _open(browser, scheme, width, 800, True)
+    page.click("#menu")
+    nav = page.locator("#nav").bounding_box()
+    below = page.evaluate(f"""() => {{ const e = document.elementFromPoint({width // 2}, {int(nav["y"] + nav["height"] + 40)});
+        return e ? e.className || e.tagName : null; }}""")
+    assert below == "nav-scrim", f"under the menu: {below}"
+    page.mouse.click(width // 2, 700)
+    assert page.get_attribute("#menu", "aria-expanded") == "false" and page.locator(".nav-scrim").is_hidden()
+    page.click("#menu")
+    page.keyboard.press("Escape")
+    assert page.locator("#nav").evaluate("e => e.classList.contains('open')") is False
+    page.click("#menu")
+    page.click("#nav a[href='#about']")
+    assert page.locator(".nav-scrim").is_hidden()
+    page.click("#menu")
+    page.click("#theme")  # switching mode keeps the menu open
+    assert page.locator("#nav").evaluate("e => e.classList.contains('open')") is True
+    assert not errors, errors
+    page.context.close()
+
+
+# ---- K10 -------------------------------------------------------------------
+# Computers: each line total sits beside its quantity box in the side panel.
+@pytest.mark.parametrize("width", [1024, 1280, 1440])
+def test_k10_desktop_line_totals_beside_the_quantity(browser, width):
+    page, errors = _open(browser, "light-device", width, 900)
+    big = width >= 1100   # from 1100 px even a GH₵3,750,000 line fits
+    page.evaluate("big => { const q = {c1: 1200, c3: 364, j3: 2.5, i1: 12, i8: 6}; if (big) q.c2 = 50000; for (const k in q) qty[k] = q[k]; renderList(); renderEst(); }", big)
+    rows = page.evaluate("""() => [...document.querySelectorAll('#lines .ln')].map(l => {
+        const q = l.querySelector('.qty').getBoundingClientRect(), a = l.querySelector('.amt').getBoundingClientRect();
+        return {beside: a.top < q.bottom - 2, gap: Math.round(a.left - q.right), amount: l.querySelector('.amt').innerText}; })""")
+    assert all(r["beside"] and r["gap"] >= 8 for r in rows), f"{width} px: {rows}"
+    page.context.close()
