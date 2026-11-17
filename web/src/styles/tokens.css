@@ -48,6 +48,12 @@
   --sec-a:#ebebeb; --sec-a-body:#fff;     /* estimate sections, alternating tones */
   --sec-b:#e0e0e0; --sec-b-body:#f7f7f7;
   --footer-text:#d9d9d6; /* light grey text on the charcoal footer */
+  --dark:#131514;    /* surfaces that stay dark in both modes: estimate heading, phone bar, footer, rod size tags */
+  --on-dark:#fff;    /* text on those dark surfaces */
+  --on-dark-mute:#cfcac0; /* secondary text on them */
+  --on-y:#131514;    /* text on ochre buttons (charcoal in both modes, 8.5:1) */
+  --thumb-bg:#fff;   /* product photos keep their white background in both modes */
+  --tex-size:512px;
 
   /* ---- Type: one fixed scale (desktop sizes; phones below) ---- */
   --font:Montserrat,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
@@ -69,6 +75,29 @@
   --r-panel:8px;             /* panels, banner photo */
   --shadow:0 6px 24px rgba(0,0,0,.06); /* the one shadow: the estimate panel */
   --tap:44px;                /* minimum height of anything you tap */
+}
+/* ---- Dark mode (17 Nov 2026) ----
+   Follows the phone's or computer's own setting, unless the customer has
+   chosen with the moon/sun button in the header (remembered on that
+   device). A small script in Base.astro sets data-theme="dark" or "light"
+   on the page before it is drawn, so it never flashes the wrong colours.
+   Only colours change; layout, sizes and the PDF quotation stay the same.
+   Contrast (measured): text 14.6:1, secondary text 7.6:1, ochre 8.3:1 on
+   the dark page. */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#151716;      /* dark concrete page */
+  --tex:url(/images/texture/concrete-dark.webp); /* the same grain, on the dark page */
+  --card:#1f2220;    /* header, cards, estimate, inputs */
+  --ink:#ececea;     /* main text */
+  --mute:#a9aca9;    /* secondary text */
+  --line:#363a38;    /* borders and dividers */
+  --y-soft:#4d3510;  /* hover on "Add" */
+  --y-tint:#2a2215;  /* products already in the estimate */
+  --sec-a:#2a2d2b; --sec-a-body:#1f2220;
+  --sec-b:#313432; --sec-b-body:#242725;
+  --dark:#0b0c0b;    /* still the darkest surface, a step below the page */
+  --shadow:0 6px 24px rgba(0,0,0,.4);
 }
 @media (max-width:899px){
   :root{--t-display:clamp(34px,9.5vw,44px);--t-heading:24px;--t-sub:17px;--gap-section:40px}

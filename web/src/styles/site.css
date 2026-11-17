@@ -31,7 +31,7 @@
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-behavior:smooth;scroll-padding-top:calc(env(safe-area-inset-top,0px) + 76px)}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-body{margin:0;background:var(--bg) var(--tex) 0 0/512px 512px;color:var(--ink);font-family:var(--font);font-size:var(--t-body);line-height:1.5}
+body{margin:0;background:var(--bg) var(--tex) 0 0/var(--tex-size) var(--tex-size);color:var(--ink);font-family:var(--font);font-size:var(--t-body);line-height:1.5}
 /* Fills the phone's status-bar area (notch) so the page never shows under it. */
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--card);z-index:10}
 button,input,select{font-family:inherit}
@@ -48,7 +48,7 @@ h2{font-size:17px;font-weight:800;margin:26px 0 2px;display:flex;align-items:cen
    products", "Send on WhatsApp", "View estimate", "Enquire" in Contact).
    Secondary: white with a dark border ("Enquire" in the hero, "Print or
    save as PDF"). "Add": neutral, see 5. */
-.cta,.bar button{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--tap);background:var(--y);color:var(--ink);border:1px solid var(--y);border-radius:var(--r-control);font-weight:var(--w-label);text-decoration:none;cursor:pointer}
+.cta,.bar button{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--tap);background:var(--y);color:var(--on-y);border:1px solid var(--y);border-radius:var(--r-control);font-weight:var(--w-label);text-decoration:none;cursor:pointer}
 .btn2{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--tap);background:var(--card);color:var(--ink);border:1px solid var(--ink);border-radius:var(--r-control);font-weight:var(--w-label);text-decoration:none}
 .cta:hover,.bar button:hover{border-color:var(--ink)}
 .btn2:hover{background:var(--bg)}
@@ -64,11 +64,23 @@ header{position:sticky;top:env(safe-area-inset-top,0px);z-index:11;background:va
 @media (max-width:899px){.brand img{height:44px}}
 /* Very narrow phones (under 360 px): 36 px tall, so the menu button still fits. */
 @media (max-width:359px){.brand img{height:36px}}
-nav{display:flex;gap:var(--s5)}
+nav{display:flex;align-items:center;gap:var(--s5)}
 nav a{display:inline-flex;align-items:center;min-height:var(--tap);color:var(--ink);text-decoration:none;font-weight:var(--w-label);font-size:var(--t-body);border-bottom:3px solid transparent}
 nav a:hover{border-bottom-color:var(--y)}
 #menu{display:none;min-width:var(--tap);min-height:var(--tap);background:none;border:0;color:var(--ink);padding:var(--s2);cursor:pointer}
 #menu svg{width:28px;height:28px;display:block}
+/* Dark mode: the logo with the white wordmark, and the moon/sun button. */
+.brand .lg-d{display:none}
+:root[data-theme="dark"] .brand .lg-l{display:none}
+:root[data-theme="dark"] .brand .lg-d{display:block}
+.theme{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-width:var(--tap);min-height:var(--tap);padding:0;background:none;border:0;border-radius:var(--r-control);color:var(--ink);font:inherit;font-weight:var(--w-label);cursor:pointer}
+.theme:hover{background:var(--bg)}
+.theme svg{width:22px;height:22px;flex:none}
+.theme .sun,:root[data-theme="dark"] .theme .moon{display:none}
+:root[data-theme="dark"] .theme .sun{display:block}
+/* Computers: the icon only (its name is read out by screen readers). */
+.theme .tl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.theme .sw{display:none}
 
 /* ---- 3. Hero ----------------------------------------------------------------
    Agreed after seeing the real photo (PR #15): 900 px and wider, the wide
@@ -181,13 +193,13 @@ section.nobanner .banner{display:none}
 .row.has-img{grid-template-columns:96px minmax(0,1fr) auto auto}
 /* 96 x 96 px photo (80 on phones); the frame is drawn just outside it so
    the photo keeps its full size (approved 12 Nov 2026). */
-.thumb{display:block;width:96px;height:96px;object-fit:contain;background:var(--card);border:0;box-shadow:0 0 0 1px var(--line);border-radius:var(--r-control)}
+.thumb{display:block;width:96px;height:96px;object-fit:contain;background:var(--thumb-bg);border:0;box-shadow:0 0 0 1px var(--line);border-radius:var(--r-control)}
 .nm{font-size:var(--t-body);font-weight:var(--w-text)}
 .nm small{display:block;font-weight:var(--w-text);font-size:var(--t-small);color:var(--mute)}
 /* Rods: the size ("16 mm") shown first as a bold black tag; the page text
    still reads "Iron rod 16 mm", so estimate, PDF and WhatsApp are unchanged. */
 .nm .rn{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
-.nm .sz{order:-1;display:inline-block;min-width:76px;text-align:center;background:var(--ink);color:var(--card);font-weight:var(--w-strong);font-size:var(--t-price);line-height:1;padding:9px 10px;border-radius:var(--r-control);letter-spacing:.01em}
+.nm .sz{order:-1;display:inline-block;min-width:76px;text-align:center;background:var(--dark);color:var(--on-dark);font-weight:var(--w-strong);font-size:var(--t-price);line-height:1;padding:9px 10px;border-radius:var(--r-control);letter-spacing:.01em}
 /* position:relative keeps a hidden price (.vh) inside its own row; without
    it, hidden prices on off-screen slides made the phone page too wide. */
 .pr{position:relative;font-weight:var(--w-strong);font-size:var(--t-price);text-align:right}
@@ -220,10 +232,10 @@ section.nobanner .banner{display:none}
    PDF) stay put; only the middle (#escroll) scrolls. On computers the panel
    is as tall as the screen allows; on phones it opens full-screen. */
 .docket{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:var(--r-panel);overflow:hidden;box-shadow:var(--shadow)}
-.dh{display:flex;justify-content:space-between;align-items:center;gap:var(--s3);background:var(--ink);color:var(--card);padding:14px var(--s4) 2px}
+.dh{display:flex;justify-content:space-between;align-items:center;gap:var(--s3);background:var(--dark);color:var(--on-dark);padding:14px var(--s4) 2px}
 .dh b{font-size:var(--t-sub);font-weight:var(--w-strong)}
-.dh span{font-size:var(--t-label);color:#cfcac0}
-.dm{background:var(--ink);color:#cfcac0;padding:0 var(--s4) var(--s3);font-size:var(--t-label)}
+.dh span{font-size:var(--t-label);color:var(--on-dark-mute)}
+.dm{background:var(--dark);color:var(--on-dark-mute);padding:0 var(--s4) var(--s3);font-size:var(--t-label)}
 /* "View full estimate" and "Clear estimate": always visible. */
 .etools{display:flex;justify-content:space-between;align-items:center;gap:var(--s2);padding:var(--s1) var(--s4);border-bottom:1px solid var(--line);flex:none}
 .etools[hidden]{display:none}
@@ -260,7 +272,7 @@ section.nobanner .banner{display:none}
 .es.shut .esh{border-radius:var(--r-panel)}
 .esh .chev{width:16px;height:16px;transition:transform .15s}
 .es.shut .esh .chev{transform:rotate(-90deg)}
-.eno{background:var(--y);color:var(--ink);border-radius:4px;padding:2px 6px;font-size:12px;font-weight:var(--w-strong)}
+.eno{background:var(--y);color:var(--on-y);border-radius:4px;padding:2px 6px;font-size:12px;font-weight:var(--w-strong)}
 .enm{display:flex;flex-direction:column;min-width:0;line-height:1.25}
 .enm b{font-size:var(--t-body);font-weight:var(--w-strong);text-transform:uppercase;letter-spacing:.05em}
 .enm span{font-size:var(--t-small);color:var(--mute)}
@@ -342,7 +354,7 @@ main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;gap:var(--s6)}
 }
 
 /* ---- 7. Phone estimate bar (bottom of the screen) ------------------------- */
-.bar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:12;background:var(--ink);color:var(--card);border-top:4px solid var(--y);padding:var(--s3) var(--s4) calc(12px + env(safe-area-inset-bottom,0px));justify-content:space-between;align-items:center;gap:var(--s3)}
+.bar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:12;background:var(--dark);color:var(--on-dark);border-top:4px solid var(--y);padding:var(--s3) var(--s4) calc(12px + env(safe-area-inset-bottom,0px));justify-content:space-between;align-items:center;gap:var(--s3)}
 .bar.on{display:flex}
 /* While the estimate panel itself is on screen the bar is not needed and
    would cover the panel's bottom, so it slides away (catalogue phase). */
@@ -350,12 +362,12 @@ main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;gap:var(--s6)}
 .bar.on.away{transform:translateY(100%);visibility:hidden}
 @media (prefers-reduced-motion:reduce){.bar{transition:none}}
 .bar b{display:flex;flex-direction:column;line-height:1.15;font-weight:var(--w-strong);font-size:var(--t-sub)}
-.bar b small{font-size:var(--t-label);font-weight:var(--w-label);color:#cfcac0}
+.bar b small{font-size:var(--t-label);font-weight:var(--w-label);color:var(--on-dark-mute)}
 .bar button{padding:var(--s3) 18px;font-size:var(--t-body);white-space:nowrap}
 @media (min-width:900px){.bar,.bar.on{display:none}}
 
 /* ---- 8. About, Contact, footer -------------------------------------------- */
-.foot{margin-top:var(--gap-section);background:var(--ink);color:var(--footer-text);border-top:4px solid var(--y);padding:var(--s5) var(--s4) 110px}
+.foot{margin-top:var(--gap-section);background:var(--dark);color:var(--footer-text);border-top:4px solid var(--y);padding:var(--s5) var(--s4) 110px}
 .foot div{max-width:var(--page);margin:0 auto;display:flex;flex-direction:column;align-items:flex-start;gap:14px}
 /* The horizontal logo: 64 px tall on computers, 56 px on phones. */
 .flogo{display:block;height:64px;width:auto;max-width:100%}
@@ -365,9 +377,17 @@ main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;gap:var(--s6)}
 
 /* ---- 9. Phones ---------------------------------------------------------------- */
 @media (max-width:819px){
-nav{display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border-bottom:1px solid var(--line);flex-direction:column;gap:0;padding:6px var(--s4) var(--s3)}
+nav{display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border-bottom:1px solid var(--line);flex-direction:column;align-items:stretch;gap:0;padding:6px var(--s4) var(--s3)}
 nav.open{display:flex}
 nav a{padding:var(--s3) 0;border-bottom:1px solid var(--line)}
+/* Phones: "Dark mode" is the last line of the ☰ menu, with an on/off switch. */
+.theme{justify-content:flex-start;width:100%;padding:var(--s3) 0;font-size:var(--t-body);border-radius:0}
+.theme:hover{background:none}
+.theme .tl{position:static;width:auto;height:auto;overflow:visible;clip:auto}
+.theme .sw{display:block;position:relative;width:40px;height:24px;margin-left:auto;border-radius:12px;background:var(--line);transition:background .15s}
+.theme .sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+.theme[aria-pressed="true"] .sw{background:var(--y)}
+.theme[aria-pressed="true"] .sw::after{transform:translateX(16px)}
 #menu{display:block}
 }
 @media (max-width:560px){

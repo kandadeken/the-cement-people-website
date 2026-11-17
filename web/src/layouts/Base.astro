@@ -51,6 +51,18 @@ const structuredData = JSON.stringify(
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Dark mode (17 Nov 2026): choose light or dark before anything is drawn.
+     The customer's own choice (moon/sun button, remembered on this device)
+     wins; otherwise the phone's or computer's setting, followed live. -->
+<script is:inline>
+(()=>{const d=document.documentElement,m=matchMedia("(prefers-color-scheme: dark)");
+const saved=()=>{try{const t=localStorage.getItem("tcp-theme");return t==="dark"||t==="light"?t:null}catch(e){return null}};
+const apply=()=>{const t=saved()||(m.matches?"dark":"light");d.dataset.theme=t;const c=document.querySelector('meta[name="theme-color"]');if(c)c.content=t==="dark"?"#1f2220":"#ffffff";};
+apply();if(m.addEventListener)m.addEventListener("change",apply);
+window.tcpTheme={get:()=>d.dataset.theme,set:t=>{try{localStorage.setItem("tcp-theme",t)}catch(e){}apply()}};})();
+</script>
+<meta name="theme-color" content="#ffffff">
+<meta name="color-scheme" content="light dark">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{title}</title>
 <meta name="description" content={description}>

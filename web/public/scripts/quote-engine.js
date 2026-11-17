@@ -416,6 +416,15 @@ document.querySelectorAll("[data-wa]").forEach(a=>{if(WA_NUMBER)a.href="https://
 // (Nov 2026). The tabs above the price list do the same job, and without the
 // tiles the first prices appear sooner. goCat() is still used by the tabs.
 
+// ---- Dark mode button ------------------------------------------------------------
+// The moon/sun button in the header (17 Nov 2026). Base.astro has already
+// chosen light or dark (window.tcpTheme); this button switches and
+// remembers the choice on this device.
+const themeBtn=$("#theme");
+function showTheme(){if(!themeBtn)return;const dark=document.documentElement.dataset.theme==="dark";themeBtn.setAttribute("aria-pressed",dark);themeBtn.title=dark?"Switch to light mode":"Switch to dark mode";}
+if(themeBtn&&window.tcpTheme){themeBtn.addEventListener("click",()=>{tcpTheme.set(tcpTheme.get()==="dark"?"light":"dark");showTheme();});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",showTheme);showTheme();}
+
 // ---- Mobile menu ---------------------------------------------------------------
 $("#menu").addEventListener("click",()=>{const o=$("#nav").classList.toggle("open");$("#menu").setAttribute("aria-expanded",o)});
 $("#nav").addEventListener("click",e=>{if(e.target.closest("a"))$("#nav").classList.remove("open")});
