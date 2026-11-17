@@ -437,13 +437,13 @@ document.querySelectorAll("[data-wa]").forEach(a=>{if(WA_NUMBER)a.href="https://
 // tiles the first prices appear sooner. goCat() is still used by the tabs.
 
 // ---- Dark mode button ------------------------------------------------------------
-// The moon/sun button in the header (17 Nov 2026). Light mode is the
-// default; Base.astro applies any saved choice (window.tcpTheme). This
-// button switches and remembers the choice on this device.
+// The moon/sun button in the header (17 Nov 2026). Base.astro follows the
+// device's own light/dark setting unless a choice is saved (window.tcpTheme);
+// this button switches and remembers the choice on this device.
 const themeBtn=$("#theme");
 function showTheme(){if(!themeBtn)return;const dark=document.documentElement.dataset.theme==="dark";themeBtn.setAttribute("aria-pressed",dark);themeBtn.title=dark?"Switch to light mode":"Switch to dark mode";}
 if(themeBtn&&window.tcpTheme){themeBtn.addEventListener("click",()=>{tcpTheme.set(tcpTheme.get()==="dark"?"light":"dark");showTheme();});
-showTheme();}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",showTheme);showTheme();}
 
 // ---- Mobile menu ---------------------------------------------------------------
 // Since 17 Nov 2026 the open menu dims and covers the page behind it (a

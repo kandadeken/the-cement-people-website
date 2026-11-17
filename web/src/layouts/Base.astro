@@ -51,19 +51,22 @@ const structuredData = JSON.stringify(
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- Dark mode (17 Nov 2026): light mode is the default for everyone; dark
-     mode is an option the customer turns on with the moon/sun button
-     (remembered on this device). Applied before anything is drawn, so the
-     page never flashes the wrong colours. -->
+<!-- Light or dark (17 Nov 2026, Daniel): the site follows the phone's or
+     computer's own setting, and changes with it, unless the customer has
+     chosen with the moon/sun button (remembered on this device). Applied
+     before anything is drawn, so the page never flashes the wrong colours. -->
 <script is:inline>
-(()=>{const d=document.documentElement;
-const saved=()=>{try{return localStorage.getItem("tcp-theme")==="dark"?"dark":"light"}catch(e){return "light"}};
-const apply=()=>{const t=saved();d.dataset.theme=t;const c=document.querySelector('meta[name="theme-color"]');if(c)c.content=t==="dark"?"#232725":"#ffffff";};
-apply();
+(()=>{const d=document.documentElement,m=matchMedia("(prefers-color-scheme: dark)");
+const saved=()=>{try{const t=localStorage.getItem("tcp-theme");return t==="dark"||t==="light"?t:null}catch(e){return null}};
+const apply=()=>{const t=saved()||(m.matches?"dark":"light");d.dataset.theme=t;const c=document.querySelector('meta[name="theme-color"]');if(c)c.content=t==="dark"?"#262a28":"#ffffff";};
+apply();if(m.addEventListener)m.addEventListener("change",apply);
 window.tcpTheme={get:()=>d.dataset.theme,set:t=>{try{localStorage.setItem("tcp-theme",t)}catch(e){}apply()}};})();
 </script>
 <meta name="theme-color" content="#ffffff">
-<meta name="color-scheme" content="light">
+<!-- "light dark": the site has its own dark design, so browsers that
+     force pages dark (Soul, Chrome's auto-dark, some Android browsers) leave
+     it alone instead of dimming the photos and logo (17 Nov 2026). -->
+<meta name="color-scheme" content="light dark">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{title}</title>
 <meta name="description" content={description}>
