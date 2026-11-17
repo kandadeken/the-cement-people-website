@@ -123,7 +123,8 @@ def test_c04_per_ton_price_shown_once(browser):
     others = page.evaluate("""() => [...document.querySelectorAll('#list .slide')]
         .filter(s => !s.querySelector('h3').innerText.includes('Per Ton'))
         .map(s => [!!s.querySelector('.cat-price'), [...s.querySelectorAll('.row .pr')].every(e => e.innerText.trim())])""")
-    assert others == [[False, True], [False, True]], f"cement and single-piece rows must keep their prices: {others}"
+    # Cement, single pieces and (since 17 Nov 2026) binding wire's own tab.
+    assert others == [[False, True], [False, True], [False, True]], f"cement and single-piece rows must keep their prices: {others}"
     page.fill("#q", "ton")
     wait_rows(page, 6)  # the six rods sold by the ton
     found = page.evaluate("[...document.querySelectorAll('#list .row .pr')].map(e => e.innerText.trim())")
@@ -134,7 +135,7 @@ def test_c04_per_ton_price_shown_once(browser):
 
 def _qty(page, pid):
     v = page.evaluate(f"document.querySelector('#est input[data-qty=\"{pid}\"]')?.value ?? null")
-    return None if v is None else float(v)
+    return None if v is None else float(v.replace(",", ""))  # boxes show 1,200 since 17 Nov 2026
 
 
 def test_c05_half_ton_steps(browser):
@@ -160,7 +161,8 @@ def test_c05_half_ton_steps(browser):
     msg = page.evaluate("decodeURIComponent(document.querySelector('#send').href.split('text=')[1])")
     assert "2.5 × GH₵7,000.00 = GH₵17,500.00" in msg, msg
     page.evaluate("dispatchEvent(new Event('beforeprint'))")
-    assert page.evaluate("[...document.querySelectorAll('#quote tbody td')].map(t => t.innerText.trim())")[2] == "2.5"
+    # The quotation now has section rows ("01 · Iron rods"); read the item row.
+    assert page.evaluate("[...document.querySelectorAll('#quote tbody tr')].filter(r => r.cells.length === 5)[0].cells[2].innerText.trim()") == "2.5"
     for _ in range(5):
         page.click('#est [data-dec="j3"]')
         if _qty(page, "j3") is None:
@@ -219,7 +221,13 @@ def test_c07_undo_clear_estimate(browser):
     page.click('#list [data-inc="c1"]')
     page.fill("#loc", "Kasoa, near Goil")
     ref, date = page.inner_text("#ref"), page.inner_text("#date")
+    # Since 17 Nov 2026 Clear asks first; "Keep estimate" changes nothing.
     page.click("#clear")
+    assert page.locator("#clearAsk").is_visible()
+    page.click("#clearNo")
+    assert page.locator("#clearAsk").is_hidden() and _qty(page, "c1") == 2
+    page.click("#clear")
+    page.click("#clearYes")
     assert page.locator("#est .ln").count() == 0
     assert page.inner_text("#ref") != ref
     assert page.locator("#undo").is_visible()
@@ -231,12 +239,14 @@ def test_c07_undo_clear_estimate(browser):
     assert ref.replace("Ref ", "") in msg and "Kasoa, near Goil" in msg
     # The Undo goes away after 10 seconds...
     page.click("#clear")
+    page.click("#clearYes")
     page.clock.fast_forward(10_001)
     expect(page.locator("#undo")).to_have_count(0)
     assert "empty" in page.inner_text("#lines")
     # ...or as soon as something new is added.
     page.click('#list [data-inc="c2"]')
     page.click("#clear")
+    page.click("#clearYes")
     page.click('#list [data-inc="c3"]')
     page.click('#est [data-dec="c3"]')
     assert page.locator("#undo").count() == 0
@@ -272,12 +282,13 @@ def test_c08_estimate_totals_have_room(browser, width):
         // right edge of the label's actual text (a wrapped label is narrower than its box)
         const r = document.createRange(); r.selectNodeContents(a);
         const textRight = Math.max(...[...r.getClientRects()].map(c => c.right));
-        return {label: a.innerText, amount: b.innerText, gap: Math.round(rb.left - textRight),
+        // sameLine: on narrow phones the total's amount may move under its label (17 Nov 2026)
+        return {label: a.innerText, amount: b.innerText, gap: Math.round(rb.left - textRight), sameLine: rb.top < ra.bottom - 2,
                 amountLines: Math.round(rb.height / parseFloat(getComputedStyle(b).lineHeight)),
                 flushRight: Math.abs(rb.right - (rd.right - parseFloat(getComputedStyle(d).paddingRight))) < 1.5}; })""")
-    assert rows[-1]["label"] == "Total before delivery" and rows[-1]["amount"] == "GH₵17,806.00", rows
+    assert rows[-1]["label"] == "Total (excl. delivery)" and rows[-1]["amount"] == "GH₵17,806.00", rows
     for r in rows:
-        assert r["gap"] >= 12, f"{width} px: label and amount too close: {r}"
+        assert r["gap"] >= 12 or not r["sameLine"], f"{width} px: label and amount too close: {r}"
         assert r["amountLines"] == 1 and r["flushRight"], f"{width} px: amount should be one line, right-aligned: {r}"
     page.context.close()
 
@@ -340,18 +351,20 @@ def test_c11_single_rods_show_pcs(browser, mobile):
         return {gap: Math.round(u.left - s.right), sameLine: u.top >= s.top - 1 && u.bottom <= s.bottom + 1,
                 fits: u.right <= document.documentElement.clientWidth}; }""")
     assert box["sameLine"] and 0 <= box["gap"] <= 12 and box["fits"], box
-    # Binding wire (same tab) and cement show no unit word.
+    # Since 17 Nov 2026 binding wire (its own tab now) reads "roll" and
+    # cement reads "bag", so every quantity says what it counts.
+    _goto_tab(page, "Binding Wire")
     page.click('#list [data-inc="i8"]')
-    assert unit("#list", "i8") is None and unit("#est", "i8") is None
+    assert unit("#list", "i8") == "roll" and unit("#est", "i8") == "roll"
     _goto_tab(page, "Cement")
     page.click('#list [data-inc="c1"]')
-    assert unit("#est", "c1") is None
+    assert unit("#est", "c1") == "bag"
     _goto_tab(page, "Per Ton")
     page.click('#list [data-inc="j3"]')
     # Printed quotation: every line names its unit under the description.
     page.evaluate("dispatchEvent(new Event('beforeprint'))")
-    lines = page.evaluate("[...document.querySelectorAll('#quote tbody tr')].map(r => [r.children[1].firstChild.textContent.trim(), r.children[1].querySelector('small').textContent.trim(), r.children[2].textContent.trim()])")
-    assert ["Iron rod 16 mm", "Iron Rods (Single Piece), per 30 ft rod", "2"] in lines, lines
-    assert ["Iron rod 12 mm", "Iron Rods (Per Ton), per ton", "1"] in lines, lines
+    lines = page.evaluate("[...document.querySelectorAll('#quote tbody tr')].filter(r => r.cells.length === 5 && !r.classList.length).map(r => [r.children[1].firstChild.textContent.trim(), r.children[1].querySelector('small').textContent.trim(), r.children[2].textContent.trim()])")
+    assert ["Iron rod 16 mm", "per 30 ft rod", "2"] in lines, lines
+    assert ["Iron rod 12 mm", "per ton", "1"] in lines, lines
     assert not errors, errors
     page.context.close()

@@ -246,9 +246,34 @@ def estimate_lines(page):
 # --------------------------------------------------------------------------
 # PDF helpers
 # --------------------------------------------------------------------------
+# One item row of the PDF, as read back out of it. Two layouts:
+# - Astro site since 17 Nov 2026, one line:
+#   "3 Iron rod 16 mm per 30 ft rod 12 GH₵102.00 GH₵1,224.00"
+#   (the material's kind is in the section heading above it)
+# - original single-file site (kept at the repository root as the rollback
+#   site), three lines: "3 Iron rod 16 mm" / "Iron Rods (Single Piece), per
+#   30 ft rod" / "12 GH₵102.00 GH₵1,224.00"
 ROW = re.compile(
-    r"^(\d+) (.+)\n(.+), per (.+)\n(\d+) " + re.escape(SYMBOL) + r"([\d,]+\.\d{2}) "
+    r"^(\d+) (.+?) per (.+) (\d{1,3}(?:,\d{3})*(?:\.\d+)?) " + re.escape(SYMBOL) + r"([\d,]+\.\d{2}) "
     + re.escape(SYMBOL) + r"([\d,]+\.\d{2})$", re.M)
+ROW_SINGLE_FILE = re.compile(
+    r"^(\d+) (.+)\n.+, per (.+)\n(\d+) " + re.escape(SYMBOL) + r"([\d,]+\.\d{2}) "
+    + re.escape(SYMBOL) + r"([\d,]+\.\d{2})$", re.M)
+
+
+def is_astro(page):
+    """True on the Astro site; False on the original single-file site."""
+    return page.evaluate("!!document.getElementById('tcp-data')")
+
+
+# Binding wire has its own category on the Astro site since 17 Nov 2026
+# (tests/baseline/products.json); the single-file site still lists it with
+# the single-piece rods.
+SINGLE_FILE_CATEGORY = {"i8": "Iron Rods (Single Piece)"}
+
+
+def category_on(product, astro):
+    return product["category"] if astro else SINGLE_FILE_CATEGORY.get(product["id"], product["category"])
 
 
 def tidy_pdf_text(text):
@@ -264,13 +289,33 @@ def tidy_pdf_text(text):
 
 
 def parse_rows(page_text):
-    """Pull every table row out of one PDF page: (#, name, category, unit, qty, unit price, amount)."""
-    return [(int(n), name, cat, unit, int(qty), price, amount)
-            for n, name, cat, unit, qty, price, amount in ROW.findall(page_text)]
+    """Pull every table row out of one PDF page: (#, name, unit, qty, unit price, amount)."""
+    found = ROW.findall(page_text) or ROW_SINGLE_FILE.findall(page_text)
+    # Quantities are printed with thousands separators ("50,000") since 17 Nov 2026.
+    return [(int(n), name, unit, float(qty.replace(",", "")) if "." in qty else int(qty.replace(",", "")), price, amount)
+            for n, name, unit, qty, price, amount in found]
+
+
+def in_sections(items, astro=True):
+    """Put (product, qty) pairs in the order the estimate and PDF list them
+    on the Astro site since 17 Nov 2026: cement, single rods, rods by the
+    ton, binding wire. Within a section the order is unchanged. The
+    single-file site keeps the order the items were added in."""
+    if not astro:
+        return list(items)
+    def part(product):
+        if product["category"] == "Cement":
+            return 0
+        if product["unit"] == "ton":
+            return 2
+        if product["category"] == "Binding Wire":
+            return 3
+        return 1
+    return sorted(items, key=lambda item: part(item[0]))
 
 
 def expected_row(number, product, qty):
-    return (number, product["name"], product["category"], product["unit"], qty,
+    return (number, product["name"], product["unit"], qty,
             f"{product['price']:,.2f}", f"{product['price'] * qty:,.2f}")
 
 
@@ -286,9 +331,11 @@ def print_pdf(page, filename):
         ".map(e => e.id || e.tagName.toLowerCase())")
     controls = page.locator(
         "#quote input, #quote button, #quote select, #quote textarea, #quote a").count()
+    # Item rows only: since 17 Nov 2026 the quotation also has section rows
+    # ("01 · Cement") and subtotal rows, which have fewer cells.
     qty_cells = page.evaluate(
         "() => [...document.querySelectorAll('#quote tbody tr')]"
-        ".map(r => r.cells.length === 5 ? r.cells[2].innerHTML : null)")
+        ".filter(r => r.cells.length === 5 && !r.classList.length).map(r => r.cells[2].innerHTML)")
     page.pdf(path=str(path), prefer_css_page_size=True, print_background=True)
     page.evaluate("window.dispatchEvent(new Event('afterprint'))")
     page.emulate_media(media="screen")
@@ -374,7 +421,7 @@ LOCATION = "Buduburam, Block 4 near the clinic"
 def short(browser):
     """A two-item estimate on a desktop screen, built entirely through the UI."""
     page, errors = open_site(browser)
-    s = SimpleNamespace(errors=errors)
+    s = SimpleNamespace(errors=errors, astro=is_astro(page))
     s.page_source_on_load = page.content()
     s.quote_visible_on_screen = page.is_visible("#quote")
 
@@ -414,8 +461,11 @@ def short(browser):
 
     s.pdf = print_pdf(page, "short-quotation.pdf")
 
-    # Start a new quotation with the Clear button
+    # Start a new quotation with the Clear button. Since 17 Nov 2026 it asks
+    # first ("Remove everything from this estimate?"); "Clear all" clears.
     page.click("#clear")
+    if s.astro:
+        page.click("#clearYes")
     s.ref_after_clear = read_ref(page)
     s.lines_after_clear = estimate_lines(page)
     add_item(page, BY_ID["c1"], 2)
@@ -424,9 +474,12 @@ def short(browser):
 
     # Press the real Clear button 5,000 times and collect every reference issued
     s.unique_refs = page.evaluate("""() => {
-        const seen = new Set(), button = document.querySelector('#clear');
+        // Each round: "Clear estimate", then "Clear all" if it asks (it only
+        // asks while the estimate has items in it).
+        const seen = new Set(), button = document.querySelector('#clear'), yes = document.querySelector('#clearYes');
         for (let i = 0; i < 5000; i++) {
             button.click();
+            if (yes && !yes.closest('[hidden]')) yes.click();
             seen.add(document.querySelector('#ref').textContent);
         }
         return seen.size;
@@ -443,7 +496,7 @@ def long(browser):
     page.evaluate(
         "items => { for (const it of items) P.push({id: it.id, cat: it.category,"
         " name: it.name, unit: it.unit, price: it.price}); }", SYNTHETIC)
-    s = SimpleNamespace(errors=errors, expected=[])
+    s = SimpleNamespace(errors=errors, expected=[], astro=is_astro(page))
     for product in PRODUCTS:
         add_item(page, product, 3)
         s.expected.append((product, 3))
@@ -462,7 +515,7 @@ def long(browser):
 def mobile(browser):
     """A four-item estimate on a phone-sized touch screen."""
     page, errors = open_site(browser, mobile=True)
-    s = SimpleNamespace(errors=errors)
+    s = SimpleNamespace(errors=errors, astro=is_astro(page))
     s.items = [(BY_ID["c1"], 40), (BY_ID["c4"], 12), (BY_ID["j3"], 2), (BY_ID["i8"], 5)]
     for product, qty in s.items:
         add_item(page, product, qty)
@@ -490,7 +543,7 @@ def mobile(browser):
 def catalogue(browser):
     """Every real product, at quantity 1, on every surface a customer sees."""
     page, errors = open_site(browser)
-    s = SimpleNamespace(errors=errors)
+    s = SimpleNamespace(errors=errors, astro=is_astro(page))
     s.price_list = price_list(page)
     for product in PRODUCTS:
         add_item(page, product, 1)

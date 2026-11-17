@@ -88,10 +88,12 @@ export function categories(P: EngineProduct[]): string[] {
 }
 
 // Small icons shown beside each category heading. Mirrors the engine's `ICON`.
-const ICON_CEMENT = `<svg viewBox="0 0 28 28" aria-hidden="true"><path d="M6 5h16l3 5v14H3V10z" fill="currentColor"/><rect x="8" y="12" width="12" height="8" fill="#f2c300"/></svg>`;
-const ICON_RODS = `<svg viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="5" width="24" height="4" rx="2" fill="currentColor"/><rect x="2" y="12" width="24" height="4" rx="2" fill="currentColor"/><rect x="2" y="19" width="24" height="4" rx="2" fill="currentColor"/><rect x="11" y="3" width="5" height="22" fill="#f2c300"/></svg>`;
+const ICON_CEMENT = `<svg viewBox="0 0 28 28" aria-hidden="true"><path d="M6 5h16l3 5v14H3V10z" fill="currentColor"/><rect x="8" y="12" width="12" height="8" fill="#ff9802"/></svg>`;
+const ICON_RODS = `<svg viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="5" width="24" height="4" rx="2" fill="currentColor"/><rect x="2" y="12" width="24" height="4" rx="2" fill="currentColor"/><rect x="2" y="19" width="24" height="4" rx="2" fill="currentColor"/><rect x="11" y="3" width="5" height="22" fill="#ff9802"/></svg>`;
+const ICON_WIRE = `<svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="14" cy="14" r="4.5" fill="none" stroke="#ff9802" stroke-width="3"/></svg>`;
 const ICON: Record<string, string> = {
   "Cement": ICON_CEMENT,
+  "Binding Wire": ICON_WIRE,
   "Iron rods and wire": ICON_RODS,
   "Iron Rods (Single Piece)": ICON_RODS,
   "Iron Rods (Per Ton)": ICON_RODS,
@@ -130,7 +132,7 @@ const BANNER_SIZES = "(min-width:1100px) 652px, (min-width:900px) calc(100vw - 4
     price is shown once under the heading; the row's own price stays in the
     page for screen readers and search engines but is hidden from view. */
 function rowHTML(p: EngineProduct, currency: string, shared = false): string {
-  return `<div class="row${p.img ? " has-img" : ""}${shared ? " one" : ""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="pr">${shared ? `<span class="vh">${money(p.price, currency)}</span>` : money(p.price, currency)}</div>${addButton(p)}</div>`;
+  return `<div class="row${p.img ? " has-img" : ""}${shared ? " one" : ""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="buy"><div class="pr">${shared ? `<span class="vh">${money(p.price, currency)}</span>` : money(p.price, currency)}</div>${addButton(p)}</div></div>`;
 }
 
 /** The product whose price the whole tab shares (same price and unit for

@@ -37,6 +37,22 @@
    size tags, and the shared iron-rods banner with a "how it's sold" note at
    the top of each rod tab (see "Product photos" below). The data for them
    comes from products.json and categories.json through the tcp-data block.
+
+   ESTIMATE REDESIGN AND BRAND IDENTITY V1.1 (17 Nov 2026) - presentation;
+   every price, quantity rule and total is calculated exactly as before.
+   1. The estimate is grouped into sections (Cement; Iron rods, single pieces
+      and by the ton; Binding wire), each with its quantity and subtotal,
+      and "Your order at a glance" at the top. Sections fold away.
+   2. Its heading (with "View full estimate" and "Clear estimate") and its
+      bottom (totals, WhatsApp, PDF) stay put; only the materials scroll.
+   3. "Clear estimate" asks first; Undo is still offered afterwards.
+   4. "View full estimate": a large view on computers, full screen on phones.
+   5. Every quantity shows its unit (bags, pcs, tons, rolls).
+   6. The PDF quotation has the new logo, the same sections, units and
+      section subtotals; "Total (excl. delivery)"; delivery "To be confirmed".
+   7. One "Enquire" button offers WhatsApp or a call (see "Enquire menus").
+   8. Binding wire is its own category in products.json (it was listed
+      under single-piece rods, so the PDF called it a rod).
    =========================================================================== */
 // ---------------------------------------------------------------------------
 // DATA HOOK-UP 1 of 2: products, currency and tax rate
@@ -58,7 +74,7 @@ const P=TCP.products;
 // cat   the category tab currently showing; q the search text; qty {id: count}
 // $     shorthand for document.querySelector; money() formats GH₵1,392.00
 const cats=[...new Set(P.map(p=>p.cat))];
-const ICON={"Cement":`<svg viewBox="0 0 28 28" aria-hidden="true"><path d="M6 5h16l3 5v14H3V10z" fill="currentColor"/><rect x="8" y="12" width="12" height="8" fill="#f2c300"/></svg>`,"Iron rods and wire":`<svg viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="5" width="24" height="4" rx="2" fill="currentColor"/><rect x="2" y="12" width="24" height="4" rx="2" fill="currentColor"/><rect x="2" y="19" width="24" height="4" rx="2" fill="currentColor"/><rect x="11" y="3" width="5" height="22" fill="#f2c300"/></svg>`};
+const ICON={"Cement":`<svg viewBox="0 0 28 28" aria-hidden="true"><path d="M6 5h16l3 5v14H3V10z" fill="currentColor"/><rect x="8" y="12" width="12" height="8" fill="#ff9802"/></svg>`,"Iron rods and wire":`<svg viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="5" width="24" height="4" rx="2" fill="currentColor"/><rect x="2" y="12" width="24" height="4" rx="2" fill="currentColor"/><rect x="2" y="19" width="24" height="4" rx="2" fill="currentColor"/><rect x="11" y="3" width="5" height="22" fill="#ff9802"/></svg>`,"Binding Wire":`<svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="14" cy="14" r="4.5" fill="none" stroke="#ff9802" stroke-width="3"/></svg>`};
 ICON["Iron Rods (Single Piece)"]=ICON["Iron Rods (Per Ton)"]=ICON["Iron rods and wire"];
 let cat=cats[0],q="",qty={};
 const $=s=>document.querySelector(s);
@@ -71,15 +87,29 @@ const money=n=>CURRENCY+n.toLocaleString(undefined,{minimumFractionDigits:2,maxi
 // Rods sold by the ton (unit "ton") go up and down in half tons (decided
 // 14 Nov 2026: only 0.5-ton steps, smallest amount half a ton); "Add"
 // starts at 1 ton. Everything else counts in whole items.
+// The most of any one product a customer can put in the estimate. Raised
+// from 9,999 to 50,000 on 17 Nov 2026 (Daniel). A bigger typed number is
+// lowered to this.
+const MAX_QTY=50000;
+// A quantity as people read it: 50,000 and 2.5 (17 Nov 2026). Used
+// everywhere a quantity is shown: the quantity boxes, the estimate's
+// summary and headings, the WhatsApp message and the PDF.
+const fmtQ=n=>(+n).toLocaleString("en-US",{maximumFractionDigits:2});
+// Reading a typed quantity. Commas that group thousands are ignored
+// ("50,000" = 50000, "1,234.5" = 1234.5); any other comma is a decimal
+// point, as many phones type it ("2,5" tons = 2.5).
+function parseQ(v){v=String(v).replace(/\s/g,"");if(/^\d{1,3}(,\d{3})+(\.\d*)?$/.test(v))v=v.replace(/,/g,"");else v=v.replace(",",".");return parseFloat(v);}
 const TON=p=>p.unit==="ton";
 const STEP=p=>TON(p)?0.5:1;
 // The small word shown beside the quantity box so the unit is never in
 // doubt: "ton"/"tons" for rods by the ton, "pc"/"pcs" for single rods
-// (unit "30 ft rod"; added 15 Nov 2026). Other products show no word.
+// (unit "30 ft rod"; added 15 Nov 2026), and since 17 Nov 2026 also
+// "bag"/"bags" for cement and "roll"/"rolls" for binding wire.
 const PIECE=p=>/\brod$/.test(p.unit);
-const unitWord=(p,n)=>TON(p)?(n===1?"ton":"tons"):PIECE(p)?(n===1?"pc":"pcs"):"";
+const BAG=p=>/\bbag$/.test(p.unit),ROLL=p=>/\broll$/.test(p.unit);
+const unitWord=(p,n)=>TON(p)?(n===1?"ton":"tons"):PIECE(p)?(n===1?"pc":"pcs"):BAG(p)?(n===1?"bag":"bags"):ROLL(p)?(n===1?"roll":"rolls"):"";
 const ctrl=p=>{const n=qty[p.id]||0,t=TON(p),one=t?"half a ton of":"one";return n
-?`<div class="qty"><div class="step"><button data-dec="${p.id}" aria-label="Remove ${one} ${p.name}">−</button><input type="number" min="0" step="${STEP(p)}" inputmode="${t?"decimal":"numeric"}" value="${n}" data-qty="${p.id}" aria-label="Quantity of ${p.name}${t?" in tons":PIECE(p)?" in pieces":""}"><button data-inc="${p.id}" aria-label="Add ${one} ${p.name}">+</button></div>${unitWord(p,n)?`<span class="u">${unitWord(p,n)}</span>`:""}</div>`
+?`<div class="qty"><div class="step"><button data-dec="${p.id}" aria-label="Remove ${one} ${p.name}">−</button><input type="text" autocomplete="off" inputmode="${t?"decimal":"numeric"}" value="${fmtQ(n)}" data-qty="${p.id}" aria-label="Quantity of ${p.name}${t?" in tons":PIECE(p)?" in pieces":BAG(p)?" in bags":ROLL(p)?" in rolls":""}"><button data-inc="${p.id}" aria-label="Add ${one} ${p.name}">+</button></div>${unitWord(p,n)?`<span class="u">${unitWord(p,n)}</span>`:""}</div>`
 :`<button class="add" data-inc="${p.id}" aria-label="Add ${p.name} to estimate">Add</button>`};
 
 
@@ -120,7 +150,12 @@ const BANNER_SIZES="(min-width:1100px) 652px, (min-width:900px) calc(100vw - 448
 // "shared": the whole tab has one price (today: rods by the ton, all
 // GH₵7,000), shown once under the heading. The row keeps its price for
 // screen readers and search engines, but hidden from view (class "vh"). If prices ever differ, each row shows its own price again.
-const rowHTML=(p,shared)=>`<div class="row${p.img?" has-img":""}${shared?" one":""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="pr">${shared?`<span class="vh">${money(p.price)}</span>`:money(p.price)}</div>${ctrl(p)}</div>`;
+// Class "in": the product is in the estimate (shown with an ochre edge and
+// "In your estimate"; added 17 Nov 2026).
+// Price and Add/stepper sit together in "buy" (17 Nov 2026): on phones the
+// stepper moves under the price when the two do not fit side by side (large
+// text settings), instead of running into it. Elsewhere "buy" has no box.
+const rowHTML=(p,shared)=>`<div class="row${p.img?" has-img":""}${shared?" one":""}${qty[p.id]?" in":""}">${thumb(p)}<div class="nm">${label(p)}<small>per ${p.unit}</small></div><div class="buy"><div class="pr">${shared?`<span class="vh">${money(p.price)}</span>`:money(p.price)}</div>${ctrl(p)}</div></div>`;
 const sharedPrice=l=>l.length>1&&l.every(p=>p.price===l[0].price&&p.unit===l[0].unit)?l[0]:null;
 // One category section. "browse" is true for the swipeable tabs and false for
 // search results; banner photos are only shown when browsing. If the banner
@@ -166,50 +201,100 @@ fit();
 // ---- The estimate panel and the WhatsApp message -----------------------------
 // Rebuilt after every change. Totals: materials = sum of price × quantity;
 // tax is TAX_RATE (0 today); delivery is always quoted separately.
+//
+// Sections (17 Nov 2026). Every product belongs to one part of the estimate:
+//   cem   Cement                      (counted in bags)
+//   pc    Iron rods, single pieces    (counted in rods)
+//   ton   Iron rods, by the ton       (counted in tons)
+//   wire  Binding wire                (counted in rolls)
+// Single rods and rods by the ton are never added together. A product in a
+// category added later (none today) goes into its own section at the end.
+const PART=p=>p.cat==="Cement"?"cem":TON(p)?"ton":PIECE(p)?"pc":p.cat==="Binding Wire"?"wire":"x:"+p.cat;
+const SECTIONS=[{k:"cem",name:"Cement",parts:["cem"]},{k:"rod",name:"Iron rods",parts:["pc","ton"]},{k:"wire",name:"Binding wire",parts:["wire"]}];
+const PART_NAME={cem:"Cement",pc:"Iron rods, single pieces",ton:"Iron rods, by the ton",wire:"Binding wire"};
+const PART_SHORT={pc:"Single pieces",ton:"By the ton"};
+// How a part's quantity is written: "205 bags", "85 rods", "5.5 tons", "6 rolls".
+const COUNT={cem:["bag","bags"],pc:["rod","rods"],ton:["ton","tons"],wire:["roll","rolls"]};
+const howMany=(k,n)=>COUNT[k]?`${fmtQ(n)} ${COUNT[k][n===1?0:1]}`:fmtQ(n);
+// Groups the products in the estimate: [{k, name, parts:[{k, rows, n, sum}], n, sum}]
+function sections(rows){
+const extra=[...new Set(rows.map(PART).filter(k=>k.startsWith("x:")))].map(k=>({k,name:k.slice(2),parts:[k]}));
+return SECTIONS.concat(extra).map(S=>{
+const parts=S.parts.map(k=>{const r=rows.filter(p=>PART(p)===k);return{k,rows:r,n:r.reduce((s,p)=>s+qty[p.id],0),sum:r.reduce((s,p)=>s+p.price*qty[p.id],0)}}).filter(x=>x.rows.length);
+return{...S,parts,sum:parts.reduce((s,x)=>s+x.sum,0)};}).filter(S=>S.parts.length);
+}
+// Sections the customer has folded away (they stay folded while editing).
+const SHUT={};
+const CHEV=`<svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
+const lineHTML=p=>`<div class="ln"><div class="nm">${p.name}<small>${money(p.price)} per ${p.unit}</small></div>${ctrl(p)}<div class="amt">${money(p.price*qty[p.id])}</div></div>`;
 function renderEst(){
 const rows=P.filter(p=>qty[p.id]>0);
 const sub=rows.reduce((s,p)=>s+p.price*qty[p.id],0);
 const tax=sub*TAX_RATE,total=sub+tax;
 if(rows.length&&undoSnap){undoSnap=null;clearTimeout(undoT);}
-$("#lines").innerHTML=rows.length?rows.map(p=>`<div class="ln"><div class="nm">${p.name}<small>${money(p.price)} per ${p.unit}</small></div>${ctrl(p)}<div class="amt">${money(p.price*qty[p.id])}</div></div>`).join(""):(undoSnap?`<p class="mute empty" role="status">Estimate cleared. <button class="ghost undo" id="undo">Undo</button></p>`:`<p class="mute empty">Your estimate is empty. Add materials from the price list.</p>`);
-$("#tot").innerHTML=`<div><span>Materials</span><span>${money(sub)}</span></div><div><span>Delivery</span><span>Quoted separately</span></div>`+(TAX_RATE?`<div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")+`<div class="gt"><span>Total before delivery</span><span>${money(total)}</span></div>`;
+const S=sections(rows);
+// "Your order at a glance": one tile per part, quantities only.
+$("#glance").innerHTML=rows.length?`<h3>Your order at a glance</h3><div class="tiles">`+S.flatMap(x=>x.parts).map(x=>`<div><b>${fmtQ(x.n)}</b> ${{cem:x.n===1?"bag of cement":"bags of cement",pc:x.n===1?"individual rod":"individual rods",ton:x.n===1?"ton of rods":"tons of rods",wire:x.n===1?"roll of binding wire":"rolls of binding wire"}[x.k]||PART_NAME[x.k]||x.k.slice(2)}</div>`).join("")+`</div>`:"";
+$("#start").hidden=rows.length>0||!!undoSnap;
+$("#etools").hidden=!rows.length;
+if(!rows.length){$("#clearAsk").hidden=true;}
+$("#lines").innerHTML=rows.length?S.map((x,i)=>`<section class="es${SHUT[x.k]?" shut":""}" data-g="${x.k}"><button type="button" class="esh" data-sec="${x.k}" aria-expanded="${!SHUT[x.k]}">${CHEV}<span class="eno">${String(i+1).padStart(2,"0")}</span><span class="enm"><b>${x.name}</b><span>${x.parts.map(y=>howMany(y.k,y.n)).join(" · ")}</span></span><span class="esx">${money(x.sum)}</span></button><div class="esb">`
++x.parts.map(y=>(x.parts.length>1||PART_SHORT[y.k]&&x.k==="rod"?`<h4 class="esub">${PART_SHORT[y.k]||PART_NAME[y.k]}<span>${howMany(y.k,y.n)}</span></h4>`:"")+y.rows.map(lineHTML).join("")+(x.k==="rod"&&x.parts.length>1?`<div class="est"><span>${PART_SHORT[y.k]} subtotal</span><b>${money(y.sum)}</b></div>`:"")).join("")
++`<div class="est all"><span>${x.name} subtotal</span><b>${money(x.sum)}</b></div></div></section>`).join(""):(undoSnap?`<p class="mute empty" role="status">Estimate cleared. <button class="ghost undo" id="undo">Undo</button></p>`:`<p class="mute empty">Your estimate is empty. Add materials from the price list.</p>`);
+$("#tot").innerHTML=(TAX_RATE?`<div><span>Materials</span><span>${money(sub)}</span></div><div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")+`<div><span>Delivery</span><span class="tbc">To be confirmed</span></div><div class="gt${total>=1e6?" lg":""}"><span>Total (excl. delivery)</span><span>${money(total)}</span></div>`;
 $("#bar").classList.toggle("on",rows.length>0);
-$("#barTxt").textContent=`Estimate: ${money(total)} (${rows.length} ${rows.length===1?"item":"items"})`;
+$("#barTxt").innerHTML=`<small>${rows.length} ${rows.length===1?"item":"items"}<span class="bl"> in your estimate</span></small>${money(total)}`;
 const loc=$("#loc").value.trim();
 const msg=`Hello The Cement People,\n\nI would like a quote for *Estimate ${REF}* (${DATE}).\n`
 +(loc?`\n*Drop-off location:* ${loc}\n`:"")
-+"\n*Items*\n"+rows.map((p,i)=>`${i+1}. ${p.name} (${p.unit})\n   ${qty[p.id]} × ${money(p.price)} = ${money(p.price*qty[p.id])}`).join("\n")
++"\n*Items*\n"+rows.map((p,i)=>`${i+1}. ${p.name} (${p.unit})\n   ${fmtQ(qty[p.id])} × ${money(p.price)} = ${money(p.price*qty[p.id])}`).join("\n")
 +`\n\n*Materials total: ${money(sub)}*`
-+(TAX_RATE?`\nTax (${+(TAX_RATE*100).toFixed(2)}%): ${money(tax)}\nTotal before delivery: ${money(total)}`:"")
++(TAX_RATE?`\nTax (${+(TAX_RATE*100).toFixed(2)}%): ${money(tax)}\nTotal (excl. delivery): ${money(total)}`:"")
 +"\n\nPlease confirm availability and the delivery cost"+(loc?" to this location.":".");
-renderQuote(rows,sub,tax,total,loc);
+renderQuote(S,sub,tax,total,loc);
 const sd=$("#send");
 if(rows.length){sd.href="https://wa.me/"+WA_NUMBER+"?text="+encodeURIComponent(msg);sd.classList.remove("off");sd.removeAttribute("aria-disabled")}
 else{sd.removeAttribute("href");sd.classList.add("off");sd.setAttribute("aria-disabled","true")}
 }
+// Folding a section away, and opening it again.
+document.addEventListener("click",e=>{const b=e.target.closest("[data-sec]");if(!b)return;const k=b.dataset.sec;SHUT[k]=!SHUT[k];b.closest(".es").classList.toggle("shut",SHUT[k]);b.setAttribute("aria-expanded",!SHUT[k]);});
 
 // ---- The printable A4 quotation ---------------------------------------------
 // Fills the hidden <section id="quote">. print.css hides everything else when
 // printing. esc() makes the customer's typed location safe to display.
+// Brand identity V1.1 (17 Nov 2026): the horizontal logo (copied from the
+// #q-logo drawing in QuotePieces.astro), the same sections as the estimate
+// with quantities and subtotals, and "Total (excl. delivery)". Each row
+// gives the unit beside the name ("per 50 kg bag"; the section already says
+// what kind of material it is); the Qty column is the number only, so the
+// quantity reads the same on screen, in WhatsApp and here.
+// The logo's drawing is copied once from the hidden #q-logo in QuotePieces.astro.
+const LOGO=(document.getElementById("q-logo")||{}).innerHTML||"";
 const esc=s=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-function renderQuote(rows,sub,tax,total,loc){
-$("#quote").innerHTML=`<header class="q-head"><div class="q-brand"><svg viewBox="0 0 59 38" aria-hidden="true"><rect x="0" y="26" width="28" height="12" rx="1" fill="#111"/><rect x="31" y="26" width="28" height="12" rx="1" fill="#111"/><rect x="17" y="13" width="42" height="12" rx="1" fill="#111"/><rect x="31" y="0" width="28" height="12" rx="1" fill="#f2c300"/></svg><div><b>The Cement People</b><span>${TCP.business.town} · ${TCP.business.phone} (call or WhatsApp)<br>${TCP.business.website}</span></div></div>`
+function renderQuote(S,sub,tax,total,loc){
+let n=0;
+const body=S.length?S.map((x,i)=>`<tr class="q-sec"><td colspan="5">${String(i+1).padStart(2,"0")} · ${x.name}<span>${x.parts.map(y=>howMany(y.k,y.n)).join(" · ")}</span></td></tr>`
++x.parts.map(y=>(x.k==="rod"?`<tr class="q-sub"><td colspan="5">${PART_SHORT[y.k]}</td></tr>`:"")
++y.rows.map(p=>`<tr><td class="n">${++n}</td><td>${p.name} <small>per ${p.unit}</small></td><td class="r">${fmtQ(qty[p.id])}</td><td class="r">${money(p.price)}</td><td class="r">${money(p.price*qty[p.id])}</td></tr>`).join("")
++(x.k==="rod"&&x.parts.length>1?`<tr class="q-st"><td></td><td colspan="3">${PART_NAME[y.k]} subtotal</td><td class="r">${money(y.sum)}</td></tr>`:"")).join("")
++`<tr class="q-st all"><td></td><td colspan="3">${x.name} subtotal</td><td class="r">${money(x.sum)}</td></tr>`).join(""):`<tr class="q-empty"><td colspan="5">No items added yet.</td></tr>`;
+$("#quote").innerHTML=`<header class="q-head"><svg class="q-logo" viewBox="0 0 592.329 100" role="img" aria-label="The Cement People">${LOGO}</svg>`
 +`<div class="q-doc"><h1>Estimate</h1><dl><dt>Reference</dt><dd>${REF}</dd><dt>Date</dt><dd>${DATE}</dd></dl></div></header>`
-+`<div class="q-to"><div><small>Drop-off location</small><p>${loc?esc(loc):"Not provided"}</p></div><div><small>Delivery</small><p>Quoted separately, by location</p></div></div>`
-+`<table><thead><tr><th class="n">#</th><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>`
-+(rows.length?rows.map((p,i)=>`<tr><td class="n">${i+1}</td><td>${p.name}<small>${p.cat}, per ${p.unit}</small></td><td class="r">${qty[p.id]}</td><td class="r">${money(p.price)}</td><td class="r">${money(p.price*qty[p.id])}</td></tr>`).join(""):`<tr class="q-empty"><td colspan="5">No items added yet.</td></tr>`)
-+`</tbody></table><div class="q-close"><div class="q-terms"><h2>Delivery and terms</h2><ul>`
++`<div class="q-to"><div><small>Drop-off location</small><p>${loc?esc(loc):"Not provided"}</p></div><div><small>Delivery</small><p>To be confirmed after you send this estimate</p></div><div><small>Contact</small><p>${TCP.business.phone} (call or WhatsApp)<br>${TCP.business.website} · ${TCP.business.town}</p></div></div>`
++`<table><thead><tr><th class="n">#</th><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>${body}</tbody></table>`
++`<div class="q-close"><div class="q-terms"><h2>Delivery and terms</h2><ul>`
 +`<li>We deliver to your drop-off location. The delivery cost depends on your order and location, and is agreed with you before delivery.</li>`
 +`<li>This estimate is indicative. Final prices and availability are confirmed when you order.</li>`
 +`<li>All prices are in Ghana cedis (GH₵).</li></ul>`
 +`<h2>To order</h2><p>WhatsApp or call ${TCP.business.phone} and quote reference <b>${REF}</b>.</p></div>`
-+`<div class="q-sum"><div><span>Materials</span><span>${money(sub)}</span></div><div><span>Delivery</span><span>Quoted separately</span></div>`
++`<div class="q-sum"><div class="q-mat"><span>Materials</span><span>${money(sub)}</span></div>`
 +(TAX_RATE?`<div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")
-+`<div class="gt"><span>Total before delivery</span><span>${money(total)}</span></div></div></div>`;
++`<div><span>Delivery</span><span>To be confirmed</span></div>`
++`<div class="gt"><span>Total (excl. delivery)</span><span>${money(total)}</span></div></div></div>`;
 // Compact running header on continuation pages only (page 2 onwards)
 let ps=document.getElementById("qpage");
 if(!ps){ps=document.createElement("style");ps.id="qpage";document.head.appendChild(ps);}
-ps.textContent=`@page{@top-left{content:"The Cement People  ·  Estimate ${REF}";font:700 7.5pt Montserrat,Arial,sans-serif;color:#111;vertical-align:bottom;padding-bottom:2mm}@top-right{content:"Continued";font:7.5pt Montserrat,Arial,sans-serif;color:#777;vertical-align:bottom;padding-bottom:2mm}}@page:first{@top-left{content:none}@top-right{content:none}}`;
+ps.textContent=`@page{@top-left{content:"The Cement People  ·  Estimate ${REF}";font:700 7.5pt Montserrat,Arial,sans-serif;color:#131514;vertical-align:bottom;padding-bottom:2mm}@top-right{content:"Continued";font:7.5pt Montserrat,Arial,sans-serif;color:#5a5a5a;vertical-align:bottom;padding-bottom:2mm}}@page:first{@top-left{content:none}@top-right{content:none}}`;
 }
 
 // Refresh the quotation just before printing, and name the PDF after the reference.
@@ -226,7 +311,7 @@ function set(id,n){
 // nearest half; a typed amount above zero never rounds down to nothing.
 const s=STEP(byId(id));n=Number.isFinite(n)?n:0;
 n=s===1?Math.trunc(n):Math.round(n/s)*s;if(s!==1&&n<=0&&arguments[2])n=s;
-n=Math.max(0,Math.min(9999,n));
+n=Math.max(0,Math.min(MAX_QTY,n));
 if(n)qty[id]=n;else delete qty[id];
 renderList();renderEst();
 }
@@ -240,8 +325,14 @@ if(d.inc)set(d.inc,qty[d.inc]?qty[d.inc]+STEP(byId(d.inc)):1);
 else if(d.dec)set(d.dec,(qty[d.dec]||0)-STEP(byId(d.dec)));
 else if(d.cat!==undefined)goCat(d.cat);
 });
+// While a quantity box is being edited it shows plain digits ("50000"),
+// so deleting or adding a digit can never leave a misplaced comma; leaving
+// the box shows it formatted again ("50,000").
+// The whole number is selected, so typing replaces it (as before).
+document.addEventListener("focusin",e=>{const i=e.target;if(i.dataset&&i.dataset.qty){const raw=String(qty[i.dataset.qty]||0);if(i.value!==raw){i.value=raw;i.select();}}});
+document.addEventListener("focusout",e=>{const i=e.target;if(i.dataset&&i.dataset.qty&&i.isConnected&&parseQ(i.value)===(qty[i.dataset.qty]||0))i.value=fmtQ(qty[i.dataset.qty]||0);});
 document.addEventListener("change",e=>{
-const i=e.target;if(i.dataset&&i.dataset.qty){const v=parseFloat(String(i.value).replace(",","."));set(i.dataset.qty,v||0,v>0);}
+const i=e.target;if(i.dataset&&i.dataset.qty){const v=parseQ(i.value);set(i.dataset.qty,v||0,v>0);}
 });
 $("#q").addEventListener("input",e=>{q=e.target.value.trim().toLowerCase();renderList();});
 $("#print").addEventListener("click",()=>window.print());
@@ -249,10 +340,18 @@ $("#print").addEventListener("click",()=>window.print());
 // 10 seconds an "Undo" button brings everything back: items, drop-off
 // location, reference and date (added 14 Nov 2026). Adding anything, or the
 // 10 seconds running out, removes the Undo.
+// Since 17 Nov 2026 it asks first ("Remove everything from this estimate?"
+// with "Keep estimate" and "Clear all"); "Clear all" does the clearing.
 let undoSnap=null,undoT;
 function dropUndo(){if(!undoSnap)return;undoSnap=null;clearTimeout(undoT);renderEst();}
+function askClear(on){$("#clearAsk").hidden=!on;$("#clear").setAttribute("aria-expanded",on);if(on)$("#clearNo").focus();}
 $("#clear").addEventListener("click",()=>{
-if(!Object.keys(qty).length){dropUndo();newQuote();renderList();renderEst();return;} // nothing to undo: just a fresh reference, as before
+if(!Object.keys(qty).length){dropUndo();newQuote();renderList();renderEst();return;} // nothing to clear: just a fresh reference, as before
+askClear($("#clearAsk").hidden);
+});
+$("#clearNo").addEventListener("click",()=>{askClear(false);$("#clear").focus();});
+$("#clearYes").addEventListener("click",()=>{
+askClear(false);
 undoSnap={qty:{...qty},loc:$("#loc").value,REF,DATE};
 qty={};newQuote();renderList();renderEst();
 clearTimeout(undoT);undoT=setTimeout(dropUndo,10000);
@@ -264,8 +363,11 @@ qty=u.qty;$("#loc").value=u.loc;REF=u.REF;DATE=u.DATE;$("#ref").textContent="Ref
 renderList();renderEst();$("#clear").focus();});
 
 // ---- Phones: the estimate opens as a full-screen view -------------------------
+// Opened from the bar at the bottom of the screen, or from "View full
+// estimate" in the estimate's heading (17 Nov 2026). Only the materials
+// (#escroll) scroll; the heading and the bottom stay put.
 const mq=matchMedia("(max-width:899px)");
-function openEst(){const e=$("#est");e.classList.add("open");e.scrollTop=0;document.body.style.overflow="hidden";$("#dclose").focus({preventScroll:true});}
+function openEst(){const e=$("#est");e.classList.add("open");$("#escroll").scrollTop=0;document.body.style.overflow="hidden";$("#dclose").focus({preventScroll:true});}
 function closeEst(){$("#est").classList.remove("open");document.body.style.overflow="";}
 $("#barBtn").addEventListener("click",openEst);
 // Phones: hide the bar while the estimate panel is on screen, so it never
@@ -274,7 +376,31 @@ $("#barBtn").addEventListener("click",openEst);
 if("IntersectionObserver"in window)new IntersectionObserver(es=>{$("#bar").classList.toggle("away",es[0].isIntersecting)},{rootMargin:"0px 0px -120px 0px"}).observe($("#est"));
 $("#dclose").addEventListener("click",closeEst);
 document.addEventListener("click",e=>{if(mq.matches&&e.target.closest('a[href="#est"]')){e.preventDefault();openEst();}});
-mq.addEventListener("change",()=>{if(!mq.matches)closeEst();});
+// Computers: "View full estimate" shows the estimate large, in the middle of
+// the screen; "Back to the price list", the dimmed background or Escape
+// closes it. Phones: it opens the full-screen view above.
+function fullEst(on){const e=$("#est"),b=$("#full");e.classList.toggle("full",on);$("#escrim").hidden=!on;document.body.style.overflow=on?"hidden":"";
+b.querySelector("span").textContent=on?"Back to the price list":"View full estimate";b.setAttribute("aria-expanded",on);if(on)$("#escroll").scrollTop=0;}
+$("#full").addEventListener("click",()=>{if(mq.matches)openEst();else fullEst(!$("#est").classList.contains("full"));});
+$("#escrim").addEventListener("click",()=>fullEst(false));
+document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("#est").classList.contains("full")){fullEst(false);$("#full").focus();}else if(!$("#clearAsk").hidden){askClear(false);$("#clear").focus();}});
+mq.addEventListener("change",()=>{if(!mq.matches)closeEst();else fullEst(false);});
+
+// ---- Enquire menus ------------------------------------------------------------
+// Each "Enquire" button (Enquire.astro) opens a small menu with two choices:
+// WhatsApp or a call. Computers: it drops down under the button. Phones: it
+// slides up from the bottom of the screen over a dimmed page. Tapping
+// outside, Escape or choosing an option closes it.
+const enqScrim=document.createElement("div");enqScrim.className="enq-scrim";enqScrim.hidden=true;document.body.appendChild(enqScrim);
+let enqOpen=null;
+function enqClose(focus){if(!enqOpen)return;const b=enqOpen;enqOpen=null;b.setAttribute("aria-expanded","false");$("#"+b.getAttribute("aria-controls")).hidden=true;enqScrim.hidden=true;if(focus)b.focus();}
+document.addEventListener("click",e=>{
+const b=e.target.closest(".enq-btn");
+if(b){const was=enqOpen===b;enqClose();if(was)return;const m=$("#"+b.getAttribute("aria-controls"));m.hidden=false;b.setAttribute("aria-expanded","true");enqOpen=b;enqScrim.hidden=!matchMedia("(max-width:599px)").matches;const a=m.querySelector("a");if(a)a.focus({preventScroll:true});return;}
+if(enqOpen&&(!e.target.closest(".enq-menu")||e.target.closest("a")))enqClose();
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")enqClose(true);});
+addEventListener("resize",()=>enqClose());
 
 // Each quotation gets its own reference: TCP-YYMMDD-XXXXXX (date plus 6 random characters).
 // It stays the same for that quotation across the screen, PDF and WhatsApp, and a new one

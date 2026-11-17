@@ -7,12 +7,16 @@
    styled once, in page order, and every colour, size and spacing value
    comes from tokens.css.
 
-   Agreed look (Design-System Proposal, 14 Nov 2026): warm-white page
-   (--bg), white header, cards and inputs (--card); one content width
-   (--page) with one left edge; one type scale; buttons and inputs at least
-   44 px tall (--tap); TCP yellow (--y) for the main action in each area;
-   neutral "Add" buttons that turn light yellow on hover and keyboard focus;
-   bold prices.
+   Agreed look (Design-System Proposal, 14 Nov 2026): white header, cards
+   and inputs (--card); one content width (--page) with one left edge; one
+   type scale; buttons and inputs at least 44 px tall (--tap); neutral "Add"
+   buttons; bold prices.
+
+   Brand identity V1.1 and the estimate redesign (17 Nov 2026): a neutral
+   page with a faint concrete grain (--bg, --tex); the interface ochre (--y)
+   for the main action in each area; the V1.1 logos; one "Enquire" button
+   with WhatsApp and call; the estimate in sections with its heading and
+   bottom fixed (section 6).
 
    The "@media print" blocks are kept exactly as they were, so the printed
    page and the PDF quotation (styled in print.css) do not change.
@@ -27,7 +31,7 @@
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-behavior:smooth;scroll-padding-top:calc(env(safe-area-inset-top,0px) + 76px)}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:var(--t-body);line-height:1.5}
+body{margin:0;background:var(--bg) var(--tex) 0 0/512px 512px;color:var(--ink);font-family:var(--font);font-size:var(--t-body);line-height:1.5}
 /* Fills the phone's status-bar area (notch) so the page never shows under it. */
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--card);z-index:10}
 button,input,select{font-family:inherit}
@@ -40,29 +44,29 @@ h2{font-size:17px;font-weight:800;margin:26px 0 2px;display:flex;align-items:cen
 .vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 .lead{color:var(--mute);max-width:52ch;margin:0}
 
-/* Buttons. Primary: yellow, for the main action in an area ("View
-   products", "Enquire on WhatsApp", "Send my estimate", "View estimate").
-   Secondary: white with a dark border ("Call us"). "Add": neutral, see 5. */
-.cta,.wa,.bar button{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--tap);background:var(--y);color:var(--ink);border:1px solid var(--y);border-radius:var(--r-control);font-weight:var(--w-label);text-decoration:none;cursor:pointer}
+/* Buttons. Primary: ochre, for the main action in an area ("View
+   products", "Send on WhatsApp", "View estimate", "Enquire" in Contact).
+   Secondary: white with a dark border ("Enquire" in the hero, "Print or
+   save as PDF"). "Add": neutral, see 5. */
+.cta,.bar button{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--tap);background:var(--y);color:var(--ink);border:1px solid var(--y);border-radius:var(--r-control);font-weight:var(--w-label);text-decoration:none;cursor:pointer}
 .btn2{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--tap);background:var(--card);color:var(--ink);border:1px solid var(--ink);border-radius:var(--r-control);font-weight:var(--w-label);text-decoration:none}
-.cta:hover,.wa:hover,.bar button:hover{border-color:var(--ink)}
+.cta:hover,.bar button:hover{border-color:var(--ink)}
 .btn2:hover{background:var(--bg)}
 
 /* ---- 2. Header ------------------------------------------------------------ */
 header{position:sticky;top:env(safe-area-inset-top,0px);z-index:11;background:var(--card);color:var(--ink);border-bottom:1px solid var(--line)}
 .hin{max-width:var(--page);margin:0 auto;padding:var(--s3) var(--s4);display:flex;align-items:center;gap:var(--s3)}
 .brand{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;margin-right:auto}
-.brand svg{width:40px;flex:none}
-.hin .brand span{font-weight:var(--w-strong);font-size:var(--t-sub);line-height:1.05;letter-spacing:-.02em}
+.brand picture,.brand img{display:block}
+/* Computers: the stacked logo, emblem 65 px tall. Phones and narrow
+   tablets: the horizontal logo, 44 px tall (260 px wide, fits a 360 px phone). */
+.brand img{height:65px;width:auto}
+@media (max-width:899px){.brand img{height:44px}}
+/* Very narrow phones (under 360 px): 36 px tall, so the menu button still fits. */
+@media (max-width:359px){.brand img{height:36px}}
 nav{display:flex;gap:var(--s5)}
 nav a{display:inline-flex;align-items:center;min-height:var(--tap);color:var(--ink);text-decoration:none;font-weight:var(--w-label);font-size:var(--t-body);border-bottom:3px solid transparent}
 nav a:hover{border-bottom-color:var(--y)}
-.wa{padding:10px var(--s4)}
-.wa svg{width:20px;height:20px;flex:none}
-.hin .wa span{font-size:var(--t-small);font-weight:var(--w-label)}
-.wa .short{display:none}
-.wa.big{padding:var(--s3) 22px}
-.wa.big span{font-size:var(--t-body);font-weight:var(--w-label)}
 #menu{display:none;min-width:var(--tap);min-height:var(--tap);background:none;border:0;color:var(--ink);padding:var(--s2);cursor:pointer}
 #menu svg{width:28px;height:28px;display:block}
 
@@ -72,18 +76,18 @@ nav a:hover{border-bottom-color:var(--y)}
    narrow tablets, the text first and the tall photo straight under the
    buttons, its plain-wall top fading into the warm white. Text left-aligned,
    no line under the headline. See components/Hero.astro. */
-.hero{background:var(--bg);display:flex;flex-direction:column}
+.hero{display:flex;flex-direction:column}
 .hpic{order:2;display:block;margin-top:-22vw}
-.hpic img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(180deg,transparent,#000 22%);mask-image:linear-gradient(180deg,transparent,#000 22%)}
+/* Phones: the photo fades into the concrete at the top and the bottom. */
+.hpic img{display:block;width:100%;height:auto;-webkit-mask-image:linear-gradient(180deg,transparent,#000 22%,#000 90%,transparent);mask-image:linear-gradient(180deg,transparent,#000 22%,#000 90%,transparent)}
 .htx{order:1;position:relative;z-index:1;text-align:left;padding:30px 20px 0}
 .kick{margin:0;font-size:var(--t-label);font-weight:var(--w-strong);letter-spacing:.22em;text-transform:uppercase}
 .htx h1{font-size:var(--t-display);line-height:1.02;letter-spacing:-.03em;margin:var(--s3) 0 0;max-width:none}
 .htx .lead{color:var(--ink);font-size:var(--t-body);max-width:30ch;margin:14px 0 20px}
 .ctas{display:flex;gap:10px;justify-content:flex-start;flex-wrap:wrap}
-.ctas a{padding:10px 18px;font-size:var(--t-body)}
-.ctas a svg{width:16px;height:16px;flex:none}
+.ctas a,.ctas .enq-btn{padding:10px 18px;font-size:var(--t-body)}
 /* Very narrow phones: the two buttons stack, full width. */
-@media (max-width:359px){.ctas{flex-direction:column}}
+@media (max-width:359px){.ctas{flex-direction:column}.ctas .enq,.ctas .enq-btn{width:100%}}
 @media (min-width:900px){
 .hero{display:grid;grid-template-columns:65fr 35fr}
 .hpic{order:0;margin:0}
@@ -93,11 +97,39 @@ nav a:hover{border-bottom-color:var(--y)}
 }
 /* 900-1023 px: the text panel is narrow, so the panel and the two buttons
    get slightly tighter side padding. That keeps "View products" and
-   "Call us" side by side instead of stacked (ChatGPT review, 14 Nov). */
-@media (min-width:900px) and (max-width:1023px){
+   "Enquire" side by side instead of stacked (ChatGPT review, 14 Nov; up to
+   1199 px since "Enquire" has a menu arrow, 17 Nov). */
+@media (min-width:900px) and (max-width:1199px){
 .htx{padding-inline:var(--s5)}
 .ctas{gap:var(--s2)}
-.ctas a{padding-inline:var(--s3)}
+.ctas a,.ctas .enq-btn{padding-inline:var(--s3)}
+}
+/* 900-1023 px: a little less side padding around the hero text too. At
+   900 px the two buttons had only 1 px to spare, and on GitHub's test
+   computers (slightly different text drawing) "Enquire" dropped onto a
+   second line. This leaves about 17 px to spare. 17 Nov 2026. */
+@media (min-width:900px) and (max-width:1023px){.htx{padding-inline:var(--s4)}}
+
+/* ---- Enquire: one button, two choices (WhatsApp or call) -------------------
+   Computers: a small menu drops down under the button. Phones (under 600 px):
+   it slides up from the bottom of the screen over a dimmed page. */
+.enq{position:relative;display:inline-block}
+.enq-btn{cursor:pointer;font-family:inherit}
+.enq-btn .chev{width:14px;height:14px;flex:none;transition:transform .15s}
+.enq-btn[aria-expanded="true"] .chev{transform:rotate(180deg)}
+.cta.big{padding:var(--s3) 22px;font-size:var(--t-body)}
+.enq-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:20;min-width:270px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-panel);box-shadow:0 10px 30px rgba(0,0,0,.14);padding:6px}
+.enq-menu[hidden]{display:none}
+.enq-menu a{display:flex;align-items:center;gap:var(--s3);min-height:52px;padding:var(--s2) var(--s3);border-radius:var(--r-control);color:var(--ink);text-decoration:none;font-weight:var(--w-label)}
+.enq-menu a:hover,.enq-menu a:focus-visible{background:var(--bg)}
+.enq-menu a svg{width:22px;height:22px;flex:none}
+.enq-menu small{display:block;font-weight:var(--w-text);font-size:var(--t-small);color:var(--mute)}
+.enq-menu .grab{display:none}
+.enq-scrim{position:fixed;inset:0;z-index:29;background:rgba(19,21,20,.35)}
+.enq-scrim[hidden]{display:none}
+@media (max-width:599px){
+.enq-menu{position:fixed;top:auto;left:0;right:0;bottom:0;z-index:31;border-radius:14px 14px 0 0;padding:10px var(--s3) calc(14px + env(safe-area-inset-bottom,0px))}
+.enq-menu .grab{display:block;width:40px;height:4px;border-radius:2px;background:var(--line);margin:2px auto var(--s2)}
 }
 
 /* ---- 4. Sections: one width, one left edge, one rhythm ------------------- */
@@ -113,13 +145,17 @@ main{max-width:var(--page);margin:0 auto;padding:var(--gap-section) var(--s4) 0;
 .st::before{display:none}
 
 /* ---- 5. Price list ---------------------------------------------------------- */
-#catalog{min-width:0}
+/* The price list sits on a flat panel (no concrete grain behind products).
+   The panel's edge is drawn with a shadow, so the layout is unchanged. */
+#catalog{min-width:0;background:var(--bg);border-radius:var(--r-panel);box-shadow:0 0 0 20px var(--bg),0 0 0 21px var(--line)}
+@media (max-width:899px){#catalog{border-radius:0;box-shadow:0 0 0 16px var(--bg)}}
 #catalog>.lead{margin:0 0 6px}
 .tools{margin:20px 0 6px;display:grid;gap:10px}
 input[type=search]{width:100%;min-height:var(--tap);padding:10px var(--s3);font-size:var(--t-body);border:1px solid var(--line);border-radius:var(--r-control);background:var(--card);color:var(--ink)}
 .tabs{display:flex;gap:var(--s1);overflow-x:auto;scrollbar-width:none;align-items:stretch}
 .tabs button{flex:1 1 0;min-height:var(--tap);white-space:normal;line-height:1.25;text-align:center;padding:var(--s2) 6px;background:none;border:0;border-bottom:3px solid transparent;color:var(--mute);font-size:var(--t-small);font-weight:var(--w-label);cursor:pointer}
 .tabs button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--y)}
+@media (max-width:399px){.tabs button{font-size:var(--t-label);padding-inline:2px}}
 .hint{display:none;margin:6px 0 0;font-size:var(--t-small);color:var(--mute)}
 @media (hover:none){.hint{display:block}}
 /* The list of slides (one per tab) that slides sideways on phones. */
@@ -160,66 +196,168 @@ section.nobanner .banner{display:none}
 /* position:relative keeps a hidden price (.vh) inside its own row; without
    it, hidden prices on off-screen slides made the phone page too wide. */
 .pr{position:relative;font-weight:var(--w-strong);font-size:var(--t-price);text-align:right}
+/* Price + Add/stepper. No box of its own (its two parts are laid out by the
+   row), except on phones, below. */
+.buy{display:contents}
 /* "Add": neutral so the yellow stays for the main actions; turns light
    yellow on hover and keyboard focus (decided 14 Nov 2026). */
 .add{min-height:var(--tap);padding:var(--s2) 18px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-control);font-size:var(--t-small);font-weight:var(--w-label);cursor:pointer}
 .add:hover,.add:focus-visible{background:var(--y-soft);border-color:var(--y)}
+/* A product already in the estimate: ochre edge, faint ochre wash and
+   "In your estimate" over its name (17 Nov 2026). */
+.row.in{background:var(--y-tint);box-shadow:inset 4px 0 0 var(--y);border-radius:var(--r-control);padding-inline:var(--s3)}
+.row.in .nm::before{content:"✓ In your estimate";display:block;font-size:12px;font-weight:var(--w-strong);letter-spacing:.02em;margin-bottom:2px}
 /* Quantity stepper (in the list and the estimate). justify-self:start keeps
    it as wide as its buttons; before, it stretched into an empty white strip. */
 .step{display:inline-flex;justify-self:start;border:1px solid var(--line);border-radius:var(--r-control);overflow:hidden}
 .step button{width:40px;min-height:var(--tap);border:0;background:var(--bg);color:var(--ink);font-size:var(--t-sub);font-weight:var(--w-label);cursor:pointer}
-.step input{width:50px;min-height:var(--tap);text-align:center;border:0;border-inline:1px solid var(--line);background:var(--card);color:var(--ink);font-size:var(--t-body);font-weight:var(--w-label);border-radius:0;-moz-appearance:textfield}
+/* 72 px: room for "50,000", the most allowed (17 Nov 2026). */
+.step input{width:72px;padding:0 2px;min-height:var(--tap);text-align:center;border:0;border-inline:1px solid var(--line);background:var(--card);color:var(--ink);font-size:var(--t-body);font-weight:var(--w-label);border-radius:0;-moz-appearance:textfield}
 /* Stepper plus its unit word ("tons" for rods by the ton, "pcs" for single rods). */
 .qty{display:inline-flex;align-items:center;gap:var(--s2);justify-self:start}
 .qty{white-space:nowrap}
 .qty .u{font-size:var(--t-small);color:var(--mute);flex:none}
 .step input::-webkit-outer-spin-button,.step input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 
-/* ---- 6. Estimate panel ------------------------------------------------------ */
-.docket{background:var(--card);border:1px solid var(--line);border-radius:var(--r-panel);overflow:hidden;box-shadow:var(--shadow)}
-.dh{display:flex;justify-content:space-between;align-items:center;background:var(--card);color:var(--ink);padding:var(--s3) 14px;border-bottom:1px solid var(--line)}
+/* ---- 6. Estimate panel ------------------------------------------------------
+   Redesigned 17 Nov 2026. Three parts: the heading (title, reference, date,
+   "View full estimate", "Clear estimate") and the bottom (totals, WhatsApp,
+   PDF) stay put; only the middle (#escroll) scrolls. On computers the panel
+   is as tall as the screen allows; on phones it opens full-screen. */
+.docket{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:var(--r-panel);overflow:hidden;box-shadow:var(--shadow)}
+.dh{display:flex;justify-content:space-between;align-items:center;gap:var(--s3);background:var(--ink);color:var(--card);padding:14px var(--s4) 2px}
 .dh b{font-size:var(--t-sub);font-weight:var(--w-strong)}
-.dh span{font-size:var(--t-label);color:var(--mute)}
-.dm{padding:var(--s2) 14px;font-size:var(--t-label);color:var(--mute);border-bottom:1px solid var(--line)}
-#lines{padding:0 14px}
-.ln{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;padding:var(--s3) 0;border-bottom:1px solid var(--line)}
-.ln .nm{grid-column:1/-1}
-.ln .amt{text-align:right;font-weight:var(--w-strong);align-self:center}
-/* Very narrow phones (under 360 px): in the estimate, the line amount drops
-   under the quantity box, right-aligned, so "tons" never runs into it. */
-@media (max-width:359px){.ln{grid-template-columns:minmax(0,1fr)}}
+.dh span{font-size:var(--t-label);color:#cfcac0}
+.dm{background:var(--ink);color:#cfcac0;padding:0 var(--s4) var(--s3);font-size:var(--t-label)}
+/* "View full estimate" and "Clear estimate": always visible. */
+.etools{display:flex;justify-content:space-between;align-items:center;gap:var(--s2);padding:var(--s1) var(--s4);border-bottom:1px solid var(--line);flex:none}
+.etools[hidden]{display:none}
+.etool{display:inline-flex;align-items:center;gap:6px;min-height:var(--tap);padding:0 2px;background:none;border:0;color:var(--ink);font-size:var(--t-small);font-weight:var(--w-label);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.etool svg{width:18px;height:18px;flex:none}
+/* Each link stays on one line (at 360 px they wrapped, 17 Nov 2026). */
+.etool{white-space:nowrap}
+@media (max-width:399px){.etools{padding-inline:var(--s3)}.etool{font-size:var(--t-label);gap:4px}.etool svg{width:16px;height:16px}}
+#clear{margin-left:auto;color:var(--mute)}
+/* "Remove everything from this estimate?" */
+.eask{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2);margin:var(--s2) var(--s4);padding:10px var(--s3);background:var(--bg);border-radius:var(--r-control);font-size:var(--t-small);flex:none}
+.eask[hidden]{display:none}
+.eask b{flex:1 1 100%}
+.eask button{min-height:var(--tap);padding:0 var(--s4);border:1px solid var(--ink);border-radius:var(--r-control);background:var(--card);color:var(--ink);font-size:var(--t-small);font-weight:var(--w-label);cursor:pointer}
+.eask .yes{background:var(--ink);color:var(--card)}
+.escroll{padding:0 var(--s4)}
+/* Your order at a glance */
+#glance:empty{display:none}
+#glance{padding:14px 0 var(--s1)}
+#glance h3{margin:0 0 var(--s2);font-size:var(--t-label);font-weight:var(--w-strong);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+#glance .tiles{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)}
+#glance .tiles div{background:var(--bg);border-radius:var(--r-control);padding:7px 10px;font-size:var(--t-small);color:var(--mute);line-height:1.3}
+#glance .tiles b{font-size:var(--t-price);font-weight:var(--w-strong);color:var(--ink);margin-right:2px}
+/* First-time help, shown while the estimate is empty */
+.estart{background:var(--bg);border-radius:var(--r-panel);padding:14px var(--s4);margin:14px 0 var(--s1)}
+.estart[hidden]{display:none}
+.estart>b{display:block;margin-bottom:6px}
+.estart ol{margin:0;padding-left:20px;font-size:var(--t-small);color:var(--mute)}
+.estart li{margin-bottom:3px}
+/* Material sections: alternating neutral tones, an ochre number, the
+   quantity and subtotal in the heading (visible when folded). The heading
+   sticks to the top of the list while you scroll through that section. */
+#lines{padding:0}
+.es{margin:14px 0;border-radius:var(--r-panel);box-shadow:0 0 0 1px var(--line)}
+.esh{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:16px auto minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;padding:var(--s3);border:0;border-radius:var(--r-panel) var(--r-panel) 0 0;background:var(--sec-a);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+.es:not(.shut) .esh{border-bottom:1px solid var(--line)}
+.es.shut .esh{border-radius:var(--r-panel)}
+.esh .chev{width:16px;height:16px;transition:transform .15s}
+.es.shut .esh .chev{transform:rotate(-90deg)}
+.eno{background:var(--y);color:var(--ink);border-radius:4px;padding:2px 6px;font-size:12px;font-weight:var(--w-strong)}
+.enm{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+.enm b{font-size:var(--t-body);font-weight:var(--w-strong);text-transform:uppercase;letter-spacing:.05em}
+.enm span{font-size:var(--t-small);color:var(--mute)}
+.esx{font-size:var(--t-body);font-weight:var(--w-strong);white-space:nowrap}
+.esb{padding:0 var(--s3);background:var(--sec-a-body);border-radius:0 0 var(--r-panel) var(--r-panel)}
+.es.shut .esb{display:none}
+.es:nth-of-type(even) .esh{background:var(--sec-b)}
+.es:nth-of-type(even) .esb{background:var(--sec-b-body)}
+.esub{display:flex;justify-content:space-between;gap:10px;margin:var(--s3) 0 0;padding-bottom:var(--s1);border-bottom:1px solid var(--line);font-size:var(--t-label);font-weight:var(--w-strong);letter-spacing:.06em;text-transform:uppercase}
+.esub span{letter-spacing:0;text-transform:none;font-weight:var(--w-label);color:var(--mute)}
+.est{display:flex;justify-content:space-between;gap:10px;padding:10px 0;font-size:var(--t-small);font-weight:var(--w-label)}
+.est b{font-weight:var(--w-strong);white-space:nowrap}
+.est.all{border-top:2px solid var(--ink);font-size:var(--t-body)}
+/* One product: name and unit price; then quantity and line total. Where
+   the line total does not fit beside the quantity (narrow phones, large
+   amounts) it moves under it, on the right, so the two never touch. */
+.ln{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s1) var(--s3);padding:var(--s3) 0;border-bottom:1px solid var(--line)}
+.ln .nm{flex:1 1 100%;min-width:0;font-weight:var(--w-label);line-height:1.3}
+.ln .nm small{margin-top:2px}
+.ln .amt{margin-left:auto;text-align:right;font-weight:var(--w-strong);font-size:var(--t-price);white-space:nowrap}
+.ln .amt::before{content:"Line total";display:block;font-size:12px;font-weight:var(--w-text);color:var(--mute);line-height:1.2}
+/* Phones: a little less side padding, so the line total usually fits
+   beside the quantity on a 390 px phone. */
+@media (max-width:599px){.escroll{padding:0 12px}.esb{padding:0 10px}.ln .amt{font-size:17px}}
 .empty{padding:var(--s4) 0;margin:0}
 /* "Undo" after Clear estimate: shown for 10 seconds. */
 .empty .undo{color:var(--ink);font-weight:var(--w-label);padding:var(--s2) var(--s3)}
-.dl{display:block;padding:14px 14px var(--s1);font-weight:var(--w-label);font-size:var(--t-small)}
+.edeliv{margin:var(--s3) 0 0;padding:14px;background:var(--bg);border-radius:var(--r-control)}
+.edeliv h3{margin:0 0 2px;font-size:var(--t-body);font-weight:var(--w-strong)}
+.edeliv p{margin:0 0 var(--s2);font-size:var(--t-small);color:var(--mute)}
+.dl{display:block;font-weight:var(--w-label);font-size:var(--t-small)}
 #loc{display:block;width:100%;min-height:var(--tap);margin-top:6px;padding:10px;font-size:var(--t-body);border:1px solid var(--line);border-radius:var(--r-control);background:var(--card);color:var(--ink)}
-.tot{padding:var(--s2) 14px 6px}
-/* Label left, amount right, always with a gap between them. On narrow
-   phones a long label ("Total before delivery") wraps onto two lines
-   instead of squeezing up against the amount. */
-.tot div{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s4);padding:5px 0}
+.fine{margin:0;padding:var(--s3) 0 var(--s4);font-size:var(--t-label);color:var(--mute)}
+/* The bottom: totals and the two actions. */
+.efoot{flex:none;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -8px 18px rgba(0,0,0,.05);padding:10px var(--s4) 14px}
+.tot{padding:0}
+/* Label left, amount right, always with a gap between them. */
+.tot div{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s4);padding:2px 0;font-size:var(--t-small)}
 .tot div span:first-child{min-width:0}
 .tot div span:last-child{flex:none;text-align:right;white-space:nowrap}
-.tot .gt{border-top:1px solid var(--line);margin-top:6px;padding-top:var(--s3);font-size:var(--t-sub);font-weight:var(--w-strong)}
-.acts{display:grid;gap:6px;padding:var(--s2) 14px var(--s3)}
-.acts .cta{width:100%;padding:var(--s3);font-size:var(--t-body);text-align:center}
+.tot .tbc{color:var(--mute)}
+.tot .gt{flex-wrap:wrap;column-gap:var(--s3);border-top:1px solid var(--line);margin-top:var(--s1);padding-top:var(--s2);font-size:var(--t-body);font-weight:var(--w-strong)}
+/* "Total (excl. delivery)" never breaks; on narrow phones the amount moves
+   under it, on the right. */
+.tot .gt span:first-child{flex:none;white-space:nowrap}
+.tot .gt span:last-child{margin-left:auto;font-size:19px}
+/* Phones under 400 px: a slightly smaller label and amount, so they share
+   one line at 360 px (ChatGPT review, 17 Nov 2026). For a total of a
+   million cedis or more ("lg", set by quote-engine.js) a step smaller
+   again. Only in extreme cases does the amount still move under the label. */
+@media (max-width:399px){
+.efoot{padding-inline:var(--s3)}
+.tot .gt{font-size:var(--t-small)}
+.tot .gt span:last-child{font-size:18px}
+.tot .gt.lg{font-size:var(--t-label)}
+.tot .gt.lg span:last-child{font-size:16px}
+}
+.acts{display:grid;gap:6px;padding:10px 0 0}
+.acts .cta{width:100%;min-height:48px;padding:var(--s3);font-size:var(--t-body);text-align:center}
+.acts .btn2{width:100%;font-size:var(--t-small);cursor:pointer}
 #send svg{width:20px;height:20px;flex:none}
+#print svg{width:18px;height:18px;flex:none}
 #send.off{opacity:.45;pointer-events:none}
-/* "Print or save as PDF", "Clear estimate": quiet text links, easy to tap. */
 .ghost{min-height:var(--tap);background:none;border:0;color:var(--mute);text-decoration:underline;padding:var(--s2);font-size:var(--t-small);cursor:pointer}
-.fine{margin:0;padding:0 14px 14px;font-size:var(--t-label);color:var(--mute)}
 /* "Back to products" bar, only when the estimate is open full-screen. */
 .dclose{display:none}
 .dclose svg{width:20px;height:20px;flex:none}
+.escrim{position:fixed;inset:0;z-index:39;background:rgba(19,21,20,.45)}
+.escrim[hidden]{display:none}
 @media (min-width:900px){
 main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;gap:var(--s6)}
-.docket{position:sticky;top:calc(env(safe-area-inset-top,0px) + 84px)}
+.docket{position:sticky;top:calc(env(safe-area-inset-top,0px) + 108px);max-height:calc(100vh - 132px)}
+.escroll{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+/* "View full estimate": the same estimate, large, in the middle of the screen. */
+#est.full{position:fixed;top:4vh;left:50%;transform:translateX(-50%);width:min(860px,94vw);max-height:92vh;z-index:40;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+#est.full #glance .tiles{grid-template-columns:repeat(4,1fr)}
+#est.full .ln{display:grid;grid-template-columns:minmax(0,1fr) auto 150px;align-items:center}
+#est.full .ln .nm{grid-column:1}
+#est.full .ln .amt::before{display:none}
+#est.full .acts{grid-template-columns:1fr 280px}
 }
 /* Phones and narrow tablets: the estimate sits under the price list, and
-   opens full-screen from the bar at the bottom. */
+   opens full-screen from the bar at the bottom or "View full estimate". */
 @media (max-width:899px){
-#est.open{position:fixed;inset:0;z-index:30;overflow:auto;border:0;border-radius:0;box-shadow:none;padding-top:env(safe-area-inset-top,0px);padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
-#est.open .dclose{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:2;width:100%;min-height:var(--tap);text-align:left;padding:14px var(--s4);background:var(--card);border:0;border-bottom:1px solid var(--line);color:var(--ink);font-size:var(--t-body);font-weight:var(--w-label);cursor:pointer}
+#est.open{position:fixed;inset:0;z-index:30;height:100dvh;border:0;border-radius:0;box-shadow:none;padding-top:env(safe-area-inset-top,0px)}
+#est.open .escroll{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+#est.open .efoot{padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+#est.open #full{display:none}
+#est.open .dclose{display:flex;align-items:center;gap:10px;flex:none;width:100%;min-height:var(--tap);text-align:left;padding:var(--s3) var(--s4);background:var(--card);border:0;border-bottom:1px solid var(--line);color:var(--ink);font-size:var(--t-body);font-weight:var(--w-label);cursor:pointer}
 }
 
 /* ---- 7. Phone estimate bar (bottom of the screen) ------------------------- */
@@ -230,16 +368,20 @@ main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;gap:var(--s6)}
 .bar{transition:transform .2s ease,visibility .2s}
 .bar.on.away{transform:translateY(100%);visibility:hidden}
 @media (prefers-reduced-motion:reduce){.bar{transition:none}}
-.bar b{font-weight:var(--w-strong)}
-.bar button{padding:10px var(--s4);font-size:var(--t-small)}
+.bar b{display:flex;flex-direction:column;line-height:1.15;font-weight:var(--w-strong);font-size:var(--t-sub)}
+.bar b small{font-size:var(--t-label);font-weight:var(--w-label);color:#cfcac0;white-space:nowrap}
+/* Phones under 380 px: "8 items" instead of "8 items in your estimate", so it stays on one line. */
+@media (max-width:379px){.bar .bl{display:none}}
+.bar button{padding:var(--s3) 18px;font-size:var(--t-body);white-space:nowrap}
 @media (min-width:900px){.bar,.bar.on{display:none}}
 
 /* ---- 8. About, Contact, footer -------------------------------------------- */
 .foot{margin-top:var(--gap-section);background:var(--ink);color:var(--footer-text);border-top:4px solid var(--y);padding:var(--s5) var(--s4) 110px}
-.foot div{max-width:var(--page);margin:0 auto;display:flex;align-items:center;gap:14px}
-.foot svg{width:44px;flex:none}
+.foot div{max-width:var(--page);margin:0 auto;display:flex;flex-direction:column;align-items:flex-start;gap:14px}
+/* The horizontal logo: 64 px tall on computers, 56 px on phones. */
+.flogo{display:block;height:64px;width:auto;max-width:100%}
+@media (max-width:599px){.flogo{height:56px}}
 .foot p{margin:0;font-size:var(--t-small)}
-.foot b{color:var(--card);font-weight:var(--w-strong);display:block;font-size:var(--t-body)}
 @media (min-width:900px){.foot{padding-bottom:28px}}
 
 /* ---- 9. Phones ---------------------------------------------------------------- */
@@ -248,9 +390,6 @@ nav{display:none;position:absolute;top:100%;left:0;right:0;background:var(--card
 nav.open{display:flex}
 nav a{padding:var(--s3) 0;border-bottom:1px solid var(--line)}
 #menu{display:block}
-/* Keeps the name to two lines next to the WhatsApp button and menu. */
-.hin .brand span{font-size:var(--t-body)}
-.wa .long{display:none}.wa .short{display:inline}
 }
 @media (max-width:560px){
 .row{grid-template-columns:minmax(0,1fr) auto}
@@ -264,6 +403,12 @@ nav a{padding:var(--s3) 0;border-bottom:1px solid var(--line)}
 .row.has-img{grid-template-columns:80px minmax(0,1fr) auto}
 .row.has-img .thumb{width:80px;height:80px;grid-row:span 2;align-self:start}
 .row.has-img .nm{grid-column:2/-1}
+/* Phones: price and stepper share one line when they fit; otherwise the
+   stepper moves under the price, on the right, so they never touch (seen
+   on an Android phone with large text, 17 Nov 2026). */
+.row.has-img:not(.one) .buy{grid-column:2/-1;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--s2) 10px;min-width:0}
+.row.has-img:not(.one) .buy .pr{white-space:nowrap}
+.row.has-img:not(.one) .buy>:last-child{margin-left:auto}
 .banner{margin-top:18px}
 }
 
@@ -282,5 +427,5 @@ main{display:block;padding:16px}
    none. The screen moved to 16 px in this phase; print keeps the old 15 px
    so the PDF quotation stays exactly the same. */
 @media print{body{font-size:15px}}
-@media print{.hero,#about,#contact,.foot,nav,.wa,#menu{display:none!important}}
+@media print{.hero,#about,#contact,.foot,nav,.enq,#menu{display:none!important}}
 @media print{#est{display:block!important;position:static!important;overflow:visible!important}.dclose{display:none!important}}
