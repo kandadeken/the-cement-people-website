@@ -240,7 +240,7 @@ $("#lines").innerHTML=rows.length?S.map((x,i)=>`<section class="es${SHUT[x.k]?" 
 +`<div class="est all"><span>${x.name} subtotal</span><b>${money(x.sum)}</b></div></div></section>`).join(""):(undoSnap?`<p class="mute empty" role="status">Estimate cleared. <button class="ghost undo" id="undo">Undo</button></p>`:`<p class="mute empty">Your estimate is empty. Add materials from the price list.</p>`);
 $("#tot").innerHTML=(TAX_RATE?`<div><span>Materials</span><span>${money(sub)}</span></div><div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")+`<div><span>Delivery</span><span class="tbc">To be confirmed</span></div><div class="gt"><span>Total (excl. delivery)</span><span>${money(total)}</span></div>`;
 $("#bar").classList.toggle("on",rows.length>0);
-$("#barTxt").innerHTML=`<small>${rows.length} ${rows.length===1?"item":"items"} in your estimate</small>${money(total)}`;
+$("#barTxt").innerHTML=`<small>${rows.length} ${rows.length===1?"item":"items"}<span class="bl"> in your estimate</span></small>${money(total)}`;
 const loc=$("#loc").value.trim();
 const msg=`Hello The Cement People,\n\nI would like a quote for *Estimate ${REF}* (${DATE}).\n`
 +(loc?`\n*Drop-off location:* ${loc}\n`:"")

@@ -370,7 +370,9 @@ main{grid-template-columns:minmax(0,1fr) 380px;align-items:start;gap:var(--s6)}
 .bar.on.away{transform:translateY(100%);visibility:hidden}
 @media (prefers-reduced-motion:reduce){.bar{transition:none}}
 .bar b{display:flex;flex-direction:column;line-height:1.15;font-weight:var(--w-strong);font-size:var(--t-sub)}
-.bar b small{font-size:var(--t-label);font-weight:var(--w-label);color:var(--on-dark-mute)}
+.bar b small{font-size:var(--t-label);font-weight:var(--w-label);color:var(--on-dark-mute);white-space:nowrap}
+/* Phones under 380 px: "8 items" instead of "8 items in your estimate", so it stays on one line. */
+@media (max-width:379px){.bar .bl{display:none}}
 .bar button{padding:var(--s3) 18px;font-size:var(--t-body);white-space:nowrap}
 @media (min-width:900px){.bar,.bar.on{display:none}}
 
