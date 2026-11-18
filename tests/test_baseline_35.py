@@ -29,9 +29,10 @@ def test_b01_steppers_typed_quantity_and_totals(short):
     # Astro site since the estimate redesign (17 Nov 2026): delivery shown
     # first as "To be confirmed", then "Total (excl. delivery)". The
     # single-file site keeps its original totals.
+    # Since 18 Nov 2026 ("Option A") the desktop panel no longer pins the
+    # "Delivery / To be confirmed" line; the Delivery box in the list says it.
     if short.astro:
-        assert short.totals.split("\n") == [
-            "Delivery", "To be confirmed", "Total (excl. delivery)", money(2292)]
+        assert short.totals.split("\n") == ["Total (excl. delivery)", money(2292)]
     else:
         assert short.totals.split("\n") == [
             "Materials", money(2292), "Delivery", "Quoted separately",

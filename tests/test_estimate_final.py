@@ -23,7 +23,9 @@ Final estimate refinements (Daniel and ChatGPT, 18 Nov 2026)
   R15  "Total (excl. delivery)" is a dark bar with an ochre left edge and
        white text, on the page and in the full view, light and dark; it
        fits on one line at 360 px; delivery stays a separate line on the
-       page; the WhatsApp button keeps the only ochre fill
+       page on phones and in the full view (not pinned in the desktop
+       panel, where the Delivery box explains it); the WhatsApp button keeps
+       the only ochre fill
 """
 import re
 
@@ -232,7 +234,15 @@ def test_r15_total_bar(browser, scheme, width):
         assert b["oneLine"] and b["spare"] >= 8, (view, b)
         assert min(page.evaluate(CONTRAST, ".tot .gt span")) >= 7
         assert page.evaluate("getComputedStyle(document.querySelector('#send')).backgroundColor") == ochre
-        if view == "page":
+        if view == "page" and not phone:
+            # desktop panel: no pinned delivery line (Option A, 18 Nov 2026);
+            # the Delivery box in the list explains it
+            assert page.evaluate("getComputedStyle(document.querySelector('.tot .tdl')).display") == "none"
+            assert "To be confirmed" not in page.inner_text("#est .efoot")
+            assert "Not included in the total" in page.inner_text("#est .edeliv")
+        if view == "full" and not phone:
+            assert page.evaluate("getComputedStyle(document.querySelector('.tot .tdl')).display") != "none"
+        if view == "page" and phone:
             # delivery: its own line above the bar, still "To be confirmed"
             d = page.evaluate("(() => { const d = document.querySelector('.tot .tdl'), g = document.querySelector('.tot .gt'); return [d.innerText.replace(/\\s+/g, ' '), d.getBoundingClientRect().bottom <= g.getBoundingClientRect().top] })()")
             assert d == ["Delivery To be confirmed", True], d

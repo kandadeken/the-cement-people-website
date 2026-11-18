@@ -86,7 +86,9 @@ def test_e01_sections_quantities_and_subtotals(browser):
     glance = page.evaluate("[...document.querySelectorAll('#glance .tiles div')].map(e => e.innerText.replace(/\\s+/g, ' '))")
     assert glance == ["160 bags of cement", "72 individual rods", "15 tons of rods", "6 rolls of binding wire"], glance
     assert page.inner_text("#tot .gt").split("\n") == ["Total (excl. delivery)", money(_expected_total())]
-    assert page.inner_text("#tot").split("\n")[:2] == ["Delivery", "To be confirmed"]
+    # The delivery line is still in the totals (it shows on phones and in the
+    # full view); the desktop panel hides it since 18 Nov 2026 ("Option A").
+    assert page.evaluate("document.querySelector('#tot .tdl').textContent") == "DeliveryTo be confirmed"
     assert not errors, errors
     page.context.close()
 

@@ -583,6 +583,12 @@ main{display:block;padding:16px}
     .tot .gt.lg span:last-child{font-size:16px}
   }
 
+  /* Desktop estimate panel (18 Nov 2026, "Option A"): no separate pinned
+     "Delivery – To be confirmed" line at the bottom; the Delivery box in the
+     list explains it, as the phone full view already does. Gives the list
+     more room. The full view and phones are unchanged. */
+  @media (min-width:900px){#est:not(.full) .tdl{display:none}}
+
   /* A little more room between the end of the estimate and About us, where
      the two sit one under the other. */
   @media (max-width:899px){#about{padding-top:calc(var(--gap-section) + var(--s5))}}

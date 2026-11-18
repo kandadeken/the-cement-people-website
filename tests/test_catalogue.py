@@ -36,8 +36,9 @@ def test_n03_estimate_uses_baseline_prices(catalogue):
     # Totals since 17 Nov 2026: "Delivery / To be confirmed", then
     # "Total (excl. delivery)" with the materials total.
     # The single-file site keeps its original totals ("Materials" first).
+    # (18 Nov 2026: the desktop panel no longer pins the delivery line.)
     if catalogue.astro:
-        assert catalogue.totals.split("\n") == ["Delivery", "To be confirmed", "Total (excl. delivery)", money(TOTAL)]
+        assert catalogue.totals.split("\n") == ["Total (excl. delivery)", money(TOTAL)]
     else:
         assert catalogue.totals.split("\n")[1] == money(TOTAL)
         assert catalogue.totals.split("\n")[-1] == money(TOTAL)
