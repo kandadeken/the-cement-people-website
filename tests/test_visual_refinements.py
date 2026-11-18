@@ -18,11 +18,10 @@ Visual refinements (Daniel and ChatGPT, 18 Nov 2026)
   V07  the PDF keeps its "01 · CEMENT" category markers
 """
 import re
-import subprocess
 
 import pytest
 
-from conftest import SITE_URL, settle
+from conftest import SITE_URL, print_pdf, settle
 
 ORDER = "() => { const q = {c2: 3, c3: 3, c4: 3, i2: 5, i3: 5, i5: 5, j3: 2, i8: 6}; for (const k in q) qty[k] = q[k]; renderList(); renderEst(); }"
 CATS = ["Cement, bags", "Iron rods, single pieces", "Iron rods, per ton", "Binding wire, rolls"]
@@ -161,14 +160,12 @@ def test_v06_quantity_and_total_still_one_line(browser, width):
     page.context.close()
 
 
-def test_v07_pdf_keeps_category_markers(browser, tmp_path):
+def test_v07_pdf_keeps_category_markers(browser):
     page, errors = _open(browser)
     page.evaluate(ORDER)
-    page.emulate_media(media="print")
-    page.evaluate("dispatchEvent(new Event('beforeprint'))")
-    pdf = tmp_path / "v07.pdf"
-    page.pdf(path=str(pdf), format="A4", print_background=True)
-    text = subprocess.run(["pdftotext", "-layout", str(pdf), "-"], capture_output=True, text=True).stdout
-    assert re.search(r"01 · CEMENT", text) and re.search(r"02 · IRON RODS", text) and re.search(r"03 · BINDING WIRE", text), text[:600]
+    pdf = print_pdf(page, "v07-order.pdf")
+    text = " ".join(pdf.text.split())
+    for marker in ("01 · CEMENT", "02 · IRON RODS", "03 · BINDING WIRE"):
+        assert marker in text, (marker, text[:600])
     assert not errors, errors
     page.context.close()
