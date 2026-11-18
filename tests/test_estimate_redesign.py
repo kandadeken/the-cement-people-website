@@ -86,7 +86,9 @@ def test_e01_sections_quantities_and_subtotals(browser):
     glance = page.evaluate("[...document.querySelectorAll('#glance .tiles div')].map(e => e.innerText.replace(/\\s+/g, ' '))")
     assert glance == ["160 bags of cement", "72 individual rods", "15 tons of rods", "6 rolls of binding wire"], glance
     assert page.inner_text("#tot .gt").split("\n") == ["Total (excl. delivery)", money(_expected_total())]
-    assert page.inner_text("#tot").split("\n")[:2] == ["Delivery", "To be confirmed"]
+    # The delivery line is still in the totals (it shows on phones and in the
+    # full view); the desktop panel hides it since 18 Nov 2026 ("Option A").
+    assert page.evaluate("document.querySelector('#tot .tdl').textContent") == "DeliveryTo be confirmed"
     assert not errors, errors
     page.context.close()
 
@@ -175,7 +177,9 @@ def test_e04_screen_whatsapp_and_pdf_match(browser):
     pdf = print_pdf(page, "redesign-full-quotation.pdf")
     rows = page.evaluate("""() => [...document.querySelectorAll('#quote tbody tr')].filter(r => r.cells.length === 5)
         .map(r => [r.cells[1].childNodes[0].textContent.trim(), r.cells[2].innerText.trim(), r.cells[4].innerText.trim()])""")
-    assert rows == screen
+    # The PDF quantity carries the unit word shown beside the box (17 Nov 2026).
+    units = page.evaluate("[...document.querySelectorAll('#lines .ln .u')].map(u => u.textContent.trim())")
+    assert rows == [[n, f"{q} {u}", a] for (n, q, a), u in zip(screen, units)]
     assert f"Total (excl. delivery) {total}" in pdf.text
     assert "2.5" in pdf.text
     assert total == money(_expected_total())
@@ -189,11 +193,14 @@ def test_e05_folded_section_keeps_its_figures(browser):
     _fill_everything(page)
     head = page.locator("#lines .es[data-g=cem] .esh")
     assert head.get_attribute("aria-expanded") == "true", "sections start open"
-    text = head.inner_text()
+    # Open: the heading shows only the section's name (17 Nov 2026);
+    # folded: its quantity and total too, so nothing is lost.
+    assert head.inner_text().split("\n") == ["01", "CEMENT"]
     head.click()
     assert head.get_attribute("aria-expanded") == "false"
     assert page.locator("#lines .es[data-g=cem] .ln").first.is_hidden()
-    assert head.inner_text() == text and "160 bags" in text
+    text = head.inner_text()
+    assert "160 bags" in text and money(sum(p["price"] * 40 for p in PRODUCTS if p["category"] == "Cement")) in text
     # Still folded after a quantity changes elsewhere; opens again on a tap.
     page.click('#est [data-inc="i8"]')
     assert page.locator("#lines .es[data-g=cem]").get_attribute("class").count("shut") == 1
@@ -365,7 +372,7 @@ def test_e12_up_to_50000_of_one_product(browser, mobile):
     import urllib.parse
     assert "   50,000 × GH₵75.00 = GH₵3,750,000.00" in urllib.parse.unquote(page.get_attribute("#send", "href"))
     page.evaluate("dispatchEvent(new Event('beforeprint'))")
-    assert page.evaluate("[...document.querySelectorAll('#quote tbody tr')].filter(r => r.cells.length === 5 && !r.classList.length)[0].cells[2].innerText") == "50,000"
+    assert page.evaluate("[...document.querySelectorAll('#quote tbody tr')].filter(r => r.cells.length === 5 && !r.classList.length)[0].cells[2].innerText") == "50,000 bags"
     fits = page.evaluate("""() => [...document.querySelectorAll('input[data-qty="c1"]')].map(i => {
         const c = document.createElement('canvas').getContext('2d'), s = getComputedStyle(i);
         c.font = `${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;

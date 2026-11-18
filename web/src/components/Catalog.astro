@@ -24,9 +24,12 @@ const { products, categoryInfo } = Astro.props;
 <div id="catalog">
 <h2 class="st">Products and prices</h2>
 <p class="lead">Add what you need to build your estimate. Prices are per unit, in Ghana cedis.</p>
+<!-- Category tiles first, then search (Daniel and ChatGPT, 17 Nov 2026):
+     the four tiles are the main way in; search is there for anyone who
+     prefers to type. -->
 <div class="tools">
-<input type="search" id="q" placeholder="Search materials" aria-label="Search materials">
 <div class="tabs" id="tabs" set:html={tabsHTML(products)}></div>
+<input type="search" id="q" placeholder="Search materials" aria-label="Search materials">
 </div>
 <div id="list" class="snap" set:html={listHTML(products, business.currencySymbol, categoryInfo)}></div>
 </div>

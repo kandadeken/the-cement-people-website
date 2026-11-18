@@ -108,8 +108,9 @@ const STEP=p=>TON(p)?0.5:1;
 const PIECE=p=>/\brod$/.test(p.unit);
 const BAG=p=>/\bbag$/.test(p.unit),ROLL=p=>/\broll$/.test(p.unit);
 const unitWord=(p,n)=>TON(p)?(n===1?"ton":"tons"):PIECE(p)?(n===1?"pc":"pcs"):BAG(p)?(n===1?"bag":"bags"):ROLL(p)?(n===1?"roll":"rolls"):"";
+const QW=v=>v.length>5?"l":v.length>3?"m":"s";
 const ctrl=p=>{const n=qty[p.id]||0,t=TON(p),one=t?"half a ton of":"one";return n
-?`<div class="qty"><div class="step"><button data-dec="${p.id}" aria-label="Remove ${one} ${p.name}">−</button><input type="text" autocomplete="off" inputmode="${t?"decimal":"numeric"}" value="${fmtQ(n)}" data-qty="${p.id}" aria-label="Quantity of ${p.name}${t?" in tons":PIECE(p)?" in pieces":BAG(p)?" in bags":ROLL(p)?" in rolls":""}"><button data-inc="${p.id}" aria-label="Add ${one} ${p.name}">+</button></div>${unitWord(p,n)?`<span class="u">${unitWord(p,n)}</span>`:""}</div>`
+?`<div class="qty"><div class="step"><button data-dec="${p.id}" aria-label="Remove ${one} ${p.name}">−</button><input type="text" autocomplete="off" inputmode="${t?"decimal":"numeric"}" value="${fmtQ(n)}" data-w="${QW(fmtQ(n))}" data-qty="${p.id}" aria-label="Quantity of ${p.name}${t?" in tons":PIECE(p)?" in pieces":BAG(p)?" in bags":ROLL(p)?" in rolls":""}"><button data-inc="${p.id}" aria-label="Add ${one} ${p.name}">+</button></div>${unitWord(p,n)?`<span class="u">${unitWord(p,n)}</span>`:""}</div>`
 :`<button class="add" data-inc="${p.id}" aria-label="Add ${p.name} to estimate">Add</button>`};
 
 
@@ -232,7 +233,9 @@ return{...S,parts,sum:parts.reduce((s,x)=>s+x.sum,0)};}).filter(S=>S.parts.lengt
 // Sections the customer has folded away (they stay folded while editing).
 const SHUT={};
 const CHEV=`<svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
-const lineHTML=p=>`<div class="ln"><div class="nm">${p.name}<small>${money(p.price)} per ${p.unit}</small></div>${ctrl(p)}<div class="amt">${money(p.price*qty[p.id])}</div></div>`;
+// Each product in the estimate: its name in a small quiet box (what the
+// customer is buying), the unit price under it, then quantity and line total.
+const lineHTML=p=>`<div class="ln"><div class="nm"><span class="pn">${p.name}</span><small>${money(p.price)} per ${p.unit}</small></div>${ctrl(p)}<div class="amt">${money(p.price*qty[p.id])}</div></div>`;
 function renderEst(){
 const rows=P.filter(p=>qty[p.id]>0);
 const sub=rows.reduce((s,p)=>s+p.price*qty[p.id],0);
@@ -247,16 +250,17 @@ if(!rows.length){$("#clearAsk").hidden=true;}
 $("#lines").innerHTML=rows.length?S.map((x,i)=>`<section class="es${SHUT[x.k]?" shut":""}" data-g="${x.k}"><button type="button" class="esh" data-sec="${x.k}" aria-expanded="${!SHUT[x.k]}">${CHEV}<span class="eno">${String(i+1).padStart(2,"0")}</span><span class="enm"><b>${x.name}</b><span>${x.parts.map(y=>howMany(y.k,y.n)).join(" · ")}</span></span><span class="esx">${money(x.sum)}</span></button><div class="esb">`
 +x.parts.map(y=>(x.parts.length>1||PART_SHORT[y.k]&&x.k==="rod"?`<h4 class="esub">${PART_SHORT[y.k]||PART_NAME[y.k]}<span>${howMany(y.k,y.n)}</span></h4>`:"")+y.rows.map(lineHTML).join("")+(x.k==="rod"&&x.parts.length>1?`<div class="est"><span>${PART_SHORT[y.k]} subtotal</span><b>${money(y.sum)}</b></div>`:"")).join("")
 +`<div class="est all"><span>${x.name} subtotal</span><b>${money(x.sum)}</b></div></div></section>`).join(""):(undoSnap?`<p class="mute empty" role="status">Estimate cleared. <button class="ghost undo" id="undo">Undo</button></p>`:`<p class="mute empty">Your estimate is empty. Add materials from the price list.</p>`);
-$("#tot").innerHTML=(TAX_RATE?`<div><span>Materials</span><span>${money(sub)}</span></div><div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")+`<div><span>Delivery</span><span class="tbc">To be confirmed</span></div><div class="gt${total>=1e6?" lg":""}"><span>Total (excl. delivery)</span><span>${money(total)}</span></div>`;
+$("#tot").innerHTML=(TAX_RATE?`<div><span>Materials</span><span>${money(sub)}</span></div><div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")+`<div class="tdl"><span>Delivery</span><span class="tbc">To be confirmed</span></div><div class="gt${total>=1e6?" lg":""}"><span>Total (excl. delivery)</span><span>${money(total)}</span></div>`;
 $("#bar").classList.toggle("on",rows.length>0);
 $("#barTxt").innerHTML=`<small>${rows.length} ${rows.length===1?"item":"items"}<span class="bl"> in your estimate</span></small>${money(total)}`;
 const loc=$("#loc").value.trim();
-const msg=`Hello The Cement People,\n\nI would like a quote for *Estimate ${REF}* (${DATE}).\n`
+// WhatsApp message (18 Nov 2026): the opening asks the question once; the
+// full itemised list, reference, date and total follow unchanged.
+const msg=`Hello The Cement People,\n\nI'd like to enquire about the following estimate. Please confirm product availability and delivery cost.\n\n*Estimate ${REF}* (${DATE})\n`
 +(loc?`\n*Drop-off location:* ${loc}\n`:"")
 +"\n*Items*\n"+rows.map((p,i)=>`${i+1}. ${p.name} (${p.unit})\n   ${fmtQ(qty[p.id])} × ${money(p.price)} = ${money(p.price*qty[p.id])}`).join("\n")
 +`\n\n*Materials total: ${money(sub)}*`
-+(TAX_RATE?`\nTax (${+(TAX_RATE*100).toFixed(2)}%): ${money(tax)}\nTotal (excl. delivery): ${money(total)}`:"")
-+"\n\nPlease confirm availability and the delivery cost"+(loc?" to this location.":".");
++(TAX_RATE?`\nTax (${+(TAX_RATE*100).toFixed(2)}%): ${money(tax)}\nTotal (excl. delivery): ${money(total)}`:"");
 renderQuote(S,sub,tax,total,loc);
 const sd=$("#send");
 if(rows.length){sd.href="https://wa.me/"+WA_NUMBER+"?text="+encodeURIComponent(msg);sd.classList.remove("off");sd.removeAttribute("aria-disabled")}
@@ -268,6 +272,10 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-sec]");if(
 // ---- The printable A4 quotation ---------------------------------------------
 // Fills the hidden <section id="quote">. print.css hides everything else when
 // printing. esc() makes the customer's typed location safe to display.
+// Refinements (17 Nov 2026): the quantity carries the same unit word as
+// beside the quantity box on screen ("120 bags", "24 pcs", "2.5 tons"); the contact details are one per line; "Materials" only shows
+// when there is tax (otherwise it repeats the total); section rows and
+// subtotals stay on the same page as their items (print.css).
 // Brand identity V1.1 (17 Nov 2026): the horizontal logo (copied from the
 // #q-logo drawing in QuotePieces.astro), the same sections as the estimate
 // with quantities and subtotals, and "Total (excl. delivery)". Each row
@@ -281,19 +289,19 @@ function renderQuote(S,sub,tax,total,loc){
 let n=0;
 const body=S.length?S.map((x,i)=>`<tr class="q-sec"><td colspan="5">${String(i+1).padStart(2,"0")} · ${x.name}<span>${x.parts.map(y=>howMany(y.k,y.n)).join(" · ")}</span></td></tr>`
 +x.parts.map(y=>(x.k==="rod"?`<tr class="q-sub"><td colspan="5">${PART_SHORT[y.k]}</td></tr>`:"")
-+y.rows.map(p=>`<tr><td class="n">${++n}</td><td>${p.name} <small>per ${p.unit}</small></td><td class="r">${fmtQ(qty[p.id])}</td><td class="r">${money(p.price)}</td><td class="r">${money(p.price*qty[p.id])}</td></tr>`).join("")
++y.rows.map(p=>`<tr><td class="n">${++n}</td><td>${p.name} <small>per ${p.unit}</small></td><td class="r">${fmtQ(qty[p.id])} ${unitWord(p,qty[p.id])}</td><td class="r">${money(p.price)}</td><td class="r">${money(p.price*qty[p.id])}</td></tr>`).join("")
 +(x.k==="rod"&&x.parts.length>1?`<tr class="q-st"><td></td><td colspan="3">${PART_NAME[y.k]} subtotal</td><td class="r">${money(y.sum)}</td></tr>`:"")).join("")
 +`<tr class="q-st all"><td></td><td colspan="3">${x.name} subtotal</td><td class="r">${money(x.sum)}</td></tr>`).join(""):`<tr class="q-empty"><td colspan="5">No items added yet.</td></tr>`;
 $("#quote").innerHTML=`<header class="q-head"><svg class="q-logo" viewBox="0 0 592.329 100" role="img" aria-label="The Cement People">${LOGO}</svg>`
 +`<div class="q-doc"><h1>Estimate</h1><dl><dt>Reference</dt><dd>${REF}</dd><dt>Date</dt><dd>${DATE}</dd></dl></div></header>`
-+`<div class="q-to"><div><small>Drop-off location</small><p>${loc?esc(loc):"Not provided"}</p></div><div><small>Delivery</small><p>To be confirmed after you send this estimate</p></div><div><small>Contact</small><p>${TCP.business.phone} (call or WhatsApp)<br>${TCP.business.website} · ${TCP.business.town}</p></div></div>`
++`<div class="q-to"><div><small>Drop-off location</small><p>${loc?esc(loc):"Not provided"}</p></div><div><small>Delivery</small><p>To be confirmed after you send this estimate</p></div><div><small>Contact</small><p>${TCP.business.phone} (call or WhatsApp)<br>${TCP.business.website}<br>${TCP.business.town}</p></div></div>`
 +`<table><thead><tr><th class="n">#</th><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>${body}</tbody></table>`
 +`<div class="q-close"><div class="q-terms"><h2>Delivery and terms</h2><ul>`
 +`<li>We deliver to your drop-off location. The delivery cost depends on your order and location, and is agreed with you before delivery.</li>`
 +`<li>This estimate is indicative. Final prices and availability are confirmed when you order.</li>`
 +`<li>All prices are in Ghana cedis (GH₵).</li></ul>`
 +`<h2>To order</h2><p>WhatsApp or call ${TCP.business.phone} and quote reference <b>${REF}</b>.</p></div>`
-+`<div class="q-sum"><div class="q-mat"><span>Materials</span><span>${money(sub)}</span></div>`
++`<div class="q-sum">`+(TAX_RATE?`<div class="q-mat"><span>Materials</span><span>${money(sub)}</span></div>`:"")
 +(TAX_RATE?`<div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")
 +`<div><span>Delivery</span><span>To be confirmed</span></div>`
 +`<div class="gt"><span>Total (excl. delivery)</span><span>${money(total)}</span></div></div></div>`;
@@ -389,6 +397,7 @@ function fullEst(on){const e=$("#est"),b=$("#full");e.classList.toggle("full",on
 b.querySelector("span").textContent=on?"Back to the price list":"View full estimate";b.setAttribute("aria-expanded",on);if(on)$("#escroll").scrollTop=0;}
 $("#full").addEventListener("click",()=>{if(mq.matches)openEst();else fullEst(!$("#est").classList.contains("full"));});
 $("#escrim").addEventListener("click",()=>fullEst(false));
+$("#fullX").addEventListener("click",()=>{fullEst(false);$("#full").focus();});
 document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("#est").classList.contains("full")){fullEst(false);$("#full").focus();}else if(!$("#clearAsk").hidden){askClear(false);$("#clear").focus();}});
 mq.addEventListener("change",()=>{if(!mq.matches)closeEst();else fullEst(false);});
 
@@ -428,6 +437,11 @@ newQuote();
 // WhatsApp number, phone and town come from src/config/business.ts via the
 // data block (also used in the quotation header and "To order" line above).
 // ---------------------------------------------------------------------------
+// Quantity boxes in the estimate on phones size to their number: s (up
+// to 3 characters, "2", "120"), m (4-5, "9,999") or l (6+, "50,000"), so
+// no digit is ever hidden and short numbers leave room for the line total.
+// Updated while typing too.
+document.addEventListener("input",e=>{if(e.target.matches(".step input"))e.target.dataset.w=QW(e.target.value)});
 const WA_NUMBER=TCP.business.whatsapp;
 $("#loc").addEventListener("input",renderEst);
 document.querySelectorAll("[data-wa]").forEach(a=>{if(WA_NUMBER)a.href="https://wa.me/"+WA_NUMBER+"?text="+encodeURIComponent("Hello, I would like to enquire about your materials.")});

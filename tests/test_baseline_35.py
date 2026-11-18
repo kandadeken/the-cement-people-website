@@ -7,7 +7,7 @@ No original check has been removed.
 import re
 
 from conftest import (A4_POINTS, BY_ID, in_sections, LOCATION, PRODUCTS, REF_PATTERN, SYNTHETIC,
-                      expected_row, money, squash)
+                      expected_row, money, squash, SITE_URL)
 
 CONTROL_LABELS = ("Send my estimate", "Clear estimate", "Print or save", "Swipe",
                   "Search materials", "View estimate", "Enquire on WhatsApp")
@@ -29,9 +29,10 @@ def test_b01_steppers_typed_quantity_and_totals(short):
     # Astro site since the estimate redesign (17 Nov 2026): delivery shown
     # first as "To be confirmed", then "Total (excl. delivery)". The
     # single-file site keeps its original totals.
+    # Since 18 Nov 2026 ("Option A") the desktop panel no longer pins the
+    # "Delivery / To be confirmed" line; the Delivery box in the list says it.
     if short.astro:
-        assert short.totals.split("\n") == [
-            "Delivery", "To be confirmed", "Total (excl. delivery)", money(2292)]
+        assert short.totals.split("\n") == ["Total (excl. delivery)", money(2292)]
     else:
         assert short.totals.split("\n") == [
             "Materials", money(2292), "Delivery", "Quoted separately",
@@ -76,15 +77,32 @@ def test_b08_whatsapp_materials_total(short):
     assert f"*Materials total: {money(2292)}*" in short.message
 
 
+# The Astro site's message opens with the question (agreed 18 Nov 2026) and
+# no longer repeats it at the end; the single-file site keeps its original
+# closing line.
+OPENING = ("I'd like to enquire about the following estimate. "
+           "Please confirm product availability and delivery cost.")
+ON_ASTRO = not SITE_URL.startswith("file:")
+
+
 def test_b09_whatsapp_asks_to_confirm_availability_and_delivery(short):
-    assert short.message.endswith(
-        "Please confirm availability and the delivery cost to this location.")
+    if ON_ASTRO:
+        assert short.message.startswith("Hello The Cement People,\n\n" + OPENING + "\n\n*Estimate ")
+        assert short.message.count("Please confirm") == 1
+        assert short.message.endswith(f"*Materials total: {money(2292)}*")
+    else:
+        assert short.message.endswith(
+            "Please confirm availability and the delivery cost to this location.")
 
 
 def test_b10_whatsapp_omits_location_when_empty(short):
     assert "Drop-off location" not in short.message_without_location
-    assert short.message_without_location.endswith(
-        "Please confirm availability and the delivery cost.")
+    if ON_ASTRO:
+        assert short.message_without_location.startswith("Hello The Cement People,\n\n" + OPENING)
+        assert short.message_without_location.endswith(f"*Materials total: {money(2292)}*")
+    else:
+        assert short.message_without_location.endswith(
+            "Please confirm availability and the delivery cost.")
 
 
 # ---- A4 PDF, short quotation ----------------------------------------------
@@ -102,8 +120,9 @@ def test_b13_pdf_quantities_are_plain_numbers(short):
         expected_row(1, BY_ID["c2"], 9),
         expected_row(2, BY_ID["i3"], 24),
     ]
-    # And the quantity cells contain only digits: no input boxes or buttons.
-    assert short.pdf.qty_cells == ["9", "24"]
+    # And the quantity cells contain only text (no input boxes or buttons):
+    # the number, and on the Astro site its unit word (17 Nov 2026).
+    assert short.pdf.qty_cells == (["9 bags", "24 pcs"] if short.astro else ["9", "24"])
 
 
 def test_b14_pdf_has_reference_date_location(short):
@@ -217,7 +236,9 @@ def test_b29_last_page_number_and_closing_section(long):
 
 def test_b30_totals_block_intact_on_last_page(long):
     last = long.pdf.pages[-1]
-    assert f"Materials {money(long.materials_total)}" in last
+    # Astro site since 17 Nov 2026: no "Materials" line without tax (it
+    # repeated the total); the single-file site keeps it.
+    assert (f"Materials {money(long.materials_total)}" in last) != long.astro
     if long.astro:
         assert "Delivery To be confirmed" in last
         assert f"Total (excl. delivery) {money(long.materials_total)}" in last

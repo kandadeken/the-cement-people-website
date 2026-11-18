@@ -18,10 +18,10 @@ import WhatsAppIcon from "./WhatsAppIcon.astro";
 ---
 <aside id="est" class="docket" aria-label="Your estimate">
 <button class="dclose noprint" id="dclose"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Back to products</button>
-<div class="dh"><b>Your estimate</b><span id="ref"></span></div>
+<div class="dh"><b>Your estimate</b><span id="ref"></span><button type="button" class="xclose noprint" id="fullX" aria-label="Close the full estimate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
 <div class="dm" id="date"></div>
 <div class="etools noprint" id="etools">
-<button type="button" class="etool" id="full"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>View full estimate</span></button>
+<button type="button" class="etool" id="full"><svg class="i-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="i-back" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>View full estimate</span></button>
 <button type="button" class="etool" id="clear"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Clear estimate</span></button>
 </div>
 <div class="eask noprint" id="clearAsk" role="alertdialog" aria-labelledby="clearQ" hidden>
@@ -31,11 +31,13 @@ import WhatsAppIcon from "./WhatsAppIcon.astro";
 </div>
 <div class="escroll" id="escroll">
 <div id="glance"></div>
-<div class="estart" id="start"><b>How to build your estimate</b><ol><li>Choose a tab in the price list: Cement, Iron rods or Binding wire.</li><li>Tap <b>Add</b> on each product you need.</li><li>Set the quantity with − and +, or type it. Your total updates as you go.</li></ol></div>
+<div class="estart" id="start"><b>How to build your estimate</b><ol><li>Choose a category in the price list: Cement, Iron rods or Binding wire.</li><li>Tap <b>Add</b> on each product you need.</li><li>Set the quantity with − and +, or type it. Your total updates as you go.</li></ol></div>
 <div id="lines"></div>
 <section class="edeliv"><h3>Delivery</h3><p>Not included in the total. We confirm the delivery cost for your order and location after you send this estimate.</p>
 <label class="dl">Drop-off location<input type="text" id="loc" placeholder="Town or site address" autocomplete="street-address"></label></section>
-<p class="fine">Delivery cost depends on your order and drop-off location, and is agreed with us before delivery. Estimates are indicative; final prices and availability are confirmed with you.</p>
+<!-- One delivery explanation only (in the box above); this line keeps the
+     price disclaimer on screen (17 Nov 2026). -->
+<p class="fine">Estimates are indicative; final prices and availability are confirmed with you.</p>
 </div>
 <div class="efoot">
 <div id="tot" class="tot"></div>
