@@ -169,10 +169,21 @@ const sharedPrice=l=>l.length>1&&l.every(p=>p.price===l[0].price&&p.unit===l[0].
 // fails to load, the section gets class "nobanner" and the photo is hidden;
 // the heading always stays. Loaded with the page at low priority, so it is
 // usually ready before the customer opens a rod tab.
+// Category arrows (18 Nov 2026): while browsing, each category heading has
+// ‹ › buttons that move to the previous / next category (the same as tapping
+// a tile). The first category's ‹ and the last one's › are disabled.
+// Swiping by finger or trackpad still works. Mirrored in catalog-html.ts.
+const ARR_L=`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ARR_R=`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const catName=c=>{const[l,s]=TAB_LABEL[c]||[c,""];return s?`${l}, ${s.toLowerCase()}`:l;};
+const navHTML=g=>{const i=cats.indexOf(g),a=cats[i-1],z=cats[i+1];return `<span class="snav">`
++(a?`<button type="button" class="sgo" data-go="${a}" aria-label="Previous category: ${catName(a)}">${ARR_L}</button>`:`<button type="button" class="sgo" disabled aria-label="Previous category">${ARR_L}</button>`)
++(z?`<button type="button" class="sgo" data-go="${z}" aria-label="Next category: ${catName(z)}">${ARR_R}</button>`:`<button type="button" class="sgo" disabled aria-label="Next category">${ARR_R}</button>`)
++`</span>`;};
 const sec=(g,l,browse)=>{const subs=[...new Set(l.map(p=>p.sub||""))],info=CAT_INFO[g]||{},b=browse&&info.banner,one=browse&&sharedPrice(l);
 return `<section>`
 +(b?`<img class="banner" src="${b.src}" srcset="${b.srcset}" sizes="${BANNER_SIZES}" alt="" width="${b.w}" height="${b.h}" fetchpriority="low" onerror="this.closest('section').classList.add('nobanner')">`:"")
-+`<h3>${ICON[g]||""}${g}</h3>`+(info.note?`<p class="cat-note">${info.note}</p>`:"")
++`<h3>${ICON[g]||""}${g}${browse?navHTML(g):""}</h3>`+(info.note?`<p class="cat-note">${info.note}</p>`:"")
 +(one?`<p class="cat-price"><b>${money(one.price)}</b> per ${one.unit}, all sizes</p>`:"")
 +`${subs.map(x=>(x?`<h4>${x}</h4>`:"")+l.filter(p=>(p.sub||"")===x).map(p=>rowHTML(p,!!one)).join("")).join("")}</section>`;};
 function fit(){const L=$("#list");if(q||!L.children.length)return;const s=L.children[cats.indexOf(cat)];if(s)L.style.height=s.offsetHeight+"px";}
@@ -205,6 +216,8 @@ L.scrollTo({left:cats.indexOf(c)*L.clientWidth,behavior:instant||RM?"auto":"smoo
 fit();
 }
 
+document.addEventListener("click",e=>{const b=e.target.closest(".sgo[data-go]");if(b)goCat(b.dataset.go);});
+
 // ---- The estimate panel and the WhatsApp message -----------------------------
 // Rebuilt after every change. Totals: materials = sum of price × quantity;
 // tax is TAX_RATE (0 today); delivery is always quoted separately.
@@ -235,7 +248,11 @@ const SHUT={};
 const CHEV=`<svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
 // Each product in the estimate: its name in a small quiet box (what the
 // customer is buying), the unit price under it, then quantity and line total.
-const lineHTML=p=>`<div class="ln"><div class="nm"><span class="pn">${p.name}</span><small>${money(p.price)} per ${p.unit}</small></div>${ctrl(p)}<div class="amt">${money(p.price*qty[p.id])}</div></div>`;
+// Numbers (18 Nov 2026): every product in the estimate is numbered 1, 2,
+// 3... in the order shown, straight across categories; the same numbers as
+// the WhatsApp message and the PDF. LN is reset before each render.
+let LN=0;
+const lineHTML=p=>`<div class="ln"><div class="nm"><span class="lno">${++LN}</span><span class="pn">${p.name}</span><small>${money(p.price)} per ${p.unit}</small></div>${ctrl(p)}<div class="amt">${money(p.price*qty[p.id])}</div></div>`;
 function renderEst(){
 const rows=P.filter(p=>qty[p.id]>0);
 const sub=rows.reduce((s,p)=>s+p.price*qty[p.id],0);
@@ -247,7 +264,8 @@ $("#glance").innerHTML=rows.length?`<h3>Your order at a glance</h3><div class="t
 $("#start").hidden=rows.length>0||!!undoSnap;
 $("#etools").hidden=!rows.length;
 if(!rows.length){$("#clearAsk").hidden=true;}
-$("#lines").innerHTML=rows.length?S.map((x,i)=>`<section class="es${SHUT[x.k]?" shut":""}" data-g="${x.k}"><button type="button" class="esh" data-sec="${x.k}" aria-expanded="${!SHUT[x.k]}">${CHEV}<span class="eno">${String(i+1).padStart(2,"0")}</span><span class="enm"><b>${x.name}</b><span>${x.parts.map(y=>howMany(y.k,y.n)).join(" · ")}</span></span><span class="esx">${money(x.sum)}</span></button><div class="esb">`
+LN=0;
+$("#lines").innerHTML=rows.length?S.map((x,i)=>`<section class="es${SHUT[x.k]?" shut":""}" data-g="${x.k}"><button type="button" class="esh" data-sec="${x.k}" aria-expanded="${!SHUT[x.k]}">${CHEV}<span class="enm"><b>${x.name}</b><span>${x.parts.map(y=>howMany(y.k,y.n)).join(" · ")}</span></span><span class="esx">${money(x.sum)}</span></button><div class="esb">`
 +x.parts.map(y=>(x.parts.length>1||PART_SHORT[y.k]&&x.k==="rod"?`<h4 class="esub">${PART_SHORT[y.k]||PART_NAME[y.k]}<span>${howMany(y.k,y.n)}</span></h4>`:"")+y.rows.map(lineHTML).join("")+(x.k==="rod"&&x.parts.length>1?`<div class="est"><span>${PART_SHORT[y.k]} subtotal</span><b>${money(y.sum)}</b></div>`:"")).join("")
 +`<div class="est all"><span>${x.name} subtotal</span><b>${money(x.sum)}</b></div></div></section>`).join(""):(undoSnap?`<p class="mute empty" role="status">Estimate cleared. <button class="ghost undo" id="undo">Undo</button></p>`:`<p class="mute empty">Your estimate is empty. Add materials from the price list.</p>`);
 $("#tot").innerHTML=(TAX_RATE?`<div><span>Materials</span><span>${money(sub)}</span></div><div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")+`<div class="tdl"><span>Delivery</span><span class="tbc">To be confirmed</span></div><div class="gt${total>=1e6?" lg":""}"><span>Total (excl. delivery)</span><span>${money(total)}</span></div>`;

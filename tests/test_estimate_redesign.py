@@ -163,7 +163,7 @@ def test_e04_screen_whatsapp_and_pdf_match(browser):
     _fill_everything(page)
     page.fill("#loc", "Kasoa, near Goil")
     screen = page.evaluate("""() => [...document.querySelectorAll('#lines .ln')].map(l => [
-        l.querySelector('.nm').childNodes[0].textContent.trim(), l.querySelector('input').value,
+        (l.querySelector('.nm .pn') || l.querySelector('.nm').childNodes[0]).textContent.trim(), l.querySelector('input').value,
         l.querySelector('.amt').childNodes[0].textContent.trim()])""")
     total = page.inner_text("#tot .gt").split("\n")[1]
     href = page.get_attribute("#send", "href")
@@ -195,7 +195,8 @@ def test_e05_folded_section_keeps_its_figures(browser):
     assert head.get_attribute("aria-expanded") == "true", "sections start open"
     # Open: the heading shows only the section's name (17 Nov 2026);
     # folded: its quantity and total too, so nothing is lost.
-    assert head.inner_text().split("\n") == ["01", "CEMENT"]
+    # (No "01" marker since 18 Nov 2026: products are numbered instead.)
+    assert head.inner_text().split("\n") == ["CEMENT"]
     head.click()
     assert head.get_attribute("aria-expanded") == "false"
     assert page.locator("#lines .es[data-g=cem] .ln").first.is_hidden()

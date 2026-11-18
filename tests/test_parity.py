@@ -119,12 +119,11 @@ def test_t03_search_words_find_the_right_products(browser, words, expected):
 
 def test_t04_page_sections_text_and_links_unchanged(browser):
     page, _ = open_site(browser)
-    for name, sel in [("about", "#about")]:
-        assert page.evaluate(READ_SECTION, sel) == SECTIONS["shared"][name], f"{name} text or links changed"
     # The header differs since 17 Nov 2026: the Astro site has no WhatsApp
     # button in the header (Enquire is in the hero and Contact instead).
+    # About us differs since 18 Nov 2026: new wording on the Astro site only.
     version = "astro" if _is_astro(page) else "single_file"
-    for name, sel in [("header", "header"), ("hero", ".hero .htx"), ("contact", "#contact"), ("footer", "footer")]:
+    for name, sel in [("about", "#about"), ("header", "header"), ("hero", ".hero .htx"), ("contact", "#contact"), ("footer", "footer")]:
         assert page.evaluate(READ_SECTION, sel) == SECTIONS[version][name], f"{name} text or links changed ({version})"
     page.context.close()
 
