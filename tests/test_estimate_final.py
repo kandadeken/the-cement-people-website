@@ -17,6 +17,12 @@ Final estimate refinements (Daniel and ChatGPT, 18 Nov 2026)
   R12  sticky parts: the bottom bar shows while choosing products and hides
        once the estimate is on screen; no new sticky row in the estimate
   R13  phones: more room between the end of the estimate and About us
+  R14  each product name sits in a small neutral box (name only; the unit
+       price stays outside, under it)
+  R15  "Total (excl. delivery)" is a dark bar with an ochre left edge and
+       white text, on the page and in the full view, light and dark; it
+       fits on one line at 360 px; delivery stays a separate line on the
+       page; the WhatsApp button keeps the only ochre fill
 """
 import re
 
@@ -180,5 +186,55 @@ def test_r13_room_before_about(browser):
     page.evaluate(ORDER)
     gap = page.evaluate("document.querySelector('#about h2').getBoundingClientRect().top - document.querySelector('#est').getBoundingClientRect().bottom")
     assert gap >= 60, gap
+    assert not errors, errors
+    page.context.close()
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+@pytest.mark.parametrize("width", [360, 390, 1280])
+def test_r14_product_name_box(browser, scheme, width):
+    page, errors = _open(browser, width, 844, width < 900, scheme)
+    page.evaluate(ORDER)
+    fill = page.evaluate("getComputedStyle(document.querySelector('#glance .tiles div')).backgroundColor")
+    names = page.evaluate("""[...document.querySelectorAll('#lines .ln')].map(l => { const pn = l.querySelector('.pn'), sm = l.querySelector('.nm small'), r = pn.getBoundingClientRect(), q = sm.getBoundingClientRect();
+        return {text: pn.innerText, bg: getComputedStyle(pn).backgroundColor, below: q.top >= r.bottom - 1, outside: !pn.contains(sm), narrow: r.width < l.getBoundingClientRect().width * 0.9 || pn.innerText.length > 24, h: r.height} })""")
+    assert len(names) == 8, names
+    assert all(n["bg"] == fill and n["below"] and n["outside"] and n["narrow"] for n in names), names
+    assert all(n["h"] < 30 for n in names), names
+    assert min(page.evaluate(CONTRAST, "#lines .ln .pn")) >= 4.5
+    assert not errors, errors
+    page.context.close()
+
+
+BAR = """(() => { const g = document.querySelector('.tot .gt'), s = getComputedStyle(g), k = g.children;
+  return {bg: s.backgroundColor, edge: s.borderLeftColor, edgeW: parseFloat(s.borderLeftWidth), color: s.color, label: k[0].innerText, amt: k[1].innerText,
+          oneLine: Math.abs(k[0].getBoundingClientRect().top - k[1].getBoundingClientRect().top) < 12,
+          spare: g.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight) - k[0].getBoundingClientRect().width - k[1].getBoundingClientRect().width - parseFloat(s.columnGap)} })()"""
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+@pytest.mark.parametrize("width", [360, 390, 1280])
+def test_r15_total_bar(browser, scheme, width):
+    phone = width < 900
+    page, errors = _open(browser, width, 844 if width > 360 else 740, phone, scheme)
+    page.evaluate(ORDER)
+    dark = page.evaluate("getComputedStyle(document.querySelector('#est .dh')).backgroundColor")
+    ochre = page.evaluate("getComputedStyle(document.querySelector('.eno')).backgroundColor")
+    for view in ("page", "full"):
+        if view == "full":
+            page.evaluate("openEst()" if phone else "fullEst(true)")
+        b = page.evaluate(BAR)
+        assert b["bg"] == dark and b["edge"] == ochre and b["edgeW"] >= 3, (view, b)
+        assert b["bg"] != ochre and b["label"] == "Total (excl. delivery)" and b["amt"] == money(ORDER_TOTAL), (view, b)
+        assert b["oneLine"] and b["spare"] >= 8, (view, b)
+        assert min(page.evaluate(CONTRAST, ".tot .gt span")) >= 7
+        assert page.evaluate("getComputedStyle(document.querySelector('#send')).backgroundColor") == ochre
+        if view == "page":
+            # delivery: its own line above the bar, still "To be confirmed"
+            d = page.evaluate("(() => { const d = document.querySelector('.tot .tdl'), g = document.querySelector('.tot .gt'); return [d.innerText.replace(/\\s+/g, ' '), d.getBoundingClientRect().bottom <= g.getBoundingClientRect().top] })()")
+            assert d == ["Delivery To be confirmed", True], d
+    if phone:
+        share = page.evaluate("document.querySelector('#escroll').clientHeight / innerHeight")
+        assert share >= 0.60, share
     assert not errors, errors
     page.context.close()

@@ -233,7 +233,9 @@ return{...S,parts,sum:parts.reduce((s,x)=>s+x.sum,0)};}).filter(S=>S.parts.lengt
 // Sections the customer has folded away (they stay folded while editing).
 const SHUT={};
 const CHEV=`<svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
-const lineHTML=p=>`<div class="ln"><div class="nm">${p.name}<small>${money(p.price)} per ${p.unit}</small></div>${ctrl(p)}<div class="amt">${money(p.price*qty[p.id])}</div></div>`;
+// Each product in the estimate: its name in a small quiet box (what the
+// customer is buying), the unit price under it, then quantity and line total.
+const lineHTML=p=>`<div class="ln"><div class="nm"><span class="pn">${p.name}</span><small>${money(p.price)} per ${p.unit}</small></div>${ctrl(p)}<div class="amt">${money(p.price*qty[p.id])}</div></div>`;
 function renderEst(){
 const rows=P.filter(p=>qty[p.id]>0);
 const sub=rows.reduce((s,p)=>s+p.price*qty[p.id],0);
