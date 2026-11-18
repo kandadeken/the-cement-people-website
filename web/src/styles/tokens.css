@@ -54,6 +54,7 @@
   --on-y:#131514;    /* text on ochre buttons (charcoal in both modes, 8.5:1) */
   --thumb-bg:#fff;   /* product photos keep their white background in both modes */
   --panel:#f4f4f4;   /* the price-list panel (the page colour in light mode) */
+  --gl:#fffdf9;      /* "order at a glance" tiles: near-white, a breath of warmth */
   --sel:#f8f2ea;     /* products already in the estimate: a faint ochre wash (17 Nov 2026) */
   --fill:#f4f4f4;    /* inner fills: stepper buttons, order-summary tiles, delivery box, help box */
   --field:#fff;      /* boxes you type in, and Add / secondary buttons */
@@ -109,6 +110,7 @@
   --line:#434a46;
   --y-soft:#5a3f12;
   --y-tint:#3d301a;
+  --gl:#1c1f1d;
   --sel:#302b22;
   --sec-a:#363b38; --sec-a-body:#262a28;
   --sec-b:#3b403d; --sec-b-body:#2b2f2d;
