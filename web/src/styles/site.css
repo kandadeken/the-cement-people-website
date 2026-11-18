@@ -517,3 +517,47 @@ main{display:block;padding:16px}
 @media print{body{font-size:15px}}
 @media print{.hero,#about,#contact,.foot,nav,.enq,#menu{display:none!important}}
 @media print{#est{display:block!important;position:static!important;overflow:visible!important}.dclose{display:none!important}}
+
+/* Estimate refinements (18 Nov 2026, agreed with Daniel and ChatGPT).
+   Screen only, so the printed page and PDF are untouched. */
+@media screen{
+  /* The estimate on the page announces itself: a heading the same size as
+     "Products and prices", and a thin ochre edge across the top (the same
+     black-and-ochre pairing as the footer). The full view keeps its
+     smaller title and no edge. */
+  #est:not(.full):not(.open){border-top:3px solid var(--y)}
+  #est:not(.full):not(.open) .dh{flex-wrap:wrap;align-items:baseline;row-gap:2px;padding-top:18px}
+  #est:not(.full):not(.open) .dh b{font-size:var(--t-heading);line-height:1.15;white-space:nowrap}
+  /* The reference sits on the right when it fits beside the title; when it
+     does not, it drops to its own line, starting on the left. */
+  #est:not(.full):not(.open) .dh #ref{margin-left:0;white-space:nowrap}
+
+  /* "View full estimate": an ochre outline, so it is easy to find without
+     competing with the solid ochre WhatsApp button. Clear estimate stays
+     quiet. */
+  #est:not(.full) #full{border:1.5px solid var(--y);border-radius:var(--r-control);padding:0 12px;min-height:40px;text-decoration:none}
+
+  /* Subtotals: light neutral strips, the amount a touch larger. */
+  .est{background:var(--fill);border-radius:6px;padding:9px 12px;margin-top:8px}
+  .est + .est{margin-top:4px}
+  .est.all{border-top:0}
+  .est b{font-size:var(--t-body)}
+  .esb > .est:last-child{margin-bottom:var(--s3)}
+
+  /* Phones: the quantity and the line total share one line. The room
+     comes from padding and a slightly narrower quantity box, not from
+     smaller text. An amount too large to fit still moves underneath,
+     on the right; it is never cut off. */
+  @media (max-width:599px){
+    .escroll{padding:0 10px}
+    .esb{padding:0}
+    #est .ln .qty{gap:6px}
+    #est:not(.full) .ln{column-gap:8px}
+    #est:not(.full) .step input{width:54px}
+    #est:not(.full) .step input[data-long]{width:66px}
+  }
+
+  /* A little more room between the end of the estimate and About us, where
+     the two sit one under the other. */
+  @media (max-width:899px){#about{padding-top:calc(var(--gap-section) + var(--s5))}}
+}

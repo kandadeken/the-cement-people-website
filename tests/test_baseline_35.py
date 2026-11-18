@@ -7,7 +7,7 @@ No original check has been removed.
 import re
 
 from conftest import (A4_POINTS, BY_ID, in_sections, LOCATION, PRODUCTS, REF_PATTERN, SYNTHETIC,
-                      expected_row, money, squash)
+                      expected_row, money, squash, SITE_URL)
 
 CONTROL_LABELS = ("Send my estimate", "Clear estimate", "Print or save", "Swipe",
                   "Search materials", "View estimate", "Enquire on WhatsApp")
@@ -76,15 +76,32 @@ def test_b08_whatsapp_materials_total(short):
     assert f"*Materials total: {money(2292)}*" in short.message
 
 
+# The Astro site's message opens with the question (agreed 18 Nov 2026) and
+# no longer repeats it at the end; the single-file site keeps its original
+# closing line.
+OPENING = ("I'd like to enquire about the following estimate. "
+           "Please confirm product availability and delivery cost.")
+ON_ASTRO = not SITE_URL.startswith("file:")
+
+
 def test_b09_whatsapp_asks_to_confirm_availability_and_delivery(short):
-    assert short.message.endswith(
-        "Please confirm availability and the delivery cost to this location.")
+    if ON_ASTRO:
+        assert short.message.startswith("Hello The Cement People,\n\n" + OPENING + "\n\n*Estimate ")
+        assert short.message.count("Please confirm") == 1
+        assert short.message.endswith(f"*Materials total: {money(2292)}*")
+    else:
+        assert short.message.endswith(
+            "Please confirm availability and the delivery cost to this location.")
 
 
 def test_b10_whatsapp_omits_location_when_empty(short):
     assert "Drop-off location" not in short.message_without_location
-    assert short.message_without_location.endswith(
-        "Please confirm availability and the delivery cost.")
+    if ON_ASTRO:
+        assert short.message_without_location.startswith("Hello The Cement People,\n\n" + OPENING)
+        assert short.message_without_location.endswith(f"*Materials total: {money(2292)}*")
+    else:
+        assert short.message_without_location.endswith(
+            "Please confirm availability and the delivery cost.")
 
 
 # ---- A4 PDF, short quotation ----------------------------------------------

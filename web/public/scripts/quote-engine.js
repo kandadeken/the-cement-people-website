@@ -109,7 +109,7 @@ const PIECE=p=>/\brod$/.test(p.unit);
 const BAG=p=>/\bbag$/.test(p.unit),ROLL=p=>/\broll$/.test(p.unit);
 const unitWord=(p,n)=>TON(p)?(n===1?"ton":"tons"):PIECE(p)?(n===1?"pc":"pcs"):BAG(p)?(n===1?"bag":"bags"):ROLL(p)?(n===1?"roll":"rolls"):"";
 const ctrl=p=>{const n=qty[p.id]||0,t=TON(p),one=t?"half a ton of":"one";return n
-?`<div class="qty"><div class="step"><button data-dec="${p.id}" aria-label="Remove ${one} ${p.name}">−</button><input type="text" autocomplete="off" inputmode="${t?"decimal":"numeric"}" value="${fmtQ(n)}" data-qty="${p.id}" aria-label="Quantity of ${p.name}${t?" in tons":PIECE(p)?" in pieces":BAG(p)?" in bags":ROLL(p)?" in rolls":""}"><button data-inc="${p.id}" aria-label="Add ${one} ${p.name}">+</button></div>${unitWord(p,n)?`<span class="u">${unitWord(p,n)}</span>`:""}</div>`
+?`<div class="qty"><div class="step"><button data-dec="${p.id}" aria-label="Remove ${one} ${p.name}">−</button><input type="text" autocomplete="off" inputmode="${t?"decimal":"numeric"}" value="${fmtQ(n)}"${fmtQ(n).length>5?" data-long":""} data-qty="${p.id}" aria-label="Quantity of ${p.name}${t?" in tons":PIECE(p)?" in pieces":BAG(p)?" in bags":ROLL(p)?" in rolls":""}"><button data-inc="${p.id}" aria-label="Add ${one} ${p.name}">+</button></div>${unitWord(p,n)?`<span class="u">${unitWord(p,n)}</span>`:""}</div>`
 :`<button class="add" data-inc="${p.id}" aria-label="Add ${p.name} to estimate">Add</button>`};
 
 
@@ -251,12 +251,13 @@ $("#tot").innerHTML=(TAX_RATE?`<div><span>Materials</span><span>${money(sub)}</s
 $("#bar").classList.toggle("on",rows.length>0);
 $("#barTxt").innerHTML=`<small>${rows.length} ${rows.length===1?"item":"items"}<span class="bl"> in your estimate</span></small>${money(total)}`;
 const loc=$("#loc").value.trim();
-const msg=`Hello The Cement People,\n\nI would like a quote for *Estimate ${REF}* (${DATE}).\n`
+// WhatsApp message (18 Nov 2026): the opening asks the question once; the
+// full itemised list, reference, date and total follow unchanged.
+const msg=`Hello The Cement People,\n\nI'd like to enquire about the following estimate. Please confirm product availability and delivery cost.\n\n*Estimate ${REF}* (${DATE})\n`
 +(loc?`\n*Drop-off location:* ${loc}\n`:"")
 +"\n*Items*\n"+rows.map((p,i)=>`${i+1}. ${p.name} (${p.unit})\n   ${fmtQ(qty[p.id])} × ${money(p.price)} = ${money(p.price*qty[p.id])}`).join("\n")
 +`\n\n*Materials total: ${money(sub)}*`
-+(TAX_RATE?`\nTax (${+(TAX_RATE*100).toFixed(2)}%): ${money(tax)}\nTotal (excl. delivery): ${money(total)}`:"")
-+"\n\nPlease confirm availability and the delivery cost"+(loc?" to this location.":".");
++(TAX_RATE?`\nTax (${+(TAX_RATE*100).toFixed(2)}%): ${money(tax)}\nTotal (excl. delivery): ${money(total)}`:"");
 renderQuote(S,sub,tax,total,loc);
 const sd=$("#send");
 if(rows.length){sd.href="https://wa.me/"+WA_NUMBER+"?text="+encodeURIComponent(msg);sd.classList.remove("off");sd.removeAttribute("aria-disabled")}
@@ -433,6 +434,9 @@ newQuote();
 // WhatsApp number, phone and town come from src/config/business.ts via the
 // data block (also used in the quotation header and "To order" line above).
 // ---------------------------------------------------------------------------
+// Quantity boxes: long numbers (six characters or more, such as "50,000")
+// get a wider box so no digit is ever hidden, also while typing.
+document.addEventListener("input",e=>{if(e.target.matches(".step input"))e.target.toggleAttribute("data-long",e.target.value.length>5)});
 const WA_NUMBER=TCP.business.whatsapp;
 $("#loc").addEventListener("input",renderEst);
 document.querySelectorAll("[data-wa]").forEach(a=>{if(WA_NUMBER)a.href="https://wa.me/"+WA_NUMBER+"?text="+encodeURIComponent("Hello, I would like to enquire about your materials.")});
