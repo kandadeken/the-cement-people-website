@@ -101,6 +101,10 @@ def test_r09_quantity_and_total_on_one_line(browser, width, view):
         page.evaluate("openEst()")
     rows = page.evaluate(ROWS)
     assert len(rows) == 8 and all(r["oneLine"] for r in rows), rows
+    # and not by a hair: at least 8 px to spare, so small differences in
+    # how a phone draws text do not push the total onto the next line
+    spare = page.evaluate("Math.min(...[...document.querySelectorAll('#lines .ln')].map(l => l.getBoundingClientRect().width - l.querySelector('.qty').getBoundingClientRect().width - l.querySelector('.amt').getBoundingClientRect().width - parseFloat(getComputedStyle(l).columnGap)))")
+    assert spare >= 8, spare
     assert all(r["inputFits"] and r["amtFits"] for r in rows), rows
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     # Very large amounts: allowed onto their own line, never cut off

@@ -549,12 +549,13 @@ main{display:block;padding:16px}
      smaller text. An amount too large to fit still moves underneath,
      on the right; it is never cut off. */
   @media (max-width:599px){
-    .escroll{padding:0 10px}
+    .escroll{padding:0 8px}
     .esb{padding:0}
-    #est .ln .qty{gap:6px}
-    #est:not(.full) .ln{column-gap:8px}
-    #est:not(.full) .step input{width:54px}
-    #est:not(.full) .step input[data-long]{width:66px}
+    #est .ln .qty{gap:5px}
+    #est:not(.full) .ln{column-gap:6px}
+    #est:not(.full) .step input{width:46px}
+    #est:not(.full) .step input[data-w="m"]{width:56px}
+    #est:not(.full) .step input[data-w="l"]{width:66px}
   }
 
   /* A little more room between the end of the estimate and About us, where
