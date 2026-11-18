@@ -558,9 +558,11 @@ main{display:block;padding:16px}
     #est:not(.full) .step input[data-w="l"]{width:66px}
   }
 
-  /* Product names: a small neutral box around the name only (18 Nov 2026),
-     the unit price under it lined up with the name's text. */
-  .ln .pn{display:inline-block;background:var(--fill);border-radius:5px;padding:3px 8px;line-height:1.3}
+  /* Product names: a small label around the name only (18 Nov 2026):
+     deep charcoal with white lettering in light mode, soft ivory with
+     charcoal lettering in dark mode (a dark label would disappear there).
+     The unit price sits under it, lined up with the name's text. */
+  .ln .pn{display:inline-block;background:var(--pn-bg);color:var(--pn-ink);font-weight:600;border-radius:5px;padding:3px 8px;line-height:1.3}
   .ln .nm small{padding-left:8px}
 
   /* "Total (excl. delivery)": the same dark bar as the PDF's total, with a

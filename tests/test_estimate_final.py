@@ -17,8 +17,9 @@ Final estimate refinements (Daniel and ChatGPT, 18 Nov 2026)
   R12  sticky parts: the bottom bar shows while choosing products and hides
        once the estimate is on screen; no new sticky row in the estimate
   R13  phones: more room between the end of the estimate and About us
-  R14  each product name sits in a small neutral box (name only; the unit
-       price stays outside, under it)
+  R14  each product name sits in a small label (name only; the unit price
+       stays outside, under it): deep charcoal with white text in light
+       mode, soft ivory with charcoal text in dark mode
   R15  "Total (excl. delivery)" is a dark bar with an ochre left edge and
        white text, on the page and in the full view, light and dark; it
        fits on one line at 360 px; delivery stays a separate line on the
@@ -195,13 +196,15 @@ def test_r13_room_before_about(browser):
 def test_r14_product_name_box(browser, scheme, width):
     page, errors = _open(browser, width, 844, width < 900, scheme)
     page.evaluate(ORDER)
-    fill = page.evaluate("getComputedStyle(document.querySelector('#glance .tiles div')).backgroundColor")
+    fill = "rgb(41, 45, 43)" if scheme == "light" else "rgb(232, 230, 223)"
+    ink = "rgb(255, 255, 255)" if scheme == "light" else "rgb(41, 45, 43)"
+    assert page.evaluate("[...document.querySelectorAll('#lines .pn')].every(e => getComputedStyle(e).color === '%s' && +getComputedStyle(e).fontWeight >= 600)" % ink)
     names = page.evaluate("""[...document.querySelectorAll('#lines .ln')].map(l => { const pn = l.querySelector('.pn'), sm = l.querySelector('.nm small'), r = pn.getBoundingClientRect(), q = sm.getBoundingClientRect();
         return {text: pn.innerText, bg: getComputedStyle(pn).backgroundColor, below: q.top >= r.bottom - 1, outside: !pn.contains(sm), narrow: r.width < l.getBoundingClientRect().width * 0.9 || pn.innerText.length > 24, h: r.height} })""")
     assert len(names) == 8, names
     assert all(n["bg"] == fill and n["below"] and n["outside"] and n["narrow"] for n in names), names
     assert all(n["h"] < 30 for n in names), names
-    assert min(page.evaluate(CONTRAST, "#lines .ln .pn")) >= 4.5
+    assert min(page.evaluate(CONTRAST, "#lines .ln .pn")) >= 7
     assert not errors, errors
     page.context.close()
 
