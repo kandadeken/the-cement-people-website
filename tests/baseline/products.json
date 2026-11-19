@@ -1,5 +1,6 @@
 {
-  "description": "Reference copy of the product catalogue as published on thecementpeople.com at commit d3f0e86 (tag v1-single-file). Tests compare the website against this file. Change a price here only in the same pull request that changes it on the website. Since then: the four cement names gained their strength class letter (32.5R, 42.5R, 42.5N) in PR #6, matching the bags.",
+  "description": "Reference copy of the product catalogue as published on thecementpeople.com at commit d3f0e86 (tag v1-single-file). Tests compare the website against this file. Change a price here only in the same pull request that changes it on the website. Since then: the four cement names gained their strength class letter (32.5R, 42.5R, 42.5N) in PR #6, matching the bags. 19 Nov 2026: Supacem 42.5R GH₵100 to GH₵98 and iron rods per ton GH₵7,000 to GH₵6,800 on the Astro site (Daniel). The single-file rollback copy keeps its old prices, listed under \"singleFilePrices\"; tests/conftest.py uses those when it tests that copy.",
+  "singleFilePrices": {"c2": 100, "j1": 7000, "j2": 7000, "j3": 7000, "j4": 7000, "j5": 7000, "j6": 7000},
   "source_commit": "d3f0e86",
   "currency": "GHS",
   "currency_symbol": "GH₵",
@@ -16,7 +17,7 @@
       "category": "Cement",
       "name": "Supacem 42.5R",
       "unit": "50 kg bag",
-      "price": 100
+      "price": 98
     },
     {
       "id": "c3",
@@ -79,42 +80,42 @@
       "category": "Iron Rods (Per Ton)",
       "name": "Iron rod 16 mm",
       "unit": "ton",
-      "price": 7000
+      "price": 6800
     },
     {
       "id": "j2",
       "category": "Iron Rods (Per Ton)",
       "name": "Iron rod 14 mm",
       "unit": "ton",
-      "price": 7000
+      "price": 6800
     },
     {
       "id": "j3",
       "category": "Iron Rods (Per Ton)",
       "name": "Iron rod 12 mm",
       "unit": "ton",
-      "price": 7000
+      "price": 6800
     },
     {
       "id": "j4",
       "category": "Iron Rods (Per Ton)",
       "name": "Iron rod 11.5 mm",
       "unit": "ton",
-      "price": 7000
+      "price": 6800
     },
     {
       "id": "j5",
       "category": "Iron Rods (Per Ton)",
       "name": "Iron rod 10 mm",
       "unit": "ton",
-      "price": 7000
+      "price": 6800
     },
     {
       "id": "j6",
       "category": "Iron Rods (Per Ton)",
       "name": "Iron rod 8 mm",
       "unit": "ton",
-      "price": 7000
+      "price": 6800
     },
     {
       "id": "i8",

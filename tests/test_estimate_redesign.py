@@ -475,6 +475,29 @@ def test_e15_total_label_and_amount_share_a_line(browser, width, big):
     page.context.close()
 
 
+# ---- E15b ------------------------------------------------------------------
+# The same, with the widest digits. Digits differ in width ("1" is narrow,
+# "0" and "8" are wide), so a real total can need more room than the one
+# E15 happens to produce: the price change of 19 Nov 2026 turned
+# GH₵161,684.00 into GH₵160,884.00, which no longer fitted at 360 px.
+# Every total up to GH₵9,999,999 must share the label's line.
+@pytest.mark.parametrize("width", [360, 390])
+@pytest.mark.parametrize("amount,lg", [("GH₵888,888.00", False), ("GH₵8,888,888.00", True)])
+def test_e15b_widest_totals_share_a_line(browser, width, amount, lg):
+    page, errors = _open(browser, width, 800, mobile=True)
+    page.evaluate("() => { qty.c1 = 1200; renderList(); renderEst(); }")
+    for mode in ("in the page", "full screen"):
+        if mode == "full screen":
+            page.evaluate("openEst()")
+        row = page.evaluate("""([t, lg]) => { const g = document.querySelector('#tot .gt'), [a, b] = g.children;
+            b.textContent = t; g.classList.toggle('lg', lg);
+            const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(), rg = g.getBoundingClientRect();
+            return {same: rb.top < ra.bottom - 2, gap: Math.round(rb.left - ra.right), inside: rb.right <= rg.right + 0.5}; }""", [amount, lg])
+        assert row["same"] and row["gap"] >= 12 and row["inside"], f"{width} px, {mode}, {amount}: {row}"
+    assert not errors, errors
+    page.context.close()
+
+
 # ---- E16 -------------------------------------------------------------------
 # Category tiles (Daniel and ChatGPT, 17 Nov 2026): "Iron rods" is named on
 # both rod tiles, every tile says how it is sold, and all four are visible

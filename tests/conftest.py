@@ -33,6 +33,14 @@ SITE_URL = os.environ.get("TCP_SITE_URL", "").strip() or (ROOT / "index.html").a
 
 BASELINE = json.loads((TESTS / "baseline" / "products.json").read_text(encoding="utf-8"))
 PRODUCTS = BASELINE["products"]
+# The Astro site's prices are in "products". The single-file rollback copy
+# (index.html at the repository root) is not edited when prices change, so
+# its older prices are recorded under "singleFilePrices" and used whenever
+# this run tests that copy (no TCP_SITE_URL given). Since 19 Nov 2026.
+SINGLE_FILE_RUN = SITE_URL == (ROOT / "index.html").as_uri()
+if SINGLE_FILE_RUN:
+    for _p in PRODUCTS:
+        _p["price"] = BASELINE.get("singleFilePrices", {}).get(_p["id"], _p["price"])
 BY_ID = {p["id"]: p for p in PRODUCTS}
 SYMBOL = BASELINE["currency_symbol"]
 

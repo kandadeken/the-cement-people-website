@@ -21,7 +21,7 @@ import re
 
 import pytest
 
-from conftest import PRODUCTS, SITE_URL, money, print_pdf, settle
+from conftest import BY_ID, PRODUCTS, SITE_URL, money, print_pdf, settle
 
 
 def _open(browser, width=1280, height=900, mobile=False, scheme="light"):
@@ -63,7 +63,7 @@ def test_r02_estimate_reads_more_simply(browser, scheme):
     head = page.locator("#lines .es[data-g=rod] .esh")
     assert head.inner_text().split("\n") == ["IRON RODS"]  # no "02" since 18 Nov 2026
     head.click()
-    assert "30 rods · 2.5 tons" in head.inner_text() and money(30 * 58 + 2.5 * 7000) in head.inner_text()
+    assert "30 rods · 2.5 tons" in head.inner_text() and money(30 * BY_ID["i3"]["price"] + 2.5 * BY_ID["j3"]["price"]) in head.inner_text()
     # All subtotals kept, including the combined iron-rods line.
     head.click()
     subs = page.evaluate("[...document.querySelectorAll('#lines .es[data-g=rod] .est span')].map(s => s.textContent)")

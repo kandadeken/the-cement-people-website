@@ -17,12 +17,17 @@ def is_a4(size):
     return abs(size[0] - A4_POINTS[0]) < 1 and abs(size[1] - A4_POINTS[1]) < 1
 
 
+# The short order (9 x Supacem 42.5R, 24 x 12 mm rods), worked out from
+# tests/baseline/products.json so a price change needs no edit here.
+SHORT_TOTAL = 9 * BY_ID["c2"]["price"] + 24 * BY_ID["i3"]["price"]
+
+
 # ---- Estimate behaviour ---------------------------------------------------
 def test_b01_steppers_typed_quantity_and_totals(short):
     assert short.c2_after_plus == "10", "Add then + nine times should give 10"
     assert short.lines == [
-        {"name": "Supacem 42.5R", "detail": f"{money(100)} per 50 kg bag", "qty": "9",
-         "amount": money(900)},
+        {"name": "Supacem 42.5R", "detail": f"{money(BY_ID['c2']['price'])} per 50 kg bag", "qty": "9",
+         "amount": money(9 * BY_ID["c2"]["price"])},
         {"name": "Iron rod 12 mm", "detail": f"{money(58)} per 30 ft rod", "qty": "24",
          "amount": money(1392)},
     ]
@@ -32,11 +37,11 @@ def test_b01_steppers_typed_quantity_and_totals(short):
     # Since 18 Nov 2026 ("Option A") the desktop panel no longer pins the
     # "Delivery / To be confirmed" line; the Delivery box in the list says it.
     if short.astro:
-        assert short.totals.split("\n") == ["Total (excl. delivery)", money(2292)]
+        assert short.totals.split("\n") == ["Total (excl. delivery)", money(SHORT_TOTAL)]
     else:
         assert short.totals.split("\n") == [
-            "Materials", money(2292), "Delivery", "Quoted separately",
-            "Total before delivery", money(2292)]
+            "Materials", money(SHORT_TOTAL), "Delivery", "Quoted separately",
+            "Total before delivery", money(SHORT_TOTAL)]
 
 
 def test_b02_search_filters(short):
@@ -68,13 +73,13 @@ def test_b07_whatsapp_items_quantities_prices_line_totals(short):
     items = short.message.split("*Items*\n")[1].split("\n\n")[0]
     assert items == (
         "1. Supacem 42.5R (50 kg bag)\n"
-        f"   9 × {money(100)} = {money(900)}\n"
+        f"   9 × {money(BY_ID['c2']['price'])} = {money(9 * BY_ID['c2']['price'])}\n"
         "2. Iron rod 12 mm (30 ft rod)\n"
         f"   24 × {money(58)} = {money(1392)}")
 
 
 def test_b08_whatsapp_materials_total(short):
-    assert f"*Materials total: {money(2292)}*" in short.message
+    assert f"*Materials total: {money(SHORT_TOTAL)}*" in short.message
 
 
 # The Astro site's message opens with the question (agreed 18 Nov 2026) and
@@ -89,7 +94,7 @@ def test_b09_whatsapp_asks_to_confirm_availability_and_delivery(short):
     if ON_ASTRO:
         assert short.message.startswith("Hello The Cement People,\n\n" + OPENING + "\n\n*Estimate ")
         assert short.message.count("Please confirm") == 1
-        assert short.message.endswith(f"*Materials total: {money(2292)}*")
+        assert short.message.endswith(f"*Materials total: {money(SHORT_TOTAL)}*")
     else:
         assert short.message.endswith(
             "Please confirm availability and the delivery cost to this location.")
@@ -99,7 +104,7 @@ def test_b10_whatsapp_omits_location_when_empty(short):
     assert "Drop-off location" not in short.message_without_location
     if ON_ASTRO:
         assert short.message_without_location.startswith("Hello The Cement People,\n\n" + OPENING)
-        assert short.message_without_location.endswith(f"*Materials total: {money(2292)}*")
+        assert short.message_without_location.endswith(f"*Materials total: {money(SHORT_TOTAL)}*")
     else:
         assert short.message_without_location.endswith(
             "Please confirm availability and the delivery cost.")
@@ -147,7 +152,7 @@ def test_b17_short_pdf_closing_section(short):
     assert "TOORDER" in squash(page)
     assert squash(f"quote reference {short.ref}.") in squash(page)
     label = "Total (excl. delivery)" if short.astro else "Total before delivery"
-    assert f"{label} {money(2292)}" in page
+    assert f"{label} {money(SHORT_TOTAL)}" in page
 
 
 def test_b18_same_reference_on_screen_pdf_and_whatsapp(short):

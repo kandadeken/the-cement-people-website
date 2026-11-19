@@ -32,10 +32,12 @@ import re
 
 import pytest
 
-from conftest import SITE_URL, money, print_pdf, settle
+from conftest import BY_ID, SITE_URL, money, print_pdf, settle
 
 ORDER = "() => { const q = {c2: 3, c3: 3, c4: 3, i2: 5, i3: 5, i5: 5, j3: 2, i8: 6}; for (const k in q) qty[k] = q[k]; renderList(); renderEst(); }"
-ORDER_TOTAL = 3 * 100 + 3 * 110 + 3 * 120 + 5 * 75 + 5 * 58 + 5 * 40 + 2 * 7000 + 6 * 60
+# Worked out from tests/baseline/products.json, so a price change needs no edit here.
+ORDER_QTY = {"c2": 3, "c3": 3, "c4": 3, "i2": 5, "i3": 5, "i5": 5, "j3": 2, "i8": 6}
+ORDER_TOTAL = sum(q * BY_ID[k]["price"] for k, q in ORDER_QTY.items())
 HUGE = "() => { const q = {c2: 50000, j3: 50000, i3: 999, j5: 20}; for (const k in q) qty[k] = q[k]; renderList(); renderEst(); }"
 
 
@@ -120,7 +122,7 @@ def test_r09_quantity_and_total_on_one_line(browser, width, view):
     # Very large amounts: allowed onto their own line, never cut off
     page.evaluate(HUGE)
     rows = page.evaluate(ROWS)
-    assert any(r["amt"] == money(350_000_000) for r in rows), rows
+    assert any(r["amt"] == money(50_000 * BY_ID["j3"]["price"]) for r in rows), rows
     assert all(r["inputFits"] and r["amtFits"] for r in rows), rows
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     assert not errors, errors

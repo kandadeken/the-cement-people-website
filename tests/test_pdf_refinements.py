@@ -80,7 +80,12 @@ def test_p03_weights(browser):
     page.context.close()
 
 
-@pytest.mark.parametrize("order,pages,total", [(SMALL, 1, 16215), (LARGE, 2, 162312)])
+def _total(order):
+    """The order's total from the product list, so a price change needs no edit here."""
+    return sum(q * PRODUCTS[k]["price"] for k, q in order.items())
+
+
+@pytest.mark.parametrize("order,pages,total", [(SMALL, 1, _total(SMALL)), (LARGE, 2, _total(LARGE))], ids=["small", "large"])
 def test_p04_totals_and_pages_unchanged(browser, order, pages, total):
     page, errors = _open(browser, order)
     pdf = print_pdf(page, f"p04-{pages}.pdf")
