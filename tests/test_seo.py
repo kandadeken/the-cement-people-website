@@ -434,14 +434,66 @@ def test_s11_no_broken_links_or_missing_files(page, graph):
         assert fetch(path), f"{path} is empty"
 
 
-def test_s12_logo_file_is_a_real_svg_and_is_the_declared_logo(graph):
+def _png_pixels(data):
+    """Decode an 8-bit RGB or RGBA PNG without extra libraries.
+    Returns (width, height, rows), each row a list of (r, g, b)."""
+    import struct
+    import zlib
+    assert data[:8] == b"\x89PNG\r\n\x1a\n", "not a PNG file"
+    pos, idat, head = 8, b"", None
+    while pos < len(data):
+        size, kind = struct.unpack(">I4s", data[pos:pos + 8])
+        body = data[pos + 8:pos + 8 + size]
+        if kind == b"IHDR":
+            head = struct.unpack(">IIBBBBB", body)
+        elif kind == b"IDAT":
+            idat += body
+        pos += 12 + size
+    width, height, depth, colour, _, _, interlace = head
+    assert depth == 8 and colour in (2, 6) and interlace == 0, head
+    bpp = 3 if colour == 2 else 4
+    raw, stride, prev, rows, i = zlib.decompress(idat), width * bpp, None, [], 0
+    for _ in range(height):
+        f, line = raw[i], bytearray(raw[i + 1:i + 1 + stride])
+        i += 1 + stride
+        up = prev or bytearray(stride)
+        for x in range(stride):
+            a = line[x - bpp] if x >= bpp else 0
+            b, c = up[x], (up[x - bpp] if x >= bpp else 0)
+            if f == 1: line[x] = (line[x] + a) & 255
+            elif f == 2: line[x] = (line[x] + b) & 255
+            elif f == 3: line[x] = (line[x] + (a + b) // 2) & 255
+            elif f == 4:
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pr = a if pa <= pb and pa <= pc else (b if pb <= pc else c)
+                line[x] = (line[x] + pr) & 255
+        prev = line
+        rows.append([tuple(line[x:x + 3]) for x in range(0, stride, bpp)])
+    return width, height, rows
+
+
+def test_s12_declared_logo_is_a_square_png_of_the_v11_logo(graph):
+    # Google's organisation logo should be a square raster image of at least
+    # 112 px that looks right on white (19 Nov 2026; was the wide SVG).
     store = node(graph, "Store")
-    assert store["logo"] == SITE + "/images/logo.svg"
-    svg = ET.fromstring(fetch(store["logo"]))
+    assert store["logo"] == SITE + "/images/logo-square-512.png"
+    width, height, rows = _png_pixels(fetch(store["logo"]))
+    assert width == height and width >= 112, (width, height)
+    corners = [rows[0][0], rows[0][-1], rows[-1][0], rows[-1][-1]]
+    assert all(px == (255, 255, 255) for px in corners), corners
+    flat = [px for row in rows for px in row]
+    near = lambda px, ref: all(abs(v - r) <= 12 for v, r in zip(px, ref))
+    # Brand identity V1.1: the diamond emblem in Ochre A (#D27D02) beside
+    # the charcoal wordmark (#131514).
+    assert sum(near(px, (0xD2, 0x7D, 0x02)) for px in flat) > 500
+    assert sum(near(px, (0x13, 0x15, 0x14)) for px in flat) > 500
+
+
+def test_s12b_vector_logo_is_still_published(graph):
+    # The SVG master stays at its old address for anyone already using it.
+    svg = ET.fromstring(fetch("/images/logo.svg"))
     assert svg.tag == "{http://www.w3.org/2000/svg}svg"
-    assert float(svg.get("width")) >= 112 and float(svg.get("height")) >= 112
-    # Brand identity V1.1 (17 Nov 2026): the diamond emblem in Ochre A over
-    # the charcoal wordmark (was the four-brick stair mark).
     fills = [p.get("fill", "").lower() for p in svg.iter("{http://www.w3.org/2000/svg}path")]
     assert "#d27d02" in fills and "#131514" in fills, fills
 

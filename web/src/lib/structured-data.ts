@@ -39,7 +39,14 @@ export function buildStructuredData(page: PageInfo) {
   const storeId = `${site}/#store`;
   const websiteId = `${site}/#website`;
   const webpageId = `${page.url}#webpage`;
-  const logoUrl = `${site}/images/logo.svg`;
+  // Google's organisation logo: a square PNG of the V1.1 primary logo
+  // (images/logo.svg) centred on white, 512 x 512 px. Google prefers a
+  // square raster image of at least 112 px that looks right on white, so
+  // the wide SVG is not used here (19 Nov 2026). Made with:
+  //   rsvg-convert -w 440 public/images/logo.svg -o l.png
+  //   convert -size 512x512 xc:white l.png -gravity center -composite \
+  //     -strip -depth 8 PNG24:public/images/logo-square-512.png
+  const logoUrl = `${site}/images/logo-square-512.png`;
 
   const store = {
     "@type": "Store",
