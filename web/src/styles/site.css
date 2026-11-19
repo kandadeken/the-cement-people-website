@@ -154,6 +154,7 @@ nav a:hover{border-bottom-color:var(--y)}
 .cphone a{font-size:clamp(26px,5vw,34px);font-weight:var(--w-strong);color:var(--ink);text-decoration:none;letter-spacing:-.01em}
 .cphone a:hover{text-decoration:underline}
 #contact .cdetails{margin-top:var(--s5)}
+#contact .cnote{margin-top:var(--s3)}
 .enq-menu a svg{width:22px;height:22px;flex:none}
 .enq-menu small{display:block;font-weight:var(--w-text);font-size:var(--t-small);color:var(--mute)}
 .enq-menu .grab{display:none}
