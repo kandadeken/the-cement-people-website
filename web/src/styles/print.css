@@ -62,8 +62,8 @@ body::before,body>*:not(#quote){display:none!important}
    product name in semibold, so each line holds its own against the bold
    subtotals; "per 50 kg bag" etc. stay light. */
 #quote td.n{color:#131514;font-weight:600}
-#quote tbody tr:not([class]) td:nth-child(2){font-weight:600}
-#quote tbody tr:not([class]) td:nth-child(2) small{font-weight:400}
+#quote tr[data-row="item"] td:nth-child(2){font-weight:600}
+#quote tr[data-row="item"] td:nth-child(2) small{font-weight:400}
 /* Bottom: terms left, totals right */
 .q-close{display:grid;grid-template-columns:minmax(0,1fr) 98mm;gap:8mm;align-items:start;margin-top:4mm;break-inside:avoid;page-break-inside:avoid}
 .q-terms{font-size:7.5pt;line-height:1.4;color:#333}
