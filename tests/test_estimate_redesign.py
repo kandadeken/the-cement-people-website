@@ -287,11 +287,13 @@ def test_e10_branded_pdf_quotation(browser):
     pdf = print_pdf(page, "redesign-quotation-sample.pdf")
     first = squash(pdf.pages[0])
     for words in ("ESTIMATE", "Reference", "Date", "DROP-OFFLOCATION", "Kasoa,nearGoil",
-                  "055 846 3468", "01·CEMENT", "02·IRONRODS"):
+                  "055 846 3468", "CEMENT", "IRONRODS"):
         assert squash(words) in first, words
+    # Category headings carry no "01 ·" numbers since 19 Nov 2026.
+    assert "01·CEMENT" not in first and "02·IRONRODS" not in first
     assert page.locator("#quote .q-logo path").count() >= 2, "the logo is drawn in the quotation"
     text = squash(pdf.text)
-    assert squash("03 · Binding wire") in text
+    assert squash("Binding wire") in text and squash("03 · Binding wire") not in text  # no numbers since 19 Nov 2026
     assert squash("Iron rods, single pieces subtotal") in text and squash("Iron rods, by the ton subtotal") in text
     assert squash(f"Delivery To be confirmed") in text
     assert squash(f"Total (excl. delivery) {money(_expected_total())}") in text
