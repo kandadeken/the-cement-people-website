@@ -6,7 +6,9 @@ been indexed. The full SEO work (test_seo.py) is for the Astro version in web/,
 which is not live yet; these checks cover the small subset ported to the live
 site so Google can find and understand it now:
 
-- the page title is just "The Cement People" (the owner's choice)
+- the page title is just "The Cement People" (the owner's choice for the
+  single-file site; its title and description are kept in business.json
+  under "legacyPage", while "page" holds the Astro site's wording)
 - a description, a canonical address and structured data describing the shop
 - robots.txt lets search engines in and points them to the sitemap
 - sitemap.xml lists the homepage
@@ -100,12 +102,12 @@ def _all_keys(value):
 
 def test_l01_title_is_only_the_brand_name():
     assert [t.strip() for t in HEAD.titles] == ["The Cement People"]
-    assert BUSINESS["page"]["title"] == "The Cement People"
+    assert BUSINESS["legacyPage"]["title"] == "The Cement People"
 
 
 def test_l02_description_and_canonical():
     desc = [m.get("content") for m in HEAD.metas if m.get("name") == "description"]
-    assert desc == [BUSINESS["page"]["description"]], desc
+    assert desc == [BUSINESS["legacyPage"]["description"]], desc
     assert 50 <= len(desc[0]) <= 200, "description should be a sentence or two"
     canon = [l.get("href") for l in HEAD.links if l.get("rel") == "canonical"]
     assert canon == [CANONICAL], canon
@@ -128,7 +130,7 @@ def test_l04_structured_data_contains_only_confirmed_details():
     store = _graph()["Store"]
     assert set(store) <= STORE_PROPERTIES, f"unexpected properties: {set(store) - STORE_PROPERTIES}"
     assert store["name"] == BUSINESS["name"]
-    assert store["description"] == BUSINESS["page"]["description"]
+    assert store["description"] == BUSINESS["legacyPage"]["description"]
     assert store["telephone"] == BUSINESS["phoneInternational"]
     assert store["email"] == BUSINESS["publicEmail"]
     a, ba = store["address"], BUSINESS["address"]

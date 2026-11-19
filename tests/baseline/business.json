@@ -37,6 +37,10 @@
   "currencySymbol": "GH₵",
   "taxRate": 0,
   "page": {
+    "title": "The Cement People | Building Materials Supplier in Kasoa, Ghana",
+    "description": "Based in Kasoa, Ghana, The Cement People supplies cement, iron rods, binding wire and more. View prices in cedis, build an estimate and enquire about delivery."
+  },
+  "legacyPage": {
     "title": "The Cement People",
     "description": "Cement, iron rods and binding wire from Krispol City, Kasoa, delivered across Kasoa and Greater Accra. See prices in Ghana cedis, build an estimate and send it on WhatsApp."
   }
