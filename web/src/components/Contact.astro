@@ -7,7 +7,12 @@
    "Delivery" line is coverage, which is wider than the address.
 
    Since 17 Nov 2026 the phone/WhatsApp number comes first and large, with
-   the Enquire button straight after it; the other details follow. */
+   the Enquire button straight after it; the other details follow.
+
+   19 Nov 2026: a note under the Delivery line invites enquiries from
+   outside the delivery areas (wording approved by Daniel and ChatGPT).
+   Enquiries from elsewhere show where demand is, so they are welcome even
+   though delivery there is not promised. */
 import Enquire from "./Enquire.astro";
 import { business } from "../config/business";
 import { addressLine, openingHoursLines, closedLine, deliveryAreasLine } from "../lib/business-format";
@@ -15,4 +20,4 @@ import { addressLine, openingHoursLines, closedLine, deliveryAreasLine } from ".
 // "Monday–Saturday, 7:00 am–5:00 pm. Sunday closed."
 const hours = [...openingHoursLines(), closedLine()].filter(Boolean).join(". ") + ".";
 ---
-<section class="sec" id="contact"><div class="wrap"><h2 class="st">Contact us</h2><p>Ready to order, or not sure what you need? Send us a message on WhatsApp or give us a call and we will help.</p><p class="cphone"><span>Call or WhatsApp</span><a href={`tel:${business.phoneInternational}`} target="_blank" rel="noopener">{business.phone}</a></p><Enquire id="enq-contact" variant="big" /><p class="cdetails"><b>Address:</b> {addressLine()}<br><b>Landmark:</b> {business.landmark}<br><b>Plus Code:</b> {business.plusCode}<br><b>Opening hours:</b> {hours}<br><b>Email:</b> <a href={`mailto:${business.publicEmail}`}>{business.publicEmail}</a><br><b>Delivery:</b> {deliveryAreasLine()}</p></div></section>
+<section class="sec" id="contact"><div class="wrap"><h2 class="st">Contact us</h2><p>Ready to order, or not sure what you need? Send us a message on WhatsApp or give us a call and we will help.</p><p class="cphone"><span>Call or WhatsApp</span><a href={`tel:${business.phoneInternational}`} target="_blank" rel="noopener">{business.phone}</a></p><Enquire id="enq-contact" variant="big" /><p class="cdetails"><b>Address:</b> {addressLine()}<br><b>Landmark:</b> {business.landmark}<br><b>Plus Code:</b> {business.plusCode}<br><b>Opening hours:</b> {hours}<br><b>Email:</b> <a href={`mailto:${business.publicEmail}`}>{business.publicEmail}</a><br><b>Delivery:</b> {deliveryAreasLine()}</p><p class="cnote">Outside these areas? You're still welcome to enquire. Tell us what you need and where your site is, and we'll confirm availability and delivery.</p></div></section>
