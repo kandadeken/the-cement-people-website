@@ -7,7 +7,7 @@ Catalogue and estimate phase checks (added 14 Nov 2026).
   C03  the price list keeps its sideways slide on computers and phones, so
        trackpad and touch swiping between categories keep working
        (Daniel, 15 Nov 2026: the original behaviour is the one to keep)
-  C04  rods by the ton: the shared price (GH₵7,000.00 per ton) is shown once
+  C04  rods by the ton: the shared price (e.g. GH₵6,800.00 per ton) is shown once
        under the heading, not on every row; other tabs and search results
        still show a price on every row
   C05  rods by the ton go up and down in half tons (Add starts at 1 ton,
@@ -35,7 +35,10 @@ import pytest
 
 from playwright.sync_api import expect
 
-from conftest import SITE_URL, goto_tab, open_site, settle, wait_bar, wait_rows, wait_slide
+from conftest import BY_ID, SITE_URL, goto_tab, money, open_site, settle, wait_bar, wait_rows, wait_slide
+
+# The shared per-ton rod price, from tests/baseline/products.json.
+TON = BY_ID["j3"]["price"]
 
 # Which slide is lined up with the list's left edge, which tab is pressed,
 # and the heading of the slide that is showing.
@@ -116,10 +119,10 @@ def test_c04_per_ton_price_shown_once(browser):
         return {once: sec.querySelector('.cat-price')?.innerText.trim(),
                 rowPrices: [...sec.querySelectorAll('.row .pr')].map(e => e.getBoundingClientRect().width > 2 ? e.innerText.trim() : ''),
                 hiddenPrices: [...sec.querySelectorAll('.row .pr .vh')].map(e => e.textContent.trim())}; }""")
-    assert per_ton["once"] == "GH₵7,000.00 per ton, all sizes", per_ton
+    assert per_ton["once"] == f"{money(TON)} per ton, all sizes", per_ton
     assert per_ton["rowPrices"] and all(p == "" for p in per_ton["rowPrices"]), f"rows should not show the price: {per_ton}"
     # ...but each row keeps it, hidden from view, for screen readers and search engines.
-    assert per_ton["hiddenPrices"] == ["GH₵7,000.00"] * 6, per_ton
+    assert per_ton["hiddenPrices"] == [money(TON)] * 6, per_ton
     others = page.evaluate("""() => [...document.querySelectorAll('#list .slide')]
         .filter(s => !s.querySelector('h3').innerText.includes('Per Ton'))
         .map(s => [!!s.querySelector('.cat-price'), [...s.querySelectorAll('.row .pr')].every(e => e.innerText.trim())])""")
@@ -128,7 +131,7 @@ def test_c04_per_ton_price_shown_once(browser):
     page.fill("#q", "ton")
     wait_rows(page, 6)  # the six rods sold by the ton
     found = page.evaluate("[...document.querySelectorAll('#list .row .pr')].map(e => e.innerText.trim())")
-    assert found and all(p == "GH₵7,000.00" for p in found), f"search results should show each price: {found}"
+    assert found and all(p == money(TON) for p in found), f"search results should show each price: {found}"
     assert not errors, errors
     page.context.close()
 
@@ -146,12 +149,12 @@ def test_c05_half_ton_steps(browser):
     assert _qty(page, "j3") == 1
     page.click('#list [data-inc="j3"]')            # + : 1.5
     assert _qty(page, "j3") == 1.5
-    assert page.inner_text('#est .ln .amt') == "GH₵10,500.00"
+    assert page.inner_text('#est .ln .amt') == money(1.5 * TON)
     assert page.inner_text('#est .ln .u') == "tons"
     page.click('#est [data-dec="j3"]')
     page.click('#est [data-dec="j3"]')             # down to 0.5
     assert _qty(page, "j3") == 0.5
-    assert page.inner_text('#tot .gt').endswith("GH₵3,500.00")
+    assert page.inner_text('#tot .gt').endswith(money(0.5 * TON))
     for typed, expect in (("2.3", 2.5), ("0.2", 0.5), ("3", 3)):
         box = page.locator('#est input[data-qty="j3"]')
         box.fill(typed)
@@ -159,7 +162,7 @@ def test_c05_half_ton_steps(browser):
         assert _qty(page, "j3") == expect, f"typed {typed}"
     page.click('#est [data-dec="j3"]')             # 2.5
     msg = page.evaluate("decodeURIComponent(document.querySelector('#send').href.split('text=')[1])")
-    assert "2.5 × GH₵7,000.00 = GH₵17,500.00" in msg, msg
+    assert f"2.5 × {money(TON)} = {money(2.5 * TON)}" in msg, msg
     page.evaluate("dispatchEvent(new Event('beforeprint'))")
     # The quotation now has section rows ("01 · Iron rods"); read the item row.
     assert page.evaluate("[...document.querySelectorAll('#quote tbody tr')].filter(r => r.cells.length === 5)[0].cells[2].innerText.trim()") == "2.5 tons"
@@ -263,7 +266,8 @@ def _fresh(browser, width, height=800, touch=False):
 
 
 def _add_rods(page):
-    """3 single rods and 2.5 tons, giving a long total (GH₵17,806.00)."""
+    """3 single 16 mm rods and 2.5 tons of 12 mm, giving a long total (GH₵17,306.00 at
+    GH₵6,800 a ton; worked out from the product list in test C08)."""
     _goto_tab(page, "Single Piece")
     for _ in range(3):
         page.click('#list [data-inc="i1"]')
@@ -286,7 +290,7 @@ def test_c08_estimate_totals_have_room(browser, width):
         return {label: a.innerText, amount: b.innerText, gap: Math.round(rb.left - textRight), sameLine: rb.top < ra.bottom - 2,
                 amountLines: Math.round(rb.height / parseFloat(getComputedStyle(b).lineHeight)),
                 flushRight: Math.abs(rb.right - (rd.right - parseFloat(getComputedStyle(d).paddingRight))) < 1.5}; })""")
-    assert rows[-1]["label"] == "Total (excl. delivery)" and rows[-1]["amount"] == "GH₵17,806.00", rows
+    assert rows[-1]["label"] == "Total (excl. delivery)" and rows[-1]["amount"] == money(3 * BY_ID["i1"]["price"] + 2.5 * TON), rows
     for r in rows:
         assert r["gap"] >= 12 or not r["sameLine"], f"{width} px: label and amount too close: {r}"
         assert r["amountLines"] == 1 and r["flushRight"], f"{width} px: amount should be one line, right-aligned: {r}"

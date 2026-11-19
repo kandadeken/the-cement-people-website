@@ -582,6 +582,14 @@ main{display:block;padding:16px}
     .tot .gt span:first-child{font-size:13px}
     .tot .gt span:last-child{font-size:18px}
     .tot .gt.lg span:last-child{font-size:16px}
+    /* The estimate inside the page (not full screen) is the narrowest: at
+       360 px a total made of wide digits (GH₵888,888.00) used to drop under
+       the label. A little less padding and a one-step smaller amount keep
+       every total up to GH₵9,999,999.99 on the label's line with room to
+       spare (19 Nov 2026, found when the rod price changed to GH₵6,800). */
+    #est:not(.open):not(.full) .tot .gt{padding-inline:6px}
+    #est:not(.open):not(.full) .tot .gt span:last-child{font-size:17px}
+    #est:not(.open):not(.full) .tot .gt.lg span:last-child{font-size:15px}
   }
 
   /* Desktop estimate panel (18 Nov 2026, "Option A"): no separate pinned
