@@ -58,6 +58,12 @@ body::before,body>*:not(#quote){display:none!important}
 #quote tr.q-st{break-before:avoid;page-break-before:avoid}
 #quote .q-st.all td{background:#f4f4f4;border-bottom:0}
 #quote .q-empty td{text-align:center;color:#5a5a5a;padding:6mm}
+/* Product lines (19 Nov 2026): the number in charcoal semibold and the
+   product name in semibold, so each line holds its own against the bold
+   subtotals; "per 50 kg bag" etc. stay light. */
+#quote td.n{color:#131514;font-weight:600}
+#quote tbody tr:not([class]) td:nth-child(2){font-weight:600}
+#quote tbody tr:not([class]) td:nth-child(2) small{font-weight:400}
 /* Bottom: terms left, totals right */
 .q-close{display:grid;grid-template-columns:minmax(0,1fr) 98mm;gap:8mm;align-items:start;margin-top:4mm;break-inside:avoid;page-break-inside:avoid}
 .q-terms{font-size:7.5pt;line-height:1.4;color:#333}
@@ -70,6 +76,9 @@ body::before,body>*:not(#quote){display:none!important}
 .q-sum div{display:flex;justify-content:space-between;gap:4mm;padding:1.2mm 2.5mm}
 .q-sum span{white-space:nowrap}
 .q-sum .q-mat{font-weight:700}
+/* The "Delivery – To be confirmed" line above the total, in semibold so it
+   reads with the total bar (19 Nov 2026). */
+.q-sum .q-del{font-weight:600}
 /* "Total (excl. delivery)": white on charcoal with an ochre edge. In black
    and white it prints as white on black. */
 .q-sum .gt{margin-top:1.5mm;padding:3mm 2.5mm;background:#131514;color:#fff;border-left:1.5mm solid #ff9802;font-size:11pt;font-weight:800}

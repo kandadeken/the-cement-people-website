@@ -305,14 +305,17 @@ const LOGO=(document.getElementById("q-logo")||{}).innerHTML||"";
 const esc=s=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function renderQuote(S,sub,tax,total,loc){
 let n=0;
-const body=S.length?S.map((x,i)=>`<tr class="q-sec"><td colspan="5">${String(i+1).padStart(2,"0")} · ${x.name}<span>${x.parts.map(y=>howMany(y.k,y.n)).join(" · ")}</span></td></tr>`
+// PDF (19 Nov 2026): category headings carry no "01 ·" numbers (products are
+// numbered 1, 2, 3... instead, as on screen); an empty drop-off location
+// reads "To be agreed".
+const body=S.length?S.map((x,i)=>`<tr class="q-sec"><td colspan="5">${x.name}<span>${x.parts.map(y=>howMany(y.k,y.n)).join(" · ")}</span></td></tr>`
 +x.parts.map(y=>(x.k==="rod"?`<tr class="q-sub"><td colspan="5">${PART_SHORT[y.k]}</td></tr>`:"")
 +y.rows.map(p=>`<tr><td class="n">${++n}</td><td>${p.name} <small>per ${p.unit}</small></td><td class="r">${fmtQ(qty[p.id])} ${unitWord(p,qty[p.id])}</td><td class="r">${money(p.price)}</td><td class="r">${money(p.price*qty[p.id])}</td></tr>`).join("")
 +(x.k==="rod"&&x.parts.length>1?`<tr class="q-st"><td></td><td colspan="3">${PART_NAME[y.k]} subtotal</td><td class="r">${money(y.sum)}</td></tr>`:"")).join("")
 +`<tr class="q-st all"><td></td><td colspan="3">${x.name} subtotal</td><td class="r">${money(x.sum)}</td></tr>`).join(""):`<tr class="q-empty"><td colspan="5">No items added yet.</td></tr>`;
 $("#quote").innerHTML=`<header class="q-head"><svg class="q-logo" viewBox="0 0 592.329 100" role="img" aria-label="The Cement People">${LOGO}</svg>`
 +`<div class="q-doc"><h1>Estimate</h1><dl><dt>Reference</dt><dd>${REF}</dd><dt>Date</dt><dd>${DATE}</dd></dl></div></header>`
-+`<div class="q-to"><div><small>Drop-off location</small><p>${loc?esc(loc):"Not provided"}</p></div><div><small>Delivery</small><p>To be confirmed after you send this estimate</p></div><div><small>Contact</small><p>${TCP.business.phone} (call or WhatsApp)<br>${TCP.business.website}<br>${TCP.business.town}</p></div></div>`
++`<div class="q-to"><div><small>Drop-off location</small><p>${loc?esc(loc):"To be agreed"}</p></div><div><small>Delivery</small><p>To be confirmed after you send this estimate</p></div><div><small>Contact</small><p>${TCP.business.phone} (call or WhatsApp)<br>${TCP.business.website}<br>${TCP.business.town}</p></div></div>`
 +`<table><thead><tr><th class="n">#</th><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>${body}</tbody></table>`
 +`<div class="q-close"><div class="q-terms"><h2>Delivery and terms</h2><ul>`
 +`<li>We deliver to your drop-off location. The delivery cost depends on your order and location, and is agreed with you before delivery.</li>`
@@ -321,7 +324,7 @@ $("#quote").innerHTML=`<header class="q-head"><svg class="q-logo" viewBox="0 0 5
 +`<h2>To order</h2><p>WhatsApp or call ${TCP.business.phone} and quote reference <b>${REF}</b>.</p></div>`
 +`<div class="q-sum">`+(TAX_RATE?`<div class="q-mat"><span>Materials</span><span>${money(sub)}</span></div>`:"")
 +(TAX_RATE?`<div><span>Tax (${+(TAX_RATE*100).toFixed(2)}%)</span><span>${money(tax)}</span></div>`:"")
-+`<div><span>Delivery</span><span>To be confirmed</span></div>`
++`<div class="q-del"><span>Delivery</span><span>To be confirmed</span></div>`
 +`<div class="gt"><span>Total (excl. delivery)</span><span>${money(total)}</span></div></div></div>`;
 // Compact running header on continuation pages only (page 2 onwards)
 let ps=document.getElementById("qpage");

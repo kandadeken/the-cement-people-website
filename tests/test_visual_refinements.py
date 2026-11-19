@@ -15,7 +15,8 @@ Visual refinements (Daniel and ChatGPT, 18 Nov 2026)
   V05  estimate name labels: charcoal with white text in light mode; a
        transparent box with a thin outline in dark mode
   V06  quantity and line total still share one line on phones
-  V07  the PDF keeps its "01 · CEMENT" category markers
+  V07  the PDF's category headings carry no numbers (since 19 Nov 2026; the
+       products are numbered instead)
 """
 import re
 
@@ -160,12 +161,13 @@ def test_v06_quantity_and_total_still_one_line(browser, width):
     page.context.close()
 
 
-def test_v07_pdf_keeps_category_markers(browser):
+def test_v07_pdf_category_headings_without_numbers(browser):
     page, errors = _open(browser)
     page.evaluate(ORDER)
     pdf = print_pdf(page, "v07-order.pdf")
     text = " ".join(pdf.text.split())
-    for marker in ("01 · CEMENT", "02 · IRON RODS", "03 · BINDING WIRE"):
-        assert marker in text, (marker, text[:600])
+    for heading in ("CEMENT", "IRON RODS", "BINDING WIRE"):
+        assert heading in text, (heading, text[:600])
+    assert not re.search(r"\b0\d · ", text), text[:600]
     assert not errors, errors
     page.context.close()
