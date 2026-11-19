@@ -272,8 +272,13 @@ def test_s02_html_catalogue_is_identical_to_what_the_engine_draws(browser):
 # ---- Titles, descriptions and link previews ---------------------------------
 def test_s03_title_description_canonical_and_link_preview(page):
     assert page.lang == "en"
-    assert page.titles == [BUSINESS["page"]["title"]], "exactly one title, the brand name only"
+    assert page.titles == [BUSINESS["page"]["title"]], "exactly one title"
     assert page.meta("description") == [BUSINESS["page"]["description"]]
+    # Agreed wording (19 Nov 2026): brand, broad category and where the shop
+    # is based; short enough that Google shows it whole.
+    assert page.titles[0].startswith(BUSINESS["name"] + " | ")
+    assert "Kasoa, Ghana" in page.titles[0] and len(page.titles[0]) <= 65
+    assert len(page.meta("description")[0]) <= 160
     canonicals = [l.get("href") for l in page.links if l.get("rel") == "canonical"]
     assert canonicals == [CANONICAL], "exactly one canonical address, absolute and https"
     assert page.meta("og:title") == page.titles
