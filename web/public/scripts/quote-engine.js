@@ -308,9 +308,11 @@ let n=0;
 // PDF (19 Nov 2026): category headings carry no "01 ·" numbers (products are
 // numbered 1, 2, 3... instead, as on screen); an empty drop-off location
 // reads "To be agreed".
+// Product rows are marked data-row="item" so the print styles can find them
+// directly (a data attribute, not a class, so rows stay class-free).
 const body=S.length?S.map((x,i)=>`<tr class="q-sec"><td colspan="5">${x.name}<span>${x.parts.map(y=>howMany(y.k,y.n)).join(" · ")}</span></td></tr>`
 +x.parts.map(y=>(x.k==="rod"?`<tr class="q-sub"><td colspan="5">${PART_SHORT[y.k]}</td></tr>`:"")
-+y.rows.map(p=>`<tr><td class="n">${++n}</td><td>${p.name} <small>per ${p.unit}</small></td><td class="r">${fmtQ(qty[p.id])} ${unitWord(p,qty[p.id])}</td><td class="r">${money(p.price)}</td><td class="r">${money(p.price*qty[p.id])}</td></tr>`).join("")
++y.rows.map(p=>`<tr data-row="item"><td class="n">${++n}</td><td>${p.name} <small>per ${p.unit}</small></td><td class="r">${fmtQ(qty[p.id])} ${unitWord(p,qty[p.id])}</td><td class="r">${money(p.price)}</td><td class="r">${money(p.price*qty[p.id])}</td></tr>`).join("")
 +(x.k==="rod"&&x.parts.length>1?`<tr class="q-st"><td></td><td colspan="3">${PART_NAME[y.k]} subtotal</td><td class="r">${money(y.sum)}</td></tr>`:"")).join("")
 +`<tr class="q-st all"><td></td><td colspan="3">${x.name} subtotal</td><td class="r">${money(x.sum)}</td></tr>`).join(""):`<tr class="q-empty"><td colspan="5">No items added yet.</td></tr>`;
 $("#quote").innerHTML=`<header class="q-head"><svg class="q-logo" viewBox="0 0 592.329 100" role="img" aria-label="The Cement People">${LOGO}</svg>`
