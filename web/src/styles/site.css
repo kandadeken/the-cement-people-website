@@ -593,3 +593,37 @@ main{display:block;padding:16px}
      the two sit one under the other. */
   @media (max-width:899px){#about{padding-top:calc(var(--gap-section) + var(--s5))}}
 }
+
+/* Visual refinements (18 Nov 2026, agreed with Daniel and ChatGPT). */
+@media screen{
+  /* Price list: each category heading is a shaded bar; at its right end,
+     ‹ › buttons move to the previous / next category (44 px tall, like
+     every other control). The unavailable direction is faded. */
+  #list h3{background:var(--hsh);border-bottom:0;border-radius:6px;padding:2px 2px 2px 12px;min-height:48px;margin-top:24px}
+  .snav{margin-left:auto;display:flex}
+  .sgo{display:inline-flex;align-items:center;justify-content:center;width:40px;height:44px;padding:0;border:0;border-radius:5px;background:none;color:var(--ink);cursor:pointer}
+  .sgo svg{width:20px;height:20px}
+  .sgo:hover:not(:disabled){background:color-mix(in srgb,var(--ink) 8%,transparent)}
+  .sgo:focus-visible{outline:2px solid var(--y);outline-offset:-2px}
+  .sgo:disabled{color:var(--mute);opacity:.35;cursor:default}
+
+  /* Estimate: the category heading is a soft shaded strip (no "01"
+     markers); the thin ochre line above each category still separates
+     them. */
+  .esh{grid-template-columns:16px minmax(0,1fr) auto;background:var(--fill);border-radius:6px;padding:9px 10px;margin-top:8px}
+  .es:not(.shut) .esh{border-bottom:0}
+
+  /* Estimate: every product numbered, in its own column to the left of the
+     name: a soft ochre square with charcoal numerals (28 px; 24 px on
+     phones). The column sits beside the name and unit price only, so the
+     quantity and line total keep their full width. */
+  .ln .nm{position:relative;padding-left:38px}
+  .lno{position:absolute;left:0;top:0;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:5px;background:var(--lno-bg);color:var(--lno-ink);font-size:14px;font-weight:600;line-height:1}
+  @media (max-width:599px){
+    .ln .nm{padding-left:32px}
+    .lno{width:24px;height:24px;font-size:13px;border-radius:4px}
+  }
+  /* Dark mode name box: transparent with a thin outline, bold name. */
+  .ln .pn{box-shadow:inset 0 0 0 1.5px var(--pn-edge)}
+  :root[data-theme="dark"] .ln .pn{font-weight:700}
+}

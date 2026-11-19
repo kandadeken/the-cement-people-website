@@ -141,9 +141,32 @@ function sharedPrice(list: EngineProduct[]): EngineProduct | null {
   return list.length > 1 && list.every((p) => p.price === list[0].price && p.unit === list[0].unit) ? list[0] : null;
 }
 
-/** One category: optional banner, heading (h3), optional note, optional
-    subgroup headings (h4), then rows. Mirrors `sec()` while browsing. */
-function sectionHTML(category: string, list: EngineProduct[], currency: string, info: CategoryInfo): string {
+/** Category arrows in each heading (18 Nov 2026). Mirrors the engine's
+    `navHTML()`: previous / next category buttons, disabled at the ends. */
+const ARR_L = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ARR_R = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+function catName(c: string): string {
+  const [l, s] = TAB_LABEL[c] || [c, ""];
+  return s ? `${l}, ${s.toLowerCase()}` : l;
+}
+function navHTML(cats: string[], g: string): string {
+  const i = cats.indexOf(g), a = cats[i - 1], z = cats[i + 1];
+  return (
+    `<span class="snav">` +
+    (a
+      ? `<button type="button" class="sgo" data-go="${a}" aria-label="Previous category: ${catName(a)}">${ARR_L}</button>`
+      : `<button type="button" class="sgo" disabled aria-label="Previous category">${ARR_L}</button>`) +
+    (z
+      ? `<button type="button" class="sgo" data-go="${z}" aria-label="Next category: ${catName(z)}">${ARR_R}</button>`
+      : `<button type="button" class="sgo" disabled aria-label="Next category">${ARR_R}</button>`) +
+    `</span>`
+  );
+}
+
+/** One category: optional banner, heading (h3) with its arrows, optional
+    note, optional subgroup headings (h4), then rows. Mirrors `sec()` while
+    browsing. */
+function sectionHTML(category: string, list: EngineProduct[], currency: string, info: CategoryInfo, cats: string[]): string {
   const subgroups = [...new Set(list.map((p) => p.sub || ""))];
   const extra = info[category] || {};
   const b = extra.banner;
@@ -163,7 +186,7 @@ function sectionHTML(category: string, list: EngineProduct[], currency: string, 
     (b
       ? `<img class="banner" src="${b.src}" srcset="${b.srcset}" sizes="${BANNER_SIZES}" alt="" width="${b.w}" height="${b.h}" fetchpriority="low" onerror="this.closest('section').classList.add('nobanner')">`
       : "") +
-    `<h3>${ICON[category] || ""}${category}</h3>` +
+    `<h3>${ICON[category] || ""}${category}${navHTML(cats, category)}</h3>` +
     (extra.note ? `<p class="cat-note">${extra.note}</p>` : "") +
     (one ? `<p class="cat-price"><b>${money(one.price, currency)}</b> per ${one.unit}, all sizes</p>` : "") +
     `${body}</section>`
@@ -189,8 +212,9 @@ export function tabsHTML(P: EngineProduct[]): string {
 
 /** The whole price list, one swipeable slide per category. Mirrors `renderList()` with no search. */
 export function listHTML(P: EngineProduct[], currency: string, info: CategoryInfo = {}): string {
-  return categories(P)
-    .map((g) => `<div class="slide">${sectionHTML(g, P.filter((p) => p.cat === g), currency, info)}</div>`)
+  const cats = categories(P);
+  return cats
+    .map((g) => `<div class="slide">${sectionHTML(g, P.filter((p) => p.cat === g), currency, info, cats)}</div>`)
     .join("");
 }
 

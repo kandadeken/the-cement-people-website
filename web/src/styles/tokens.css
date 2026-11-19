@@ -56,6 +56,10 @@
   --panel:#f4f4f4;   /* the price-list panel (the page colour in light mode) */
   --pn-bg:#292d2b;   /* product names in the estimate: deep charcoal label... */
   --pn-ink:#fff;     /* ...with white lettering */
+  --pn-edge:transparent; /* (dark mode outlines the name instead) */
+  --lno-bg:#ffb549;  /* estimate product numbers: the ochre lightened, same in both themes */
+  --lno-ink:#292d2b;
+  --hsh:#e6e5e0;     /* price-list category heading bar (18 Nov 2026) */
   --sel:#f8f2ea;     /* products already in the estimate: a faint ochre wash (17 Nov 2026) */
   --fill:#f4f4f4;    /* inner fills: stepper buttons, order-summary tiles, delivery box, help box */
   --field:#fff;      /* boxes you type in, and Add / secondary buttons */
@@ -111,8 +115,10 @@
   --line:#434a46;
   --y-soft:#5a3f12;
   --y-tint:#3d301a;
-  --pn-bg:#e8e6df;   /* dark mode: a soft ivory label instead, so it stands out */
-  --pn-ink:#292d2b;
+  --pn-bg:transparent; /* dark mode (18 Nov 2026, "B2"): no fill, a thin outline... */
+  --pn-ink:var(--ink);
+  --pn-edge:#8a8d8b;   /* ...in a softened text colour */
+  --hsh:#343936;
   --sel:#302b22;
   --sec-a:#363b38; --sec-a-body:#262a28;
   --sec-b:#3b403d; --sec-b-body:#2b2f2d;

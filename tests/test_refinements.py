@@ -61,7 +61,7 @@ def test_r02_estimate_reads_more_simply(browser, scheme):
     assert "Line total" not in est
     # Open sections: name only. Folded: quantity and total too.
     head = page.locator("#lines .es[data-g=rod] .esh")
-    assert head.inner_text().split("\n") == ["02", "IRON RODS"]
+    assert head.inner_text().split("\n") == ["IRON RODS"]  # no "02" since 18 Nov 2026
     head.click()
     assert "30 rods · 2.5 tons" in head.inner_text() and money(30 * 58 + 2.5 * 7000) in head.inner_text()
     # All subtotals kept, including the combined iron-rods line.

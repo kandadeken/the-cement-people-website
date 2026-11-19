@@ -221,7 +221,9 @@ def price_list(page):
                 const nm = row.querySelector('.nm');
                 return {
                     category,
-                    name: nm.childNodes[0].textContent.trim(),
+                    // Astro since 18 Nov 2026: the name is in its label (.pn), after
+                // the product number; the single-file site has plain text.
+                name: (nm.querySelector('.pn') || nm.childNodes[0]).textContent.trim(),
                     unit: nm.querySelector('small').textContent.trim().replace(/^per /, ''),
                     price: row.querySelector('.pr').textContent.trim(),
                 };
@@ -235,7 +237,9 @@ def estimate_lines(page):
         [...document.querySelectorAll('#lines .ln')].map(ln => {
             const nm = ln.querySelector('.nm');
             return {
-                name: nm.childNodes[0].textContent.trim(),
+                // Astro since 18 Nov 2026: the name is in its label (.pn), after
+                // the product number; the single-file site has plain text.
+                name: (nm.querySelector('.pn') || nm.childNodes[0]).textContent.trim(),
                 detail: nm.querySelector('small').textContent.trim(),
                 qty: ln.querySelector('input[data-qty]').value,
                 amount: ln.querySelector('.amt').textContent.trim(),

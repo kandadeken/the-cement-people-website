@@ -19,7 +19,8 @@ Final estimate refinements (Daniel and ChatGPT, 18 Nov 2026)
   R13  phones: more room between the end of the estimate and About us
   R14  each product name sits in a small label (name only; the unit price
        stays outside, under it): deep charcoal with white text in light
-       mode, soft ivory with charcoal text in dark mode
+       mode; in dark mode (since 18 Nov 2026) a transparent box with a thin
+       outline and the name in bold
   R15  "Total (excl. delivery)" is a dark bar with an ochre left edge and
        white text, on the page and in the full view, light and dark; it
        fits on one line at 360 px; delivery stays a separate line on the
@@ -69,7 +70,7 @@ def test_r07_estimate_heading(browser, width, mobile):
     assert _px(page, "#est .dh b", "fontSize") == section
     assert _px(page, "#est", "borderTopWidth") == 3
     assert page.evaluate("getComputedStyle(document.querySelector('#est')).borderTopColor") == \
-        page.evaluate("getComputedStyle(document.querySelector('.eno')).backgroundColor")
+        page.evaluate("getComputedStyle(document.querySelector('#send')).backgroundColor")
     # the title stays on one line
     assert page.evaluate("document.querySelector('#est .dh b').getClientRects().length") == 1
     assert _px(page, "#est .dh b", "height") < section * 1.6
@@ -84,7 +85,7 @@ def test_r07_estimate_heading(browser, width, mobile):
 def test_r08_view_full_estimate_outline(browser, scheme):
     page, errors = _open(browser, 390, 844, True, scheme)
     page.evaluate(ORDER)
-    ochre = page.evaluate("getComputedStyle(document.querySelector('.eno')).backgroundColor")
+    ochre = page.evaluate("getComputedStyle(document.querySelector('#send')).backgroundColor")
     s = page.evaluate("(() => { const s = getComputedStyle(document.querySelector('#full')); return [s.borderTopColor, s.borderTopWidth, s.backgroundColor, s.textDecorationLine] })()")
     assert s[0] == ochre and float(s[1].rstrip("px")) >= 1, s
     assert s[2] in ("rgba(0, 0, 0, 0)", "transparent"), s
@@ -198,8 +199,10 @@ def test_r13_room_before_about(browser):
 def test_r14_product_name_box(browser, scheme, width):
     page, errors = _open(browser, width, 844, width < 900, scheme)
     page.evaluate(ORDER)
-    fill = "rgb(41, 45, 43)" if scheme == "light" else "rgb(232, 230, 223)"
-    ink = "rgb(255, 255, 255)" if scheme == "light" else "rgb(41, 45, 43)"
+    # Light: charcoal label, white text. Dark (since 18 Nov 2026, "B2"): no
+    # fill, a thin outline, the name in the normal text colour.
+    fill = "rgb(41, 45, 43)" if scheme == "light" else "rgba(0, 0, 0, 0)"
+    ink = "rgb(255, 255, 255)" if scheme == "light" else "rgb(243, 244, 242)"
     assert page.evaluate("[...document.querySelectorAll('#lines .pn')].every(e => getComputedStyle(e).color === '%s' && +getComputedStyle(e).fontWeight >= 600)" % ink)
     names = page.evaluate("""[...document.querySelectorAll('#lines .ln')].map(l => { const pn = l.querySelector('.pn'), sm = l.querySelector('.nm small'), r = pn.getBoundingClientRect(), q = sm.getBoundingClientRect();
         return {text: pn.innerText, bg: getComputedStyle(pn).backgroundColor, below: q.top >= r.bottom - 1, outside: !pn.contains(sm), narrow: r.width < l.getBoundingClientRect().width * 0.9 || pn.innerText.length > 24, h: r.height} })""")
@@ -224,7 +227,7 @@ def test_r15_total_bar(browser, scheme, width):
     page, errors = _open(browser, width, 844 if width > 360 else 740, phone, scheme)
     page.evaluate(ORDER)
     dark = page.evaluate("getComputedStyle(document.querySelector('#est .dh')).backgroundColor")
-    ochre = page.evaluate("getComputedStyle(document.querySelector('.eno')).backgroundColor")
+    ochre = page.evaluate("getComputedStyle(document.querySelector('#send')).backgroundColor")
     for view in ("page", "full"):
         if view == "full":
             page.evaluate("openEst()" if phone else "fullEst(true)")
