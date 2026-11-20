@@ -11,8 +11,11 @@
       writes). The products and quantities fill in automatically.
    3. Add the customer's name and phone, change any agreed prices, choose
       the delivery (free, a fee or pickup).
-   4. "Save invoice as PDF" prints an A4 invoice; "Send on WhatsApp" opens a
-      chat with the customer so the PDF can be attached.
+   4. "Share invoice" makes the A4 PDF and opens the phone's share menu
+      with it and a one-line message (choose WhatsApp, then the customer).
+      "Download PDF" keeps a copy. The PDF is drawn in the page with jsPDF
+      (public/scripts/vendor/, loaded only when a PDF is made), because a
+      WhatsApp link can carry text but not a file (20 Nov 2026).
 
    WHAT IT IS NOT (agreed with Daniel and ChatGPT, 20 Nov 2026)
    - Not a tax invoice. TCP is not VAT-registered, so the document says
@@ -37,7 +40,6 @@
    =========================================================================== */
 import "../styles/tokens.css";
 import "../styles/desk.css";
-import "../styles/print.css";
 
 import products from "../data/products.json";
 import { business } from "../config/business";
@@ -51,15 +53,6 @@ const deskVersion = createHash("sha256")
   .update(readFileSync(join(process.cwd(), "public/scripts/invoice-desk.js")))
   .digest("hex")
   .slice(0, 10);
-
-// The horizontal logo for the top of the PDF, drawn from the same file the
-// website uses (public/brand/tcp-logo-horizontal-on-light.svg).
-const logoSvg = readFileSync(
-  join(process.cwd(), "public/brand/tcp-logo-horizontal-on-light.svg"),
-  "utf8",
-)
-  .replace(/<\?xml[^>]*>/, "")
-  .replace(/<svg\b/, '<svg class="q-logo" role="img" aria-label="The Cement People"');
 
 // What the desk script reads from the page: the price list and the
 // business details printed on the invoice.
@@ -187,19 +180,15 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
         <div class="dk-total"><span>Total</span><b id="sTot"></b></div>
         <p id="sMsg" class="dk-msg" role="alert"></p>
         <div class="dk-row">
-          <button type="button" id="pdfBtn" class="dk-btn primary">Save invoice as PDF</button>
-          <a id="waBtn" class="dk-btn" target="_blank" rel="noopener">Send on WhatsApp</a>
+          <button type="button" id="shareBtn" class="dk-btn primary">Share invoice</button>
+          <button type="button" id="pdfBtn" class="dk-btn">Download PDF</button>
         </div>
-        <p class="dk-help">Save the PDF first, then use "Send on WhatsApp" and attach it in the chat. Keep every PDF: it is your record of the invoice.</p>
+        <p class="dk-help">"Share invoice" opens your phone's share menu with the PDF and a short message: choose WhatsApp, then the customer. Use "Download PDF" to keep a copy: the PDF is your record of the invoice.</p>
         <button type="button" id="newBtn" class="dk-btn ghost">New invoice</button>
       </section>
     </div>
   </div>
 </main>
-
-<!-- The A4 invoice: hidden on screen, the only thing printed (print.css). -->
-<section id="quote" aria-hidden="true"></section>
-<template id="q-logo-svg"><Fragment set:html={logoSvg} /></template>
 
 <script is:inline type="application/json" id="desk-data" set:html={deskJson}></script>
 <script is:inline src={`/scripts/invoice-desk.js?v=${deskVersion}`}></script>

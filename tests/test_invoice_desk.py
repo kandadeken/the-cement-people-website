@@ -16,19 +16,27 @@ browser; prices from the same products.json as the public site.
        longer in the price list, a price that changed since the estimate
   D05  the rules: no invoice until delivery is agreed; delivery fee, free
        delivery and pickup; agreed prices; the invoice number and revisions
-  D06  the PDF: A4, titled INVOICE (never a tax invoice, no VAT lines),
-       with the customer, every item and the right total
-  D07  WhatsApp: Ghana numbers turned into wa.me form; the message carries
-       the invoice number and total
+  D06  the PDF (drawn in the page with jsPDF so it can be shared as a
+       file): A4, titled INVOICE (never a tax invoice, no VAT lines), with
+       the customer, every item and the right total; "Download PDF" names
+       the file after the invoice
+  D07  sharing: one short line goes with the PDF (20 Nov 2026, Daniel: not
+       every item in the message); Ghana numbers turned into wa.me form for
+       browsers that cannot share files
   D08  fits a 360 px and a 390 px phone without sideways scrolling
+  D09  a long invoice runs onto more pages with the table heading repeated,
+       a "Continued" line and page numbers, and the totals on the last page
 """
+import base64
+import io
 import os
 import re
 import urllib.parse
 
 import pytest
+from pypdf import PdfReader
 
-from conftest import PRODUCTS, SITE_URL, money, print_pdf, settle, whatsapp_message
+from conftest import PRODUCTS, SITE_URL, money, settle, tidy_pdf_text, whatsapp_message
 
 ASTRO = SITE_URL.startswith("http")
 DESK = urllib.parse.urljoin(SITE_URL, "invoice-desk/")
@@ -70,6 +78,14 @@ def _estimate_message(browser, order, loc=""):
 
 
 ORDER = {"c2": 9, "i3": 24, "j3": 2.5, "i8": 6}
+
+
+def _pdf(page):
+    """The invoice PDF exactly as Share and Download make it."""
+    b64 = page.evaluate("async () => (await TCPDesk.makePdf(TCPDesk.state())).output('datauristring').split(',')[1]")
+    reader = PdfReader(io.BytesIO(base64.b64decode(b64)))
+    pages = [tidy_pdf_text(p.extract_text()) for p in reader.pages]
+    return pages, [(float(p.mediabox.width), float(p.mediabox.height)) for p in reader.pages]
 
 
 # ---- D01 --------------------------------------------------------------------
@@ -195,39 +211,50 @@ def test_d06_the_invoice_pdf(browser):
     page.fill("#cPhone", "0241234567")
     page.check('input[name="dl"][value="fee"]')
     page.fill("#fee", "250")
-    page.fill("#iPay", "MTN MoMo 055 000 0000 (The Cement People)")
+    page.fill("#iPay", "MTN MoMo 055 000 0000\nName: The Cement People")
     no = page.inner_text("#sNo")
-    pdf = print_pdf(page, "invoice-desk-d06.pdf")
-    assert pdf.printed_blocks == ["quote"], pdf.printed_blocks
-    assert all(abs(w - 595.28) < 1 and abs(h - 841.89) < 1 for w, h in pdf.sizes), pdf.sizes
-    text = pdf.text
+    pages, sizes = _pdf(page)
+    assert len(pages) == 1 and all(abs(w - 595.28) < 1 and abs(h - 841.89) < 1 for w, h in sizes), sizes
+    text = pages[0]
     assert "INVOICE" in text and no in text and "Kwame Mensah" in text and "0241234567" in text
-    for k in ORDER:
-        assert BY_ID[k]["name"] in text, BY_ID[k]["name"]
+    for k, q in ORDER.items():
+        p = BY_ID[k]
+        assert p["name"] in text and money(p["price"] * q) in text, p["name"]
     total = sum(BY_ID[k]["price"] * q for k, q in ORDER.items()) + 250
     assert f"Total due {money(total)}" in text, text[-400:]
-    assert "Delivery fee" in text and "MTN MoMo 055 000 0000" in text
+    assert "Delivery fee" in text and "MTN MoMo 055 000 0000" in text and "Name: The Cement People" in text
+    assert "Page 1 of 1" in text and "GH₵" in text
     assert not re.search(r"\bVAT\b|\btax invoice\b|\bNHIL\b|GETFund", text, re.I), "the invoice must not look like a tax invoice"
+    with page.expect_download() as dl:
+        page.click("#pdfBtn")
+    assert dl.value.suggested_filename == f"TCP Invoice {no}.pdf"
     assert not errors, errors
     page.context.close()
 
 
 # ---- D07 --------------------------------------------------------------------
-def test_d07_whatsapp(browser):
+def test_d07_sharing(browser):
     page, errors = _desk(browser)
     for typed, want in [("024 123 4567", "233241234567"), ("+233 24 123 4567", "233241234567"),
                         ("00233241234567", "233241234567"), ("241234567", "233241234567"), ("0241", "")]:
         assert page.evaluate("p => TCPDesk.waNumber(p)", typed) == want, typed
-    msg = _estimate_message(browser, {"c2": 2})
-    _read(page, msg)
+    _read(page, _estimate_message(browser, {"c2": 2}))
     page.fill("#cName", "Ama Owusu")
     page.fill("#cPhone", "020 555 1234")
+    assert page.is_disabled("#shareBtn")
     page.check('input[name="dl"][value="pickup"]')
-    href = page.get_attribute("#waBtn", "href")
-    assert href.startswith("https://wa.me/233205551234?text=")
-    text = urllib.parse.unquote(href.split("text=", 1)[1])
-    assert text.startswith("Hello Ama,") and page.inner_text("#sNo") in text
-    assert f"*Total due: {money(2 * BY_ID['c2']['price'])}*" in text
+    assert not page.is_disabled("#shareBtn")
+    no = page.inner_text("#sNo")
+    line = page.evaluate("TCPDesk.waText(TCPDesk.state())")
+    assert line == f"Hello Ama, here is your invoice {no} from The Cement People.", line
+    # What the phone's share menu receives: the PDF file and that one line.
+    page.evaluate("""() => { window.__shared = null;
+        navigator.canShare = d => !!(d && d.files && d.files.length);
+        navigator.share = async d => { window.__shared = {names: d.files.map(f => f.name), types: d.files.map(f => f.type), text: d.text}; }; }""")
+    page.click("#shareBtn")
+    page.wait_for_function("window.__shared")
+    shared = page.evaluate("window.__shared")
+    assert shared == {"names": [f"TCP Invoice {no}.pdf"], "types": ["application/pdf"], "text": line}, shared
     assert not errors, errors
     page.context.close()
 
@@ -239,5 +266,28 @@ def test_d08_fits_a_phone(browser, width):
     _read(page, _estimate_message(browser, ORDER))
     widest = page.evaluate("document.documentElement.scrollWidth")
     assert widest <= width, f"{width} px phone: page is {widest} px wide"
+    assert not errors, errors
+    page.context.close()
+
+
+# ---- D09 --------------------------------------------------------------------
+def test_d09_long_invoice_runs_onto_more_pages(browser):
+    page, errors = _desk(browser, width=1280)
+    page.click("#blankBtn")
+    for i in range(34):
+        page.select_option("#addSel", index=i % len(PRODUCTS))
+        page.click("#addBtn")
+    page.fill("#cName", "Big Order Ltd")
+    page.fill("#cPhone", "0201234567")
+    page.check('input[name="dl"][value="free"]')
+    no = page.inner_text("#sNo")
+    pages, _ = _pdf(page)
+    assert len(pages) >= 2, len(pages)
+    for n, text in enumerate(pages, 1):
+        assert f"Page {n} of {len(pages)}" in text and "DESCRIPTION" in text
+        if n > 1:
+            assert f"Invoice {no}" in text and "Continued" in text
+    total = 2 * sum(p["price"] for p in PRODUCTS)
+    assert f"Total due {money(total)}" in pages[-1] and "Total due" not in "".join(pages[:-1])
     assert not errors, errors
     page.context.close()

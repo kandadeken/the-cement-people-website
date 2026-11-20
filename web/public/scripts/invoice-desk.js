@@ -196,10 +196,8 @@ function refresh(){const t=totals(S),bad=problems(S);
   $("#sNo").textContent=invoiceNo(S);$("#sMat").textContent=isNaN(t.mat)?"—":money(t.mat);
   $("#sDel").textContent=S.dl==="fee"?money(t.fee):S.dl==="pending"?"Not agreed yet":DL_TEXT[S.dl]+" · "+money(0);
   $("#sTot").textContent=isNaN(t.total)?"—":money(t.total);$("#pdfBtn").disabled=bad.length>0;
-  const wa=$("#waBtn"),to=waNumber(S.phone);
-  $("#sMsg").textContent=bad.length?bad.join(" "):to?"":"The PDF is ready. For WhatsApp, enter the full phone number (10 digits, e.g. 024 123 4567).";
-  if(!bad.length&&to){wa.href="https://wa.me/"+to+"?text="+encodeURIComponent(waText(S));wa.removeAttribute("aria-disabled");wa.classList.remove("off")}
-  else{wa.removeAttribute("href");wa.setAttribute("aria-disabled","true");wa.classList.add("off")}
+  $("#shareBtn").disabled=bad.length>0;
+  $("#sMsg").textContent=bad.join(" ");
   save();}
 $("#items").addEventListener("change",()=>render());
 $("#items").addEventListener("click",e=>{const b=e.target.closest("[data-rm]");if(!b)return;S.items.splice(+b.dataset.rm,1);render();});
@@ -226,54 +224,150 @@ $("#newBtn").addEventListener("click",()=>{
   S=blank();try{localStorage.removeItem(DRAFT)}catch(e){}$("#paste").value="";$("#readMsg").textContent="";$("#form").hidden=true;window.scrollTo(0,0);});
 
 // ---- 6. The PDF --------------------------------------------------------------------
-// Same A4 layout as the website's estimate (styles/print.css): logo and
-// document details on top, customer and delivery in the grey band, the
-// items table, then notes on the left and totals on the right.
+// The desk draws the invoice PDF itself (jsPDF), so the file can be shared
+// straight to WhatsApp from the phone's share menu (20 Nov 2026, Daniel:
+// a WhatsApp link can only carry text, so the PDF was not attached).
+// It copies the look of the website's estimate PDF (styles/print.css):
+// logo and document details on top, a charcoal rule with an ochre start,
+// customer and delivery in a grey band, the items table, then notes on the
+// left and totals on the right; footer and page numbers on every page.
+// The library and the font load only the first time a PDF is made.
+const VENDOR="/scripts/vendor/";
+const loadScript=src=>new Promise((ok,fail)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=()=>fail(new Error("Could not load "+src));document.head.appendChild(s);});
+let ready=null;
+function pdfKit(){
+  if(!ready)ready=Promise.all([
+    window.jspdf?0:loadScript(VENDOR+"jspdf.umd.min.js"),
+    window.TCP_PDF_FONTS?0:loadScript(VENDOR+"montserrat-pdf.js"),
+    logoPng(),
+  ]).then(r=>({jsPDF:window.jspdf.jsPDF,logo:r[2]})).catch(e=>{ready=null;throw e;});
+  return ready;
+}
+// The horizontal logo, drawn sharp (4 times its print size) as a PNG.
+function logoPng(){return new Promise((ok,fail)=>{const img=new Image();
+  img.onload=()=>{const c=document.createElement("canvas");c.width=2369;c.height=400;const g=c.getContext("2d");g.drawImage(img,0,0,c.width,c.height);ok(c.toDataURL("image/png"));};
+  img.onerror=()=>fail(new Error("Could not load the logo"));img.src="/brand/tcp-logo-horizontal-on-light.svg";});}
 function dateText(iso){const[y,m,d]=(iso||today()).split("-").map(Number);
   return new Date(y,m-1,d).toLocaleDateString("en-GB",{year:"numeric",month:"long",day:"numeric"});}
-function invoiceHTML(s){
+const fileName=s=>`TCP Invoice ${invoiceNo(s)}.pdf`;
+async function makePdf(s){
+  const{jsPDF,logo}=await pdfKit(),F=window.TCP_PDF_FONTS;
+  const doc=new jsPDF({unit:"mm",format:"a4",compress:true});
+  [["r","normal"],["s","semibold"],["x","bold"]].forEach(([k,st])=>{doc.addFileToVFS(`M-${k}.ttf`,F[k]);doc.addFont(`M-${k}.ttf`,"Montserrat",st);});
+  doc.setProperties({title:`${B.name} ${DOC_TITLE} ${invoiceNo(s)}`,author:B.name,creator:"TCP Invoice Desk"});
+  const INK="#131514",MUTE="#5a5a5a",LINE="#dcdcdc",OCHRE="#ff9802",BAND="#f4f4f4";
+  const L=14,R=196,W=R-L,TOP=16,BOTTOM=282,pt=n=>n*0.3528;
+  const font=(st,size,col)=>{doc.setFont("Montserrat",st);doc.setFontSize(size);doc.setTextColor(col||INK);};
+  // Text drawn from its top edge; "sp" is letter spacing in mm; right-aligned when "right" is set.
+  const txt=(str,x,y,o={})=>{const sp=o.sp||0,w=doc.getTextWidth(str)+sp*Math.max(0,str.length-1);
+    doc.text(str,o.right?x-w:x,y,{baseline:"top",charSpace:sp});return w;};
+  const wrap=(str,w)=>doc.splitTextToSize(str,w);
   const t=totals(s),no=invoiceNo(s);
-  const logo=($("#q-logo-svg")||{}).innerHTML||"";
-  const rows=s.items.map((l,i)=>`<tr data-row="item"><td class="n">${i+1}</td><td>${esc(l.name)} <small>per ${esc(l.unit)}</small></td><td class="r">${fmtQ(l.qty)} ${UNIT_WORD(l.unit,l.qty)}</td><td class="r">${money(l.price)}</td><td class="r">${money(lineTotal(l))}</td></tr>`).join("");
+  // -- Header: logo left; INVOICE, number, date and estimate right
+  doc.addImage(logo,"PNG",L,TOP,13*5.92329,13);
+  font("bold",17);txt(DOC_TITLE.toUpperCase(),R,TOP,{right:1,sp:pt(17)*.08});
+  const dl=[["Invoice no.",no],["Date",dateText(s.date)]].concat(s.ref?[["Estimate",s.ref]]:[]);
+  font("bold",9);const vw=Math.max(...dl.map(r=>doc.getTextWidth(r[1])));
+  let y=TOP+8.5;
+  dl.forEach(([k,v])=>{font("bold",9);txt(v,R,y,{right:1});font("normal",9,MUTE);txt(k,R-vw-4,y,{right:1});y+=4.3;});
+  y=Math.max(TOP+13,y)+4.5;
+  doc.setFillColor(INK);doc.rect(L,y,W,.8,"F");doc.setFillColor(OCHRE);doc.rect(L,y,28,.8,"F");
+  y+=.8+4.5;
+  // -- Grey band: bill to, delivery, from
   const site=s.site.trim();
-  const dl=s.dl==="pickup"?`Customer pickup<br>${esc(B.pickup)}`:s.dl==="free"?`Free delivery${site?" to<br>"+esc(site):""}`:`Delivery${site?" to<br>"+esc(site):""}`;
-  const dlAmt=s.dl==="fee"?money(t.fee):s.dl==="free"?"Free":"Pickup";
-  return`<header class="q-head">${logo}<div class="q-doc"><h1>${DOC_TITLE}</h1><dl><dt>Invoice no.</dt><dd>${no}</dd><dt>Date</dt><dd>${dateText(s.date)}</dd>${s.ref?`<dt>Estimate</dt><dd>${s.ref}</dd>`:""}</dl></div></header>`
-  +`<div class="q-to"><div><small>Bill to</small><p>${esc(s.name.trim())}<br>${esc(s.phone.trim())}</p></div><div><small>Delivery</small><p>${dl}</p></div><div><small>From</small><p>${esc(B.name)}<br>${esc(B.phone)} (call or WhatsApp)<br>${esc(B.website)}<br>${esc(B.town)}</p></div></div>`
-  +`<table><thead><tr><th class="n">#</th><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table>`
-  +`<div class="q-close"><div class="q-terms">`
-  +(s.pay.trim()?`<h2>How to pay</h2><p class="q-pre">${esc(s.pay.trim())}</p>`:"")
-  +(s.note.trim()?`<h2>Note</h2><p class="q-pre">${esc(s.note.trim())}</p>`:"")
-  +`<h2>Questions</h2><p>WhatsApp or call ${esc(B.phone)} and quote invoice <b>${no}</b>.</p>`
-  +`<h2>Terms</h2><ul><li>All prices are in Ghana cedis (GH₵).</li></ul></div>`
-  +`<div class="q-sum"><div class="q-mat"><span>Materials</span><span>${money(t.mat)}</span></div>`
-  +`<div class="q-del"><span>${DL_TEXT[s.dl]}</span><span>${dlAmt}</span></div>`
-  +`<div class="gt"><span>Total due</span><span>${money(t.total)}</span></div></div></div>`;
+  const dlv=s.dl==="pickup"?`Customer pickup\n${B.pickup}`:(s.dl==="free"?"Free delivery":"Delivery")+(site?` to\n${site}`:"");
+  const cols=[["Bill to",`${s.name.trim()}\n${s.phone.trim()}`],["Delivery",dlv],["From",`${B.name}\n${B.phone} (call or WhatsApp)\n${B.website}\n${B.town}`]];
+  const inner=W-.8-7,gap=6,unitW=(inner-2*gap)/3.7,cw=[1.5,1,1.2].map(r=>r*unitW);
+  font("semibold",8.5);const lh=pt(8.5)*1.45;
+  const lines=cols.map((c,i)=>c[1].split("\n").flatMap(l=>wrap(l,cw[i])));
+  const bandH=3+pt(7)*1.2+.6+Math.max(...lines.map(l=>l.length))*lh+3;
+  doc.setFillColor(BAND);doc.rect(L,y,W,bandH,"F");doc.setFillColor(OCHRE);doc.rect(L,y,.8,bandH,"F");
+  let x=L+.8+3.5;
+  cols.forEach((c,i)=>{font("bold",7,MUTE);txt(c[0].toUpperCase(),x,y+3,{sp:pt(7)*.1});
+    font("semibold",8.5);lines[i].forEach((l,j)=>txt(l,x,y+3+pt(7)*1.2+.6+j*lh));x+=cw[i]+gap;});
+  y+=bandH+4.5;
+  // -- Items table
+  const C={n:L+2.5,d:L+8+2.5,q:R-32-28-2.5,u:R-32-2.5,a:R-2.5},dW=C.q-24-C.d;
+  const head=()=>{doc.setFillColor(INK);doc.rect(L,y,W,7,"F");font("bold",7.5,"#ffffff");const sp=pt(7.5)*.08,ty=y+2.2;
+    txt("#",C.n,ty,{sp});txt("DESCRIPTION",C.d,ty,{sp});txt("QTY",C.q,ty,{right:1,sp});txt("UNIT PRICE",C.u,ty,{right:1,sp});txt("AMOUNT",C.a,ty,{right:1,sp});y+=7;};
+  const newPage=()=>{doc.addPage();y=TOP;};
+  head();
+  const rlh=pt(9.5)*1.45;
+  s.items.forEach((l,i)=>{
+    font("semibold",9.5);const nameLines=wrap(l.name,dW);
+    font("normal",8);const per=`per ${l.unit}`,perW=doc.getTextWidth(per);
+    font("semibold",9.5);const lastW=doc.getTextWidth(nameLines[nameLines.length-1]);
+    const perOwn=lastW+1.5+perW>dW,rows=nameLines.length+(perOwn?1:0),h=1.7*2+rows*rlh;
+    if(y+h>BOTTOM){newPage();head();}
+    const ty=y+1.7;
+    font("semibold",9.5);txt(String(i+1),C.n,ty);nameLines.forEach((n,j)=>txt(n,C.d,ty+j*rlh));
+    font("normal",8,MUTE);perOwn?txt(per,C.d,ty+nameLines.length*rlh+.3):txt(per,C.d+lastW+1.5,ty+(nameLines.length-1)*rlh+.4);
+    font("normal",9.5);txt(`${fmtQ(l.qty)} ${UNIT_WORD(l.unit,l.qty)}`.trim(),C.q,ty,{right:1});txt(money(l.price),C.u,ty,{right:1});txt(money(lineTotal(l)),C.a,ty,{right:1});
+    y+=h;doc.setDrawColor(LINE);doc.setLineWidth(.25);doc.line(L,y,R,y);
+  });
+  // -- Bottom: notes left, totals right (kept together on one page)
+  const TW=98,LW=W-TW-8,tlh=pt(7.5)*1.4;
+  const notes=[];
+  if(s.pay.trim())notes.push(["How to pay",s.pay.trim()]);
+  if(s.note.trim())notes.push(["Note",s.note.trim()]);
+  notes.push(["Questions",`WhatsApp or call ${B.phone} and quote invoice ${no}.`]);
+  notes.push(["Terms","All prices are in Ghana cedis (GH₵)."]);
+  font("normal",7.5);const noteLines=notes.map(([h,b])=>[h,b.split("\n").flatMap(l=>wrap(l,LW))]);
+  const notesH=noteLines.reduce((a,[,b])=>a+tlh+1.5+b.length*tlh+3,0);
+  const rowH=1.2*2+pt(9.5)*1.45,sumH=.5+rowH*2+1.5+3*2+pt(11)*1.45;
+  if(y+4+Math.max(notesH,sumH)>BOTTOM)newPage();else y+=4;
+  let ny=y;
+  noteLines.forEach(([h,b])=>{font("bold",7.5,MUTE);txt(h.toUpperCase(),L,ny,{sp:pt(7.5)*.1});ny+=tlh+1.5;
+    font("normal",7.5,"#333333");b.forEach(l=>{txt(l,L,ny);ny+=tlh;});ny+=3;});
+  const sx=R-TW;let sy=y;
+  doc.setFillColor(INK);doc.rect(sx,sy,TW,.5,"F");sy+=.5;
+  const sumRow=(k,v,st)=>{font(st,9.5);txt(k,sx+2.5,sy+1.2);txt(v,R-2.5,sy+1.2,{right:1});sy+=rowH;};
+  sumRow("Materials",money(t.mat),"bold");
+  sumRow(DL_TEXT[s.dl],s.dl==="fee"?money(t.fee):s.dl==="free"?"Free":"Pickup","semibold");
+  sy+=1.5;const gh=3*2+pt(11)*1.45;
+  doc.setFillColor(INK);doc.rect(sx,sy,TW,gh,"F");doc.setFillColor(OCHRE);doc.rect(sx,sy,1.5,gh,"F");
+  font("bold",11,"#ffffff");txt("Total due",sx+1.5+2.5,sy+3);txt(money(t.total),R-2.5,sy+3,{right:1});
+  // -- Every page: footer; pages 2+ also a "continued" line at the top
+  const n=doc.getNumberOfPages();
+  for(let p=1;p<=n;p++){doc.setPage(p);
+    font("normal",7,MUTE);txt(`${B.website}  ·  ${B.phone}`,L,289);txt(`Page ${p} of ${n}`,R,289,{right:1});
+    if(p>1){font("bold",7.5);txt(`${B.name}  ·  ${DOC_TITLE} ${no}`,L,9);font("normal",7.5,MUTE);txt("Continued",R,9,{right:1});}}
+  return doc;
 }
-const PAGE_TITLE=document.title;
-function renderPdf(){
-  $("#quote").innerHTML=invoiceHTML(S);
-  let ps=document.getElementById("qpage");
-  if(!ps){ps=document.createElement("style");ps.id="qpage";document.head.appendChild(ps);}
-  ps.textContent=`@page{@top-left{content:"The Cement People  ·  ${DOC_TITLE} ${invoiceNo(S)}";font:700 7.5pt Montserrat,Arial,sans-serif;color:#131514;vertical-align:bottom;padding-bottom:2mm}@top-right{content:"Continued";font:7.5pt Montserrat,Arial,sans-serif;color:#5a5a5a;vertical-align:bottom;padding-bottom:2mm}}@page:first{@top-left{content:none}@top-right{content:none}}`;
-}
-// The saved PDF is named after the invoice number.
-addEventListener("beforeprint",()=>{renderPdf();document.title=`The Cement People ${DOC_TITLE} ${invoiceNo(S)}`;});
-addEventListener("afterprint",()=>{document.title=PAGE_TITLE;});
-$("#pdfBtn").addEventListener("click",()=>{if(problems(S).length)return;renderPdf();window.print();});
 
-// ---- 7. WhatsApp -------------------------------------------------------------------
-// A Ghana number as wa.me needs it: 024 123 4567 -> 233241234567.
+// ---- 7. Sharing ----------------------------------------------------------------------
+// "Share invoice": the phone's share menu with the PDF and a one-line
+// message; choose WhatsApp, then the customer (20 Nov 2026, Daniel: only
+// the PDF and "here is your invoice", not every item in the message).
+// Where a browser cannot share files (most computers), the PDF is
+// downloaded and the customer's WhatsApp chat opens with the same line.
 function waNumber(p){let d=String(p||"").replace(/\D/g,"");
   if(d.startsWith("00"))d=d.slice(2);
   if(d.length===10&&d.startsWith("0"))d="233"+d.slice(1);
   else if(d.length===9)d="233"+d;
   return d.length>=11?d:"";}
-function waText(s){const t=totals(s),first=s.name.trim().split(/\s+/)[0]||"";
-  return`Hello${first?" "+first:""},\n\nThank you for your order. Here is your invoice from The Cement People.\n\n*Invoice ${invoiceNo(s)}*${s.ref?`\nFor estimate ${s.ref}`:""}\n`
-  +s.items.map((l,i)=>`${i+1}. ${l.name} (${l.unit}): ${fmtQ(l.qty)} × ${money(l.price)} = ${money(lineTotal(l))}`).join("\n")
-  +`\n\nMaterials: ${money(t.mat)}\n${DL_TEXT[s.dl]}: ${s.dl==="fee"?money(t.fee):money(0)}\n*Total due: ${money(t.total)}*\n\nThe invoice PDF is attached.`;}
+function waText(s){const first=s.name.trim().split(/\s+/)[0]||"";
+  return`Hello${first?" "+first:""}, here is your invoice ${invoiceNo(s)} from ${B.name}.`;}
+function busy(btn,on,label){btn.disabled=on;if(on){btn.dataset.label=btn.textContent;btn.textContent=label;}else if(btn.dataset.label)btn.textContent=btn.dataset.label;}
+async function pdfFile(s){const doc=await makePdf(s);return new File([doc.output("blob")],fileName(s),{type:"application/pdf"});}
+function download(file){const a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),30000);}
+$("#shareBtn").addEventListener("click",async()=>{
+  if(problems(S).length)return;const btn=$("#shareBtn"),m=$("#sMsg");busy(btn,true,"Preparing PDF…");
+  try{const file=await pdfFile(S),text=waText(S);
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      try{await navigator.share({files:[file],text,title:file.name});}catch(e){if(e.name!=="AbortError")throw e;}
+    }else{download(file);const to=waNumber(S.phone);
+      if(to)window.open("https://wa.me/"+to+"?text="+encodeURIComponent(text),"_blank","noopener");
+      m.textContent="This browser cannot share files: the PDF was downloaded. Attach it in the WhatsApp chat.";}
+  }catch(e){m.textContent="The PDF could not be made: "+e.message;}
+  finally{busy(btn,false);}
+});
+$("#pdfBtn").addEventListener("click",async()=>{
+  if(problems(S).length)return;const btn=$("#pdfBtn");busy(btn,true,"Preparing PDF…");
+  try{download(await pdfFile(S));}catch(e){$("#sMsg").textContent="The PDF could not be made: "+e.message;}
+  finally{busy(btn,false);}
+});
 
 // For the tests (and nothing else): the desk's own functions.
-window.TCPDesk={parseEstimate,num,invoiceNo,totals,problems,waNumber,waText,invoiceHTML,state:()=>S};
+window.TCPDesk={parseEstimate,num,invoiceNo,totals,problems,waNumber,waText,makePdf,state:()=>S};
 })();
