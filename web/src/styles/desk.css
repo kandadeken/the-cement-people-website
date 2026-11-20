@@ -62,3 +62,15 @@ body.desk{margin:0;background:var(--bg);color:var(--ink);font:var(--w-text) 16px
 .dk-sum .dk-no-line b{font-size:14px;letter-spacing:.02em;white-space:nowrap}
 .dk-sum .dk-total{margin-top:6px;padding:12px;background:var(--dark);color:var(--on-dark);border-left:5px solid var(--y);border-radius:3px;font-size:18px}
 .dk-sum .dk-total span{color:var(--on-dark)}
+/* Payments and receipts (20 Nov 2026) */
+.dk-paysum{margin-bottom:6px}
+.dk-card h3{margin:16px 0 10px;font-size:15px;font-weight:800}
+.dk-link{margin-top:6px;padding:6px 0;border:0;background:none;color:var(--ink);font:700 14px var(--font);text-decoration:underline;cursor:pointer;min-height:32px}
+.dk-pm{margin-top:12px}
+.dk-pm-more{margin-top:12px}
+.dk-pm-more:not(:has(> div:not([hidden]))){display:none}
+.dk-pay{padding:12px 0;border-top:1px solid var(--line)}
+.dk-pay .dk-row{margin-top:8px}
+.dk-pay-txt b{font-variant-numeric:tabular-nums}
+.dk-pay-txt span{color:var(--ink);font-size:14px}
+.dk-pay-txt small{display:block;margin-top:2px;color:var(--mute);font-size:12px;letter-spacing:.02em}

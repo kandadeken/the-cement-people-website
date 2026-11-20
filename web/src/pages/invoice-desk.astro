@@ -16,6 +16,11 @@
       "Download PDF" keeps a copy. The PDF is drawn in the page with jsPDF
       (public/scripts/vendor/, loaded only when a PDF is made), because a
       WhatsApp link can carry text but not a file (20 Nov 2026).
+   5. When the customer pays (in full or in parts), record the payment in
+      "Payments and receipts" and share the receipt: a short A5 PDF that
+      reads like the website's "Your order at a glance" panel, with the
+      amount received, how it was paid and the balance left (added
+      20 Nov 2026; see section 8 of public/scripts/invoice-desk.js).
 
    WHAT IT IS NOT (agreed with Daniel and ChatGPT, 20 Nov 2026)
    - Not a tax invoice. TCP is not VAT-registered, so the document says
@@ -184,6 +189,40 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
           <button type="button" id="pdfBtn" class="dk-btn">Download PDF</button>
         </div>
         <p class="dk-help">"Share invoice" opens your phone's share menu with the PDF and a short message: choose WhatsApp, then the customer. Use "Download PDF" to keep a copy: the PDF is your record of the invoice.</p>
+      </section>
+
+      <!-- 6. Payments and receipts (20 Nov 2026) -->
+      <section class="dk-card" id="paySec">
+        <h2><span class="dk-no">6</span>Payments and receipts</h2>
+        <p class="dk-help">When the customer pays, record it here and share a receipt. Part payments are fine: each payment gets its own receipt showing the balance left.</p>
+        <div class="dk-sum dk-paysum" aria-live="polite">
+          <div><span>Invoice total</span><b id="pTot"></b></div>
+          <div><span>Paid so far</span><b id="pPaid"></b></div>
+          <div class="dk-total"><span>Balance</span><b id="pBal"></b></div>
+        </div>
+        <div id="pays"></div>
+        <div id="payForm">
+          <h3>Record a payment</h3>
+          <div class="dk-grid">
+            <div><label for="pAmt">Amount received (GH₵)</label>
+              <input id="pAmt" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
+              <button type="button" id="pFull" class="dk-link">Whole balance</button></div>
+            <div><label for="pDate">Date paid</label><input id="pDate" type="date"></div>
+          </div>
+          <div class="dk-opts dk-pm" role="radiogroup" aria-label="How the customer paid">
+            <label><input type="radio" name="pm" value="momo"> Mobile Money</label>
+            <label><input type="radio" name="pm" value="cash"> Cash</label>
+            <label><input type="radio" name="pm" value="bank"> Bank transfer</label>
+          </div>
+          <div class="dk-grid dk-pm-more">
+            <div id="netBox" hidden><label for="pNet">Network</label>
+              <select id="pNet"><option>MTN MoMo</option><option>Telecel Cash</option><option>AT Money</option></select></div>
+            <div id="refBox" hidden><label for="pRef" id="refLbl">Transaction ID (optional)</label>
+              <input id="pRef" autocomplete="off" autocapitalize="characters"></div>
+          </div>
+          <div class="dk-row"><button type="button" id="payBtn" class="dk-btn primary">Record payment</button></div>
+        </div>
+        <p id="pMsg" class="dk-msg" role="status"></p>
         <button type="button" id="newBtn" class="dk-btn ghost">New invoice</button>
       </section>
     </div>

@@ -13,6 +13,7 @@
      5. The screen             (form, summary, draft kept on this device)
      6. The PDF                (A4, same look as the website's estimate PDF)
      7. WhatsApp
+     8. Payments and receipts  (added 20 Nov 2026, see the notes there)
    =========================================================================== */
 (()=>{
 // ---- 1. Settings and helpers ------------------------------------------------
@@ -76,7 +77,8 @@ $("#gateForm").addEventListener("submit",async e=>{
   let ok=false;try{ok=await check($("#pass").value)}catch(err){m.textContent="This browser cannot check the passphrase. Try Chrome.";return}
   if(ok){m.textContent="";$("#pass").value="";open()}else{m.textContent="That passphrase is not right.";$("#pass").select()}
 });
-try{if(sessionStorage.getItem(UNLOCK)==="1")open()}catch(e){}
+// (Re-opening the desk after a reload happens at the very end of this file,
+// once every section below is ready: see "Start".)
 
 // ---- 3. Reading the estimate -------------------------------------------------
 // The website writes (quote-engine.js, renderEst):
@@ -114,7 +116,9 @@ function parseEstimate(text){
 // ---- 4. The invoice ------------------------------------------------------------
 // S holds everything on the form; saved as a draft on this device (section 5).
 let S=blank();
-function blank(){return{ref:null,code:null,name:"",phone:"",site:"",items:[],dl:"pending",fee:"",date:today(),rev:"1",pay:"",note:""};}
+// payments: the money received against this invoice, in the order it was
+// recorded, each {date, amount (pesewas), method, net, ref} (section 8).
+function blank(){return{ref:null,code:null,name:"",phone:"",site:"",items:[],dl:"pending",fee:"",date:today(),rev:"1",pay:"",note:"",payments:[]};}
 function today(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 // A code of 6 characters for invoices made without an estimate.
 function freshCode(){const A="23456789ABCDEFGHJKLMNPQRSTUVWXYZ",r=new Uint8Array(6);crypto.getRandomValues(r);return[...r].map(n=>A[n%32]).join("");}
@@ -198,6 +202,7 @@ function refresh(){const t=totals(S),bad=problems(S);
   $("#sTot").textContent=isNaN(t.total)?"—":money(t.total);$("#pdfBtn").disabled=bad.length>0;
   $("#shareBtn").disabled=bad.length>0;
   $("#sMsg").textContent=bad.join(" ");
+  renderPays();
   save();}
 $("#items").addEventListener("change",()=>render());
 $("#items").addEventListener("click",e=>{const b=e.target.closest("[data-rm]");if(!b)return;S.items.splice(+b.dataset.rm,1);render();});
@@ -220,7 +225,7 @@ $("#readBtn").addEventListener("click",()=>{
 });
 $("#blankBtn").addEventListener("click",()=>{S={...blank(),code:freshCode()};$("#readMsg").textContent="";showForm();$("#cName").focus();});
 $("#newBtn").addEventListener("click",()=>{
-  if(S.items.length&&!confirm("Start a new invoice? This one is cleared from the desk (your saved PDF is kept)."))return;
+  if(S.items.length&&!confirm("Start a new invoice? This one and its payments are cleared from the desk (PDFs you saved or shared are kept)."))return;
   S=blank();try{localStorage.removeItem(DRAFT)}catch(e){}$("#paste").value="";$("#readMsg").textContent="";$("#form").hidden=true;window.scrollTo(0,0);});
 
 // ---- 6. The PDF --------------------------------------------------------------------
@@ -368,6 +373,245 @@ $("#pdfBtn").addEventListener("click",async()=>{
   finally{busy(btn,false);}
 });
 
+// ---- 8. Payments and receipts ----------------------------------------------------
+// Added 20 Nov 2026 (Daniel): when a customer pays, record the payment
+// and send a short receipt that reads like the website's "Your order at
+// a glance" panel: the amount received, how it was paid, the order as
+// plain counts ("205 bags of cement", "5.5 tons of rods") and the balance
+// left. Agreed choices:
+//   - Short receipt: no item list or prices; the invoice already has those.
+//   - Part payments allowed: every payment gets its own receipt with the
+//     balance left after it. The last one shows "PAID IN FULL".
+//   - Ways to pay: Mobile Money (with the network), cash, bank transfer.
+// Payments are kept with the invoice draft on this device, like the rest
+// of the desk; the shared or downloaded receipt PDF is the record.
+//
+// Receipt number: TCP-RCT-YYMMDD-XXXXXX-n = the payment date, the same six
+// characters as the invoice (so a receipt leads back to its invoice), and
+// n = 1 for the first payment on the order, 2 for the second, and so on.
+// Only the latest payment can be removed, so a receipt already sent never
+// has its number taken over by another payment.
+const METHOD={momo:"Mobile Money",cash:"Cash",bank:"Bank transfer"};
+// Money received before payment number i (counting from 0).
+const paidBefore=(s,i)=>s.payments.slice(0,i).reduce((a,p)=>a+p.amount,0);
+const paidAll=s=>paidBefore(s,s.payments.length);
+function receiptNo(s,i){const d=(s.payments[i].date||today()).replace(/-/g,"").slice(2);return`TCP-RCT-${d}-${s.code}-${i+1}`;}
+// "MTN MoMo · Ref 4471829", "Cash", "Bank transfer · Ref GCB-55120".
+function methodText(p){
+  const how=p.method==="momo"&&p.net?p.net:METHOD[p.method];
+  return how+(p.method!=="cash"&&p.ref.trim()?" · Ref "+p.ref.trim():"");
+}
+
+// "Your order at a glance": one tile per kind of goods, quantities only,
+// in the same words and order as the website's estimate panel
+// (quote-engine.js renderEst). Single rods and rods by the ton stay
+// separate tiles. An item not in today's price list gets its own tile.
+const GLANCE=[
+  ["Cement",["bag of cement","bags of cement"]],
+  ["Iron Rods (Single Piece)",["individual rod","individual rods"]],
+  ["Iron Rods (Per Ton)",["ton of rods","tons of rods"]],
+  ["Binding Wire",["roll of binding wire","rolls of binding wire"]],
+];
+function glance(s){
+  const tiles=new Map();
+  s.items.forEach(l=>{
+    const p=l.pid&&byId(l.pid),known=p&&GLANCE.find(g=>g[0]===p.cat);
+    const key=known?known[0]:p?"cat:"+p.cat:"item:"+l.name+"|"+l.unit;
+    if(!tiles.has(key))tiles.set(key,{key,n:0,words:known?known[1]:null,name:known?null:(p?p.cat:l.name),unit:l.unit});
+    tiles.get(key).n+=l.qty;
+  });
+  const rank=k=>{const i=GLANCE.findIndex(g=>g[0]===k);return i<0?GLANCE.length:i;};
+  return[...tiles.values()].sort((a,b)=>rank(a.key)-rank(b.key)).map(t=>{
+    const n=Math.round(t.n*1000)/1000;
+    let label;
+    if(t.words)label=t.words[n===1?0:1];
+    else{const w=UNIT_WORD(t.unit,n);label=w?`${w} of ${t.name}`:`× ${t.name}`;}
+    return{n,label};
+  });
+}
+
+// What is missing before a payment can be recorded.
+function payProblems(s,p){
+  const out=[];
+  if(problems(s).length)return["Finish the invoice above first."];
+  const bal=totals(s).total-paidAll(s);
+  if(bal<=0)return["This invoice is paid in full."];
+  if(!(p.amount>0))out.push("Enter the amount received.");
+  else if(p.amount>bal)out.push(`That is more than the balance of ${money(bal)}.`);
+  if(!p.date)out.push("Enter the date of the payment.");
+  if(!METHOD[p.method])out.push("Choose how the customer paid.");
+  return out;
+}
+// The payment being typed into the "Record a payment" boxes.
+function newPay(){
+  const method=(document.querySelector('input[name="pm"]:checked')||{}).value||"";
+  return{date:$("#pDate").value,amount:toP(num($("#pAmt").value)),method,
+    net:method==="momo"?$("#pNet").value:"",ref:method==="cash"?"":$("#pRef").value.trim()};
+}
+function showPayFields(){
+  const m=(document.querySelector('input[name="pm"]:checked')||{}).value;
+  $("#netBox").hidden=m!=="momo";$("#refBox").hidden=!m||m==="cash";
+  $("#refLbl").textContent=m==="bank"?"Bank reference (optional)":"Transaction ID (optional)";
+}
+// Redraws the payments card: totals, the list of payments, the form.
+function renderPays(){
+  if(!$("#paySec"))return;
+  if(!Array.isArray(S.payments))S.payments=[];
+  const t=totals(S),paid=paidAll(S),bal=t.total-paid,open=!problems(S).length;
+  $("#pTot").textContent=isNaN(t.total)?"—":money(t.total);
+  $("#pPaid").textContent=money(paid);
+  $("#pBal").textContent=isNaN(bal)?"—":bal<=0&&S.payments.length?"Paid in full":money(bal);
+  $("#pays").innerHTML=S.payments.map((p,i)=>{const last=i===S.payments.length-1,left=t.total-paidBefore(S,i)-p.amount;
+    return`<div class="dk-pay">
+      <div class="dk-pay-txt"><b>${i+1}. ${money(p.amount)}</b> <span>${esc(dateText(p.date))} · ${esc(methodText(p))}</span>
+        <small>${receiptNo(S,i)} · ${left<=0?"Paid in full":"Balance after: "+money(left)}</small></div>
+      <div class="dk-row">
+        <button type="button" class="dk-btn primary" data-rshare="${i}"${open?"":" disabled"}>Share receipt</button>
+        <button type="button" class="dk-btn" data-rpdf="${i}"${open?"":" disabled"}>Download</button>
+        ${last?`<button type="button" class="dk-x" data-rrm="${i}" aria-label="Remove payment ${i+1}">Remove</button>`:""}
+      </div></div>`;}).join("");
+  $("#payForm").hidden=open&&bal<=0&&S.payments.length>0;
+  $("#payBtn").disabled=!open;
+  if(!open)$("#pMsg").textContent="Finish the invoice above first.";
+  else if($("#pMsg").textContent==="Finish the invoice above first.")$("#pMsg").textContent="";
+  if(paid>t.total)$("#pMsg").textContent=`The payments recorded (${money(paid)}) are more than the invoice total. Check the invoice.`;
+}
+if($("#paySec")){
+  $("#pDate").value=today();
+  document.querySelectorAll('input[name="pm"]').forEach(r=>r.addEventListener("change",showPayFields));
+  showPayFields();
+  // "Whole balance" fills in what is still owed.
+  $("#pFull").addEventListener("click",()=>{const bal=totals(S).total-paidAll(S);if(bal>0)$("#pAmt").value=(bal/100).toFixed(2);});
+  $("#payBtn").addEventListener("click",()=>{
+    const p=newPay(),bad=payProblems(S,p);
+    if(bad.length){$("#pMsg").textContent=bad.join(" ");return;}
+    S.payments.push(p);
+    $("#pAmt").value="";$("#pRef").value="";$("#pDate").value=today();
+    $("#pMsg").textContent=`Payment ${S.payments.length} recorded. Share the receipt with the customer.`;
+    refresh();
+  });
+  $("#pays").addEventListener("click",async e=>{
+    const b=e.target.closest("button");if(!b)return;
+    if(b.dataset.rrm!=null){const i=+b.dataset.rrm;
+      if(!confirm(`Remove payment ${i+1} (${money(S.payments[i].amount)})? Only do this if it was recorded by mistake.`))return;
+      S.payments.splice(i,1);$("#pMsg").textContent="";refresh();return;}
+    const i=b.dataset.rshare!=null?+b.dataset.rshare:b.dataset.rpdf!=null?+b.dataset.rpdf:null;
+    if(i==null||problems(S).length)return;
+    busy(b,true,"Preparing PDF…");
+    try{const doc=await makeReceipt(S,i),file=new File([doc.output("blob")],receiptFile(S,i),{type:"application/pdf"});
+      if(b.dataset.rpdf!=null)download(file);
+      else if(navigator.canShare&&navigator.canShare({files:[file]})){
+        try{await navigator.share({files:[file],text:receiptText(S,i),title:file.name});}catch(err){if(err.name!=="AbortError")throw err;}
+      }else{download(file);const to=waNumber(S.phone);
+        if(to)window.open("https://wa.me/"+to+"?text="+encodeURIComponent(receiptText(S,i)),"_blank","noopener");
+        $("#pMsg").textContent="This browser cannot share files: the receipt was downloaded. Attach it in the WhatsApp chat.";}
+    }catch(err){$("#pMsg").textContent="The receipt could not be made: "+err.message;}
+    finally{busy(b,false);}
+  });
+}
+const receiptFile=(s,i)=>`TCP Receipt ${receiptNo(s,i)}.pdf`;
+// The one line that goes with the receipt on WhatsApp.
+function receiptText(s,i){const first=s.name.trim().split(/\s+/)[0]||"";
+  return`Hello${first?" "+first:""}, here is your receipt ${receiptNo(s,i)} for ${money(s.payments[i].amount)} from ${B.name}. Thank you!`;}
+
+// The receipt PDF: A5 (half an A4 page), easy to read on a phone. Same
+// look as the invoice: logo and details on top, charcoal rule with an
+// ochre start, then the amount received in a dark band, how it was paid,
+// "Your order" in grey tiles, and the balance.
+async function makeReceipt(s,i){
+  const{jsPDF,logo}=await pdfKit(),F=window.TCP_PDF_FONTS;
+  const doc=new jsPDF({unit:"mm",format:"a5",compress:true});
+  [["r","normal"],["s","semibold"],["x","bold"]].forEach(([k,st])=>{doc.addFileToVFS(`M-${k}.ttf`,F[k]);doc.addFont(`M-${k}.ttf`,"Montserrat",st);});
+  const p=s.payments[i],no=receiptNo(s,i),t=totals(s);
+  const before=paidBefore(s,i),bal=t.total-before-p.amount;
+  doc.setProperties({title:`${B.name} Receipt ${no}`,author:B.name,creator:"TCP Invoice Desk"});
+  const INK="#131514",MUTE="#5a5a5a",LINE="#dcdcdc",OCHRE="#ff9802",BAND="#f4f4f4";
+  const L=12,R=136,W=R-L,TOP=12,pt=n=>n*0.3528;
+  const font=(st,size,col)=>{doc.setFont("Montserrat",st);doc.setFontSize(size);doc.setTextColor(col||INK);};
+  const txt=(str,x,y,o={})=>{const sp=o.sp||0,w=doc.getTextWidth(str)+sp*Math.max(0,str.length-1);
+    doc.text(str,o.right?x-w:x,y,{baseline:"top",charSpace:sp});return w;};
+  const label=(str,x,y)=>{font("bold",6.5,MUTE);txt(str.toUpperCase(),x,y,{sp:pt(6.5)*.1});};
+  // -- Header: logo left; RECEIPT, number, date and invoice right
+  doc.addImage(logo,"PNG",L,TOP,9*5.92329,9);
+  font("bold",14);txt("RECEIPT",R,TOP,{right:1,sp:pt(14)*.08});
+  const dl=[["Receipt no.",no],["Date",dateText(p.date)],["Invoice",invoiceNo(s)]];
+  font("bold",7.5);const vw=Math.max(...dl.map(r=>doc.getTextWidth(r[1])));
+  let y=TOP+7;
+  dl.forEach(([k,v])=>{font("bold",7.5);txt(v,R,y,{right:1});font("normal",7.5,MUTE);txt(k,R-vw-3,y,{right:1});y+=3.6;});
+  y+=3;
+  doc.setFillColor(INK);doc.rect(L,y,W,.7,"F");doc.setFillColor(OCHRE);doc.rect(L,y,22,.7,"F");
+  y+=.7+5;
+  // -- Received from
+  label("Received from",L,y);y+=3.6;
+  font("bold",11);doc.splitTextToSize(s.name.trim(),W).forEach(l=>{txt(l,L,y);y+=pt(11)*1.35;});
+  font("normal",8.5,MUTE);txt(s.phone.trim(),L,y);y+=pt(8.5)*1.4+4;
+  // -- Amount received, in a dark band
+  const bh=17;
+  doc.setFillColor(INK);doc.rect(L,y,W,bh,"F");doc.setFillColor(OCHRE);doc.rect(L,y,1.5,bh,"F");
+  font("bold",6.5,"#c9c9c9");txt("AMOUNT RECEIVED",L+5,y+3.2,{sp:pt(6.5)*.1});
+  font("bold",19,"#ffffff");txt(money(p.amount),L+5,y+7.4);
+  y+=bh+4.5;
+  // -- Paid by
+  label("Paid by",L,y);label("Payment",R-38,y);y+=3.6;
+  font("semibold",9);const how=doc.splitTextToSize(methodText(p),W-44);
+  how.forEach((l,j)=>txt(l,L,y+j*pt(9)*1.4));
+  txt(`${i+1} of this order`,R-38,y);
+  y+=how.length*pt(9)*1.4+5;
+  // -- Your order: grey tiles, two to a row (the tiles read like the
+  // website's "Your order at a glance"; the heading on the receipt is just
+  // "Your order", Daniel, 20 Nov 2026)
+  label("Your order",L,y);y+=3.4;
+  doc.setFillColor(OCHRE);doc.rect(L,y,8,.8,"F");y+=3;
+  const gap=3,tw=(W-gap)/2,pad=3,tiles=glance(s);
+  for(let k=0;k<tiles.length;k+=2){
+    const row=tiles.slice(k,k+2).map(tl=>{
+      font("bold",12);const nt=fmtQ(tl.n),nw=doc.getTextWidth(nt);
+      font("normal",8);const inline=doc.getTextWidth(tl.label)<=tw-pad*2-nw-1.5;
+      const lines=inline?[tl.label]:doc.splitTextToSize(tl.label,tw-pad*2);
+      return{nt,nw,inline,lines,h:pad*2+pt(12)*1.1+(inline?0:lines.length*pt(8)*1.35+.6)};});
+    const h=Math.max(...row.map(r=>r.h));
+    row.forEach((r,j)=>{const x=L+j*(tw+gap);
+      doc.setFillColor(BAND);doc.roundedRect(x,y,tw,h,1.5,1.5,"F");
+      font("bold",12);txt(r.nt,x+pad,y+pad);
+      font("normal",8,MUTE);
+      if(r.inline)txt(r.lines[0],x+pad+r.nw+1.5,y+pad+pt(12)*.32);
+      else r.lines.forEach((l,q)=>txt(l,x+pad,y+pad+pt(12)*1.1+.6+q*pt(8)*1.35));});
+    y+=h+gap;
+  }
+  y+=2.5;
+  // -- Money: invoice total, earlier payments, this payment, balance
+  const rh=pt(9)*1.5+1.6;
+  const sumRow=(k,v,st,col)=>{font(st,9,col);txt(k,L,y+.8);txt(v,R,y+.8,{right:1});y+=rh;
+    doc.setDrawColor(LINE);doc.setLineWidth(.25);doc.line(L,y,R,y);};
+  doc.setFillColor(INK);doc.rect(L,y,W,.5,"F");y+=.5;
+  sumRow("Invoice total",money(t.total),"semibold");
+  if(before>0)sumRow(i===1?"Paid before (1 payment)":`Paid before (${i} payments)`,money(before),"normal",MUTE);
+  sumRow("This payment",money(p.amount),"bold");
+  y+=3;
+  const gh=pt(11)*1.45+6;
+  if(bal<=0){
+    doc.setDrawColor(OCHRE);doc.setLineWidth(.8);doc.rect(L+.4,y+.4,W-.8,gh-.8,"S");
+    font("bold",11);txt("PAID IN FULL",L+4,y+3,{sp:pt(11)*.08});font("semibold",9,MUTE);txt("Balance "+money(0),R-4,y+3.6,{right:1});
+  }else{
+    doc.setFillColor(BAND);doc.rect(L,y,W,gh,"F");doc.setFillColor(OCHRE);doc.rect(L,y,1.5,gh,"F");
+    font("bold",11);txt("Balance due",L+5,y+3);txt(money(bal),R-4,y+3,{right:1});
+  }
+  y+=gh;
+  // -- Footer
+  font("semibold",8);txt(`Thank you for buying from ${B.name}.`,L,193);
+  font("normal",6.5,MUTE);txt(`Questions? WhatsApp or call ${B.phone} and quote receipt ${no}.`,L,197.5);
+  txt(`${B.website}  ·  ${B.email}`,L,201);
+  return doc;
+}
+
+// ---- Start ------------------------------------------------------------------------
+// If the desk was already unlocked in this tab, open it again straight
+// away, with the saved draft. This runs last so every section above is
+// ready (20 Nov 2026 fix: it used to run before them, and a reload showed
+// an empty desk although the draft was still saved).
+try{if(sessionStorage.getItem(UNLOCK)==="1")open()}catch(e){}
+
 // For the tests (and nothing else): the desk's own functions.
-window.TCPDesk={parseEstimate,num,invoiceNo,totals,problems,waNumber,waText,makePdf,state:()=>S};
+window.TCPDesk={parseEstimate,num,invoiceNo,totals,problems,waNumber,waText,makePdf,
+  receiptNo,glance,methodText,payProblems,makeReceipt,receiptText,state:()=>S};
 })();
