@@ -517,7 +517,7 @@ function receiptText(s,i){const first=s.name.trim().split(/\s+/)[0]||"";
 // The receipt PDF: A5 (half an A4 page), easy to read on a phone. Same
 // look as the invoice: logo and details on top, charcoal rule with an
 // ochre start, then the amount received in a dark band, how it was paid,
-// the order at a glance in grey tiles, and the balance.
+// "Your order" in grey tiles, and the balance.
 async function makeReceipt(s,i){
   const{jsPDF,logo}=await pdfKit(),F=window.TCP_PDF_FONTS;
   const doc=new jsPDF({unit:"mm",format:"a5",compress:true});
@@ -557,8 +557,10 @@ async function makeReceipt(s,i){
   how.forEach((l,j)=>txt(l,L,y+j*pt(9)*1.4));
   txt(`${i+1} of this order`,R-38,y);
   y+=how.length*pt(9)*1.4+5;
-  // -- Your order at a glance: grey tiles, two to a row
-  label("Your order at a glance",L,y);y+=3.4;
+  // -- Your order: grey tiles, two to a row (the tiles read like the
+  // website's "Your order at a glance"; the heading on the receipt is just
+  // "Your order", Daniel, 20 Nov 2026)
+  label("Your order",L,y);y+=3.4;
   doc.setFillColor(OCHRE);doc.rect(L,y,8,.8,"F");y+=3;
   const gap=3,tw=(W-gap)/2,pad=3,tiles=glance(s);
   for(let k=0;k<tiles.length;k+=2){

@@ -450,13 +450,14 @@ def test_r03_the_receipt_pdf(browser):
     text = pages[0]
     no = page.evaluate("TCPDesk.receiptNo(TCPDesk.state(), 0)")
     for want in ("RECEIPT", no, inv, "Kofi Mensah", "024 123 4567", "AMOUNT RECEIVED", money(1500),
-                 "Telecel Cash · Ref 4471829", "1 of this order", "YOUR ORDER AT A GLANCE",
+                 "Telecel Cash · Ref 4471829", "1 of this order", "YOUR ORDER",
                  "20 bags of cement", "24 individual rods", "2 rolls of binding wire",
                  f"Invoice total {money(total)}", f"Balance due {money(total - 1500)}"):
         assert want in text, (want, text)
     # Short: no item list or unit prices; the invoice has those.
     assert money(BY_ID["c2"]["price"]) not in text and BY_ID["c2"]["name"] not in text
     assert "PAID IN FULL" not in text
+    assert "AT A GLANCE" not in text, "the receipt's heading is just 'Your order' (20 Nov 2026)"
     last, _ = _receipt(page, 1)
     for want in ("Cash", "2 of this order", f"Paid before (1 payment) {money(1500)}",
                  f"This payment {money(total - 1500)}", "PAID IN FULL"):
