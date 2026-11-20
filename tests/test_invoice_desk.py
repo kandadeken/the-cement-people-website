@@ -26,6 +26,23 @@ browser; prices from the same products.json as the public site.
   D08  fits a 360 px and a 390 px phone without sideways scrolling
   D09  a long invoice runs onto more pages with the table heading repeated,
        a "Continued" line and page numbers, and the totals on the last page
+  D10  a draft (with its payments) comes back after the page is reloaded
+       (20 Nov 2026 fix: the desk used to reopen empty)
+
+Payments and receipts (20 Nov 2026, Daniel: a short receipt that reads like
+the website's "Your order at a glance"; part payments; Mobile Money, cash,
+bank transfer):
+  R01  the rules: no payment before the invoice is complete; amount, method
+       and date needed; never more than the balance; "Whole balance";
+       paid in full closes the form; only the latest payment can be removed
+  R02  receipt numbers lead back to the invoice; the order at a glance uses
+       the same counts and words as the website's own glance panel
+  R03  the receipt PDF: A5, titled RECEIPT, the amount received, how it was
+       paid, the glance tiles, no item prices, and the balance left, with
+       "PAID IN FULL" on the last one
+  R04  sharing a receipt: the PDF and one short line; "Download" names the
+       file after the receipt
+  R05  fits a 360 px phone with payments recorded
 """
 import base64
 import io
@@ -289,5 +306,191 @@ def test_d09_long_invoice_runs_onto_more_pages(browser):
             assert f"Invoice {no}" in text and "Continued" in text
     total = 2 * sum(p["price"] for p in PRODUCTS)
     assert f"Total due {money(total)}" in pages[-1] and "Total due" not in "".join(pages[:-1])
+    assert not errors, errors
+    page.context.close()
+
+
+# ---- D10 --------------------------------------------------------------------
+def test_d10_draft_comes_back_after_a_reload(browser):
+    page, errors = _desk(browser)
+    page.on("dialog", lambda d: d.accept())
+    _read(page, _estimate_message(browser, {"c2": 4}))
+    page.fill("#cName", "Esi Boateng")
+    page.fill("#cPhone", "0277000000")
+    page.check('input[name="dl"][value="pickup"]')
+    page.fill("#pAmt", "100")
+    page.check('input[name="pm"][value="cash"]')
+    page.click("#payBtn")
+    page.reload(wait_until="load")
+    page.wait_for_selector("#form:not([hidden])", timeout=5000)
+    assert page.input_value("#cName") == "Esi Boateng"
+    assert page.evaluate("TCPDesk.state().payments.length") == 1
+    assert page.inner_text("#pPaid") == money(100)
+    assert not errors, errors
+    page.context.close()
+
+
+# ---- Payments and receipts --------------------------------------------------
+def _ready_invoice(browser, order, width=390, fee=None):
+    """The desk with a complete invoice for this order (pickup, or a delivery fee)."""
+    page, errors = _desk(browser, width=width)
+    page.on("dialog", lambda d: d.accept())
+    msg = _estimate_message(browser, order)
+    _read(page, msg)
+    page.fill("#cName", "Kofi Mensah")
+    page.fill("#cPhone", "024 123 4567")
+    page.fill("#iDate", "2026-11-20")
+    if fee:
+        page.check('input[name="dl"][value="fee"]')
+        page.fill("#fee", str(fee))
+    else:
+        page.check('input[name="dl"][value="pickup"]')
+    return page, errors, msg
+
+
+def _pay(page, amount, method, date="2026-11-21", net=None, ref=""):
+    page.fill("#pAmt", amount)
+    page.fill("#pDate", date)
+    page.check(f'input[name="pm"][value="{method}"]')
+    if net:
+        page.select_option("#pNet", net)
+    if ref:
+        page.fill("#pRef", ref)
+    page.click("#payBtn")
+
+
+def _receipt(page, i):
+    b64 = page.evaluate("async i => (await TCPDesk.makeReceipt(TCPDesk.state(), i)).output('datauristring').split(',')[1]", i)
+    reader = PdfReader(io.BytesIO(base64.b64decode(b64)))
+    return ([tidy_pdf_text(p.extract_text()) for p in reader.pages],
+            [(float(p.mediabox.width), float(p.mediabox.height)) for p in reader.pages])
+
+
+def test_r01_payment_rules(browser):
+    page, errors = _desk(browser)
+    page.on("dialog", lambda d: d.accept())
+    _read(page, _estimate_message(browser, {"c2": 10}))
+    # Not before the invoice is complete.
+    assert page.is_disabled("#payBtn") and "Finish the invoice" in page.inner_text("#pMsg")
+    page.fill("#cName", "Kofi Mensah")
+    page.fill("#cPhone", "024 123 4567")
+    page.check('input[name="dl"][value="fee"]')
+    page.fill("#fee", "20")
+    total = 10 * BY_ID["c2"]["price"] + 20
+    assert not page.is_disabled("#payBtn")
+    assert page.inner_text("#pTot") == money(total) and page.inner_text("#pBal") == money(total)
+    # Each of these is refused, with a reason.
+    page.fill("#pAmt", "")
+    page.click("#payBtn")
+    assert "amount received" in page.inner_text("#pMsg")
+    page.fill("#pAmt", "100")
+    page.click("#payBtn")
+    assert "how the customer paid" in page.inner_text("#pMsg")
+    page.check('input[name="pm"][value="cash"]')
+    page.fill("#pAmt", str(total + 1))
+    page.click("#payBtn")
+    assert f"more than the balance of {money(total)}" in page.inner_text("#pMsg")
+    assert page.evaluate("TCPDesk.state().payments.length") == 0
+    # The network and reference boxes follow the method.
+    assert page.is_hidden("#netBox") and page.is_hidden("#refBox")
+    page.check('input[name="pm"][value="momo"]')
+    assert page.is_visible("#netBox") and page.is_visible("#refBox")
+    page.check('input[name="pm"][value="bank"]')
+    assert page.is_hidden("#netBox") and "Bank reference" in page.inner_text("#refLbl")
+    # A part payment, then the whole balance.
+    _pay(page, "500", "momo", net="MTN MoMo", ref="4471829")
+    assert page.inner_text("#pPaid") == money(500) and page.inner_text("#pBal") == money(total - 500)
+    page.click("#pFull")
+    assert page.input_value("#pAmt") == f"{total - 500:.2f}"
+    page.check('input[name="pm"][value="cash"]')
+    page.click("#payBtn")
+    assert page.inner_text("#pBal") == "Paid in full" and page.is_hidden("#payForm")
+    # Only the latest payment has a Remove button.
+    assert page.locator("[data-rrm]").count() == 1 and page.get_attribute("[data-rrm]", "data-rrm") == "1"
+    page.click("[data-rrm]")
+    assert page.evaluate("TCPDesk.state().payments.length") == 1 and page.is_visible("#payForm")
+    assert not errors, errors
+    page.context.close()
+
+
+def test_r02_receipt_numbers_and_the_glance(browser):
+    order = {"c2": 205, "c3": 10, "i3": 85, "i6": 15, "j3": 5.5, "i8": 6}
+    # The website's own "Your order at a glance" for this order.
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900}, locale="en-US")
+    home = ctx.new_page()
+    home.goto(SITE_URL, wait_until="load")
+    home.wait_for_selector("#list .row")
+    home.evaluate("o => { for (const k in o) qty[k] = o[k]; renderList(); renderEst(); }", order)
+    site_tiles = [re.sub(r"\s+", " ", t).strip() for t in home.eval_on_selector_all("#glance .tiles > div", "e => e.map(d => d.textContent)")]
+    ctx.close()
+    assert site_tiles == ["215 bags of cement", "100 individual rods", "5.5 tons of rods", "6 rolls of binding wire"], site_tiles
+    page, errors, msg = _ready_invoice(browser, order)
+    desk_tiles = [f"{t['n']:,g} {t['label']}" for t in page.evaluate("TCPDesk.glance(TCPDesk.state())")]
+    assert desk_tiles == site_tiles, (desk_tiles, site_tiles)
+    code = re.search(r"TCP-\d{6}-([A-Z0-9]{6})", msg).group(1)
+    _pay(page, "1000", "cash", date="2026-11-21")
+    _pay(page, "2000", "bank", date="2026-11-22", ref="GCB-55120")
+    nos = [page.evaluate("i => TCPDesk.receiptNo(TCPDesk.state(), i)", i) for i in (0, 1)]
+    assert nos == [f"TCP-RCT-261121-{code}-1", f"TCP-RCT-261122-{code}-2"], nos
+    assert page.evaluate("TCPDesk.methodText(TCPDesk.state().payments[1])") == "Bank transfer · Ref GCB-55120"
+    assert nos[0] in page.inner_text("#pays") and nos[1] in page.inner_text("#pays")
+    assert not errors, errors
+    page.context.close()
+
+
+def test_r03_the_receipt_pdf(browser):
+    order = {"c2": 20, "i3": 24, "i8": 2}
+    page, errors, _ = _ready_invoice(browser, order, width=1280, fee=300)
+    total = sum(BY_ID[k]["price"] * q for k, q in order.items()) + 300
+    _pay(page, "1500", "momo", net="Telecel Cash", ref="4471829")
+    _pay(page, f"{total - 1500:.2f}", "cash")
+    inv = page.inner_text("#sNo")
+    pages, sizes = _receipt(page, 0)
+    assert len(pages) == 1 and abs(sizes[0][0] - 419.53) < 1 and abs(sizes[0][1] - 595.28) < 1, sizes
+    text = pages[0]
+    no = page.evaluate("TCPDesk.receiptNo(TCPDesk.state(), 0)")
+    for want in ("RECEIPT", no, inv, "Kofi Mensah", "024 123 4567", "AMOUNT RECEIVED", money(1500),
+                 "Telecel Cash · Ref 4471829", "1 of this order", "YOUR ORDER AT A GLANCE",
+                 "20 bags of cement", "24 individual rods", "2 rolls of binding wire",
+                 f"Invoice total {money(total)}", f"Balance due {money(total - 1500)}"):
+        assert want in text, (want, text)
+    # Short: no item list or unit prices; the invoice has those.
+    assert money(BY_ID["c2"]["price"]) not in text and BY_ID["c2"]["name"] not in text
+    assert "PAID IN FULL" not in text
+    last, _ = _receipt(page, 1)
+    for want in ("Cash", "2 of this order", f"Paid before (1 payment) {money(1500)}",
+                 f"This payment {money(total - 1500)}", "PAID IN FULL"):
+        assert want in last[0], (want, last[0])
+    assert "Balance due" not in last[0]
+    assert not re.search(r"\bVAT\b|\btax invoice\b", text, re.I)
+    assert not errors, errors
+    page.context.close()
+
+
+def test_r04_sharing_a_receipt(browser):
+    page, errors, _ = _ready_invoice(browser, {"c2": 3})
+    _pay(page, "100", "cash")
+    no = page.evaluate("TCPDesk.receiptNo(TCPDesk.state(), 0)")
+    line = page.evaluate("TCPDesk.receiptText(TCPDesk.state(), 0)")
+    assert line == f"Hello Kofi, here is your receipt {no} for {money(100)} from The Cement People. Thank you!", line
+    page.evaluate("""() => { window.__shared = null;
+        navigator.canShare = d => !!(d && d.files && d.files.length);
+        navigator.share = async d => { window.__shared = {names: d.files.map(f => f.name), types: d.files.map(f => f.type), text: d.text}; }; }""")
+    page.click("[data-rshare='0']")
+    page.wait_for_function("window.__shared")
+    assert page.evaluate("window.__shared") == {"names": [f"TCP Receipt {no}.pdf"], "types": ["application/pdf"], "text": line}
+    with page.expect_download() as dl:
+        page.click("[data-rpdf='0']")
+    assert dl.value.suggested_filename == f"TCP Receipt {no}.pdf"
+    assert not errors, errors
+    page.context.close()
+
+
+def test_r05_payments_fit_a_phone(browser):
+    page, errors, _ = _ready_invoice(browser, ORDER, width=360)
+    page.check('input[name="pm"][value="momo"]')
+    _pay(page, "250", "momo", net="AT Money", ref="TX-0000000000-LONG-REFERENCE")
+    widest = page.evaluate("document.documentElement.scrollWidth")
+    assert widest <= 360, f"360 px phone: page is {widest} px wide"
     assert not errors, errors
     page.context.close()
