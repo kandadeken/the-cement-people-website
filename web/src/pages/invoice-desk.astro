@@ -1,0 +1,207 @@
+---
+/* ===========================================================================
+   invoice-desk.astro - TCP Invoice Desk (thecementpeople.com/invoice-desk/)
+   ---------------------------------------------------------------------------
+   A private tool for Daniel and TCP staff (20 Nov 2026, "option A"): turn
+   the estimate a customer sends on WhatsApp into a branded PDF invoice.
+
+   HOW IT WORKS
+   1. Unlock with the passphrase.
+   2. Paste the customer's WhatsApp estimate (the message the website
+      writes). The products and quantities fill in automatically.
+   3. Add the customer's name and phone, change any agreed prices, choose
+      the delivery (free, a fee or pickup).
+   4. "Save invoice as PDF" prints an A4 invoice; "Send on WhatsApp" opens a
+      chat with the customer so the PDF can be attached.
+
+   WHAT IT IS NOT (agreed with Daniel and ChatGPT, 20 Nov 2026)
+   - Not a tax invoice. TCP is not VAT-registered, so the document says
+     "Invoice" and carries no VAT or levy lines. If TCP registers for VAT,
+     official tax invoices must come from GRA's E-VAT system and this tool
+     should then title its document "Proforma invoice" (one word to change:
+     DOC_TITLE in public/scripts/invoice-desk.js).
+   - No database and nothing sent to any server. Customer details stay in
+     this browser (a draft is kept on this device until "New invoice"), so
+     the saved PDF is the permanent record.
+   - Private by obscurity plus a passphrase, not by a login server: GitHub
+     Pages can only serve public files. The passphrase keeps casual
+     visitors out; the page holds no customer data, so there is nothing
+     here to leak. Real logins come with the larger system (option B).
+
+   Kept out of search engines: "noindex, nofollow" below, not in the
+   sitemap (pages/sitemap.xml.ts lists the home page only), and no link to
+   it anywhere on the site. robots.txt deliberately does not name it.
+
+   Prices come from the same src/data/products.json as the public site, so
+   a price change (made through the usual pull request) reaches both.
+   =========================================================================== */
+import "../styles/tokens.css";
+import "../styles/desk.css";
+import "../styles/print.css";
+
+import products from "../data/products.json";
+import { business } from "../config/business";
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { join } from "node:path";
+
+// Fingerprint of the desk script, so a phone never runs an old copy
+// against a new page (the same reason as for quote-engine.js).
+const deskVersion = createHash("sha256")
+  .update(readFileSync(join(process.cwd(), "public/scripts/invoice-desk.js")))
+  .digest("hex")
+  .slice(0, 10);
+
+// The horizontal logo for the top of the PDF, drawn from the same file the
+// website uses (public/brand/tcp-logo-horizontal-on-light.svg).
+const logoSvg = readFileSync(
+  join(process.cwd(), "public/brand/tcp-logo-horizontal-on-light.svg"),
+  "utf8",
+)
+  .replace(/<\?xml[^>]*>/, "")
+  .replace(/<svg\b/, '<svg class="q-logo" role="img" aria-label="The Cement People"');
+
+// What the desk script reads from the page: the price list and the
+// business details printed on the invoice.
+const deskData = {
+  currency: business.currencySymbol,
+  business: {
+    name: business.name,
+    phone: business.phone,
+    website: business.website,
+    email: business.publicEmail,
+    town: business.town,
+    pickup: `${business.address.area}, ${business.address.locality}`,
+  },
+  products: products.map((p) => ({
+    id: p.id,
+    cat: p.category,
+    name: p.name,
+    unit: p.unit,
+    price: p.price,
+  })),
+};
+const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
+---
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ffffff">
+<title>TCP Invoice Desk</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body class="desk">
+
+<main id="desk" class="dk">
+  <header class="dk-head">
+    <img src="/brand/tcp-logo-horizontal-on-light.svg" alt="The Cement People" width="592" height="100">
+    <h1>Invoice Desk</h1>
+  </header>
+
+  <!-- Locked until the passphrase is entered -->
+  <section id="gate" class="dk-card">
+    <h2>Private</h2>
+    <p>Enter the passphrase to open the Invoice Desk.</p>
+    <form id="gateForm" autocomplete="off">
+      <label for="pass">Passphrase</label>
+      <input id="pass" type="password" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+      <button type="submit" class="dk-btn primary">Open</button>
+      <p id="gateMsg" class="dk-msg" role="alert"></p>
+    </form>
+  </section>
+
+  <div id="tool" hidden>
+    <!-- 1. Paste the estimate -->
+    <section class="dk-card">
+      <h2><span class="dk-no">1</span>Customer's estimate</h2>
+      <p class="dk-help">Copy the estimate message the customer sent on WhatsApp and paste it here. Or start an invoice without one.</p>
+      <label for="paste" class="sr">WhatsApp estimate</label>
+      <textarea id="paste" rows="6" placeholder="Hello The Cement People, … *Estimate TCP-…* …"></textarea>
+      <div class="dk-row">
+        <button type="button" id="readBtn" class="dk-btn primary">Read estimate</button>
+        <button type="button" id="blankBtn" class="dk-btn">Start without an estimate</button>
+      </div>
+      <p id="readMsg" class="dk-msg" role="status"></p>
+    </section>
+
+    <div id="form" hidden>
+      <!-- 2. Customer -->
+      <section class="dk-card">
+        <h2><span class="dk-no">2</span>Customer</h2>
+        <div class="dk-grid">
+          <div><label for="cName">Name</label><input id="cName" autocomplete="off" required></div>
+          <div><label for="cPhone">Phone</label><input id="cPhone" type="tel" inputmode="tel" autocomplete="off" placeholder="024 123 4567" required></div>
+          <div class="wide"><label for="cSite">Site or drop-off location</label><input id="cSite" autocomplete="off"></div>
+        </div>
+      </section>
+
+      <!-- 3. Items -->
+      <section class="dk-card">
+        <h2><span class="dk-no">3</span>Items</h2>
+        <p class="dk-help">Change a price if you agreed a different one with the customer. The website's price list does not change.</p>
+        <div id="items"></div>
+        <div class="dk-row">
+          <label for="addSel" class="sr">Add a product</label>
+          <select id="addSel"></select>
+          <button type="button" id="addBtn" class="dk-btn">Add item</button>
+        </div>
+      </section>
+
+      <!-- 4. Delivery -->
+      <section class="dk-card">
+        <h2><span class="dk-no">4</span>Delivery</h2>
+        <div class="dk-opts" role="radiogroup" aria-label="Delivery">
+          <label><input type="radio" name="dl" value="pending" checked> Not agreed yet</label>
+          <label><input type="radio" name="dl" value="free"> Free delivery</label>
+          <label><input type="radio" name="dl" value="fee"> Delivery fee</label>
+          <label><input type="radio" name="dl" value="pickup"> Customer pickup</label>
+        </div>
+        <div id="feeBox" class="dk-fee" hidden>
+          <label for="fee">Delivery fee (GH₵)</label>
+          <input id="fee" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
+        </div>
+      </section>
+
+      <!-- 5. Invoice details -->
+      <section class="dk-card">
+        <h2><span class="dk-no">5</span>Invoice details</h2>
+        <div class="dk-grid">
+          <div><label for="iDate">Date</label><input id="iDate" type="date"></div>
+          <div><label for="iRev">Version</label>
+            <select id="iRev"><option value="1">First invoice</option><option value="2">Revised (2)</option><option value="3">Revised (3)</option><option value="4">Revised (4)</option></select></div>
+          <div class="wide"><label for="iPay">How to pay (optional, printed on the invoice)</label><textarea id="iPay" rows="2" placeholder="e.g. MTN MoMo number and name, or bank details"></textarea></div>
+          <div class="wide"><label for="iNote">Note to the customer (optional)</label><textarea id="iNote" rows="2"></textarea></div>
+        </div>
+      </section>
+
+      <!-- Summary and actions -->
+      <section class="dk-card dk-sum" aria-live="polite">
+        <div class="dk-no-line"><span>Invoice number</span><b id="sNo"></b></div>
+        <div><span>Materials</span><b id="sMat"></b></div>
+        <div><span>Delivery</span><b id="sDel"></b></div>
+        <div class="dk-total"><span>Total</span><b id="sTot"></b></div>
+        <p id="sMsg" class="dk-msg" role="alert"></p>
+        <div class="dk-row">
+          <button type="button" id="pdfBtn" class="dk-btn primary">Save invoice as PDF</button>
+          <a id="waBtn" class="dk-btn" target="_blank" rel="noopener">Send on WhatsApp</a>
+        </div>
+        <p class="dk-help">Save the PDF first, then use "Send on WhatsApp" and attach it in the chat. Keep every PDF: it is your record of the invoice.</p>
+        <button type="button" id="newBtn" class="dk-btn ghost">New invoice</button>
+      </section>
+    </div>
+  </div>
+</main>
+
+<!-- The A4 invoice: hidden on screen, the only thing printed (print.css). -->
+<section id="quote" aria-hidden="true"></section>
+<template id="q-logo-svg"><Fragment set:html={logoSvg} /></template>
+
+<script is:inline type="application/json" id="desk-data" set:html={deskJson}></script>
+<script is:inline src={`/scripts/invoice-desk.js?v=${deskVersion}`}></script>
+</body>
+</html>

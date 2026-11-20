@@ -72,6 +72,10 @@ body::before,body>*:not(#quote){display:none!important}
 .q-terms li{margin-bottom:.6mm}
 .q-terms p{margin:0}
 .q-terms b{white-space:nowrap}
+/* Invoice Desk (20 Nov 2026): "How to pay" and the note keep the line
+   breaks they were typed with. */
+.q-terms .q-pre{white-space:pre-line;margin-bottom:3mm}
+.q-terms p+h2{margin-top:3mm}
 .q-sum{font-variant-numeric:tabular-nums;border-top:.5mm solid #131514}
 .q-sum div{display:flex;justify-content:space-between;gap:4mm;padding:1.2mm 2.5mm}
 .q-sum span{white-space:nowrap}
