@@ -4,6 +4,32 @@ This is the plan for moving the tested database onto a real Supabase project.
 **None of it happens until Daniel (with ChatGPT) approves it.** Each numbered
 step is a separate go-ahead.
 
+## Test project (in place since 21 November 2026)
+
+Before the real project, a **free test project** checks the database on real
+Supabase. It only ever holds made-up records.
+
+| | |
+| --- | --- |
+| Project | `tcp-test`, in the organisation "TCP Org" (Free plan) |
+| Address | `https://cdwnytycinqhgqzbkaro.supabase.co` |
+| Region | Central EU (Frankfurt), the nearest Supabase region to Ghana |
+| Linked to | this repository, branch `main`, through Supabase's GitHub integration |
+| Preview branches | off (a Pro-plan feature; not needed) |
+
+> **Important: merging into `main` now changes the test database.** Supabase
+> applies any new file in `supabase/migrations/` to `tcp-test` when it reaches
+> `main`. So database pull requests are reviewed knowing that merging them
+> deploys them to the test project. That is harmless for made-up records, and
+> it is also how we prove the deployment route works.
+>
+> Whether the **real** project is linked the same way, or deployed by hand
+> with the command-line tool (step 3), is a separate decision for go-live,
+> because there a merge would change live business records.
+
+The starting price list (`seed.sql`) is not loaded by the link on its own;
+it is added to the test project separately after the first deployment.
+
 ## 1. Create the Supabase project
 
 - Plan: **Pro** (about $25 a month) before any real record goes in. Pro
