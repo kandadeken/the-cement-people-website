@@ -442,8 +442,12 @@ as $$
 declare
   inv_state text;
 begin
+  -- Lock the invoice (shared) while checking it. If the invoice is being
+  -- issued at this moment, this waits until issuing is saved and then sees
+  -- "issued", so a line can never slip in or out of an invoice mid-issue.
   select state into inv_state from public.invoices
-   where id = case when tg_op = 'DELETE' then old.invoice_id else new.invoice_id end;
+   where id = case when tg_op = 'DELETE' then old.invoice_id else new.invoice_id end
+   for share;
   if inv_state is distinct from 'draft' then
     raise exception 'Lines can only change while the invoice is a draft'
       using errcode = '42501';
@@ -572,28 +576,46 @@ create trigger audit_log_no_truncate
 
 
 -- -----------------------------------------------------------------------------
--- 12. Website publishing (prices to thecementpeople.com)
---     When a product changes, a "publish request" is queued. A small Supabase
---     Edge Function (see DEPLOYMENT.md) picks it up, calls Cloudflare's build
---     hook, and reports back. Safeguards:
---       - only one request waits at a time (repeat changes don't pile up)
---       - failures are retried, with the error and attempt count kept
---       - the last successful publish is recorded
---       - site_price_status says plainly when the website is out of date
+-- 12. Website publishing (the price list on thecementpeople.com)
+--     When anything the public sees about a product changes (name, category,
+--     unit, price, published, price visible), the change time is recorded and
+--     a "publish request" is queued. A small Supabase Edge Function (see
+--     DEPLOYMENT.md) takes the request, calls Cloudflare's build hook, and
+--     reports back. Safeguards:
+--       - only one request WAITS at a time, so repeat changes don't pile up
+--       - only one request is SENT at a time; a change made while a build is
+--         running queues a fresh request, so it is never lost
+--       - a request stuck in "sending" for 15 minutes is taken back and retried
+--       - failures are retried up to 5 times, with the error kept
+--       - site_price_status compares the last catalogue change with the moment
+--         the last successful build started, and says plainly when the
+--         website is out of date
 -- -----------------------------------------------------------------------------
+
+-- One row: when the public catalogue last changed, and what changed.
+create table public.site_catalogue_state (
+  id              boolean primary key default true check (id),
+  last_change_at  timestamptz not null default clock_timestamp(),
+  last_change     text not null default 'Initial'
+);
+insert into public.site_catalogue_state default values;
+
 create table public.site_publish_requests (
   id            bigint generated always as identity primary key,
-  requested_at  timestamptz not null default now(),
+  requested_at  timestamptz not null default clock_timestamp(),
   reason        text not null,
   status        text not null default 'pending'
-                  check (status in ('pending', 'sending', 'succeeded', 'failed')),
+                  check (status in ('pending', 'sending', 'succeeded', 'failed', 'superseded')),
   attempts      integer not null default 0 check (attempts >= 0),
+  claimed_at    timestamptz,       -- when the current/last attempt started
   last_error    text,
   finished_at   timestamptz
 );
--- At most one request waiting or being sent at any moment.
-create unique index site_publish_one_open_request
-  on public.site_publish_requests ((true)) where status in ('pending', 'sending');
+-- At most one request waiting, and at most one being sent, at any moment.
+create unique index site_publish_one_pending
+  on public.site_publish_requests ((true)) where status = 'pending';
+create unique index site_publish_one_sending
+  on public.site_publish_requests ((true)) where status = 'sending';
 
 create function tcp_private.queue_site_publish()
 returns trigger
@@ -601,6 +623,20 @@ language plpgsql security definer
 set search_path = ''
 as $$
 begin
+  -- Only changes the public can see count (not, say, created_at).
+  if tg_op = 'UPDATE'
+     and new.site_id       is not distinct from old.site_id
+     and new.name          is not distinct from old.name
+     and new.category      is not distinct from old.category
+     and new.unit          is not distinct from old.unit
+     and new.current_price is not distinct from old.current_price
+     and new.published     is not distinct from old.published
+     and new.price_visible is not distinct from old.price_visible then
+    return null;
+  end if;
+  update public.site_catalogue_state
+     set last_change_at = clock_timestamp(),
+         last_change = 'Product ' || coalesce(new.site_id, new.id::text) || ' ' || lower(tg_op) || 'd';
   insert into public.site_publish_requests (reason)
   values ('Product ' || coalesce(new.site_id, new.id::text) || ' changed')
   on conflict do nothing;      -- one already waiting: it will carry this change too
@@ -612,6 +648,8 @@ create trigger products_queue_publish
   for each row execute function tcp_private.queue_site_publish();
 
 -- Called by the Edge Function: take the waiting request (if any) to send.
+-- Returns nothing (all fields empty) when there is nothing to do, or when a
+-- build is already running.
 create function public.claim_site_publish()
 returns public.site_publish_requests
 language plpgsql security definer
@@ -620,52 +658,98 @@ as $$
 declare
   req public.site_publish_requests;
 begin
+  -- Serialise claims so two workers can't both start a build.
+  lock table public.site_publish_requests in share row exclusive mode;
+
+  -- Recover a request stuck in "sending" (the worker crashed or timed out).
+  -- If a newer request is already waiting, the stuck one is superseded by it;
+  -- otherwise it goes back to waiting and is retried.
   update public.site_publish_requests
-     set status = 'sending', attempts = attempts + 1
+     set status = case when exists (select 1 from public.site_publish_requests
+                                     where status = 'pending')
+                       then 'superseded' else 'pending' end,
+         last_error = 'No report after 15 minutes',
+         finished_at = case when exists (select 1 from public.site_publish_requests
+                                          where status = 'pending')
+                            then clock_timestamp() end
+   where status = 'sending' and claimed_at < clock_timestamp() - interval '15 minutes';
+
+  -- One build at a time.
+  if exists (select 1 from public.site_publish_requests where status = 'sending') then
+    return req;
+  end if;
+
+  update public.site_publish_requests
+     set status = 'sending', attempts = attempts + 1, claimed_at = clock_timestamp()
    where id = (select id from public.site_publish_requests
-                where status = 'pending' order by id limit 1
-                for update skip locked)
+                where status = 'pending' order by id limit 1)
   returning * into req;
   return req;
 end;
 $$;
 
 -- Called by the Edge Function after calling Cloudflare.
--- Success closes the request. Failure puts it back to wait for a retry,
--- until 5 attempts, after which it is marked failed (and shows as out of date).
+--   success: the request is closed. If the catalogue changed after this
+--            build started, a fresh request is waiting (or is queued now).
+--   failure: back to waiting for a retry, until 5 attempts, then failed.
+--            If a newer request is already waiting, this one is superseded.
 create function public.finish_site_publish(request_id bigint, ok boolean, error_text text default null)
 returns void
 language plpgsql security definer
 set search_path = ''
 as $$
+declare
+  req public.site_publish_requests;
+  newer_waiting boolean;
 begin
-  update public.site_publish_requests
-     set status = case when ok then 'succeeded'
-                       when attempts >= 5 then 'failed'
-                       else 'pending' end,
-         last_error = case when ok then null else error_text end,
-         finished_at = case when ok or attempts >= 5 then now() else null end
+  lock table public.site_publish_requests in share row exclusive mode;
+  select * into req from public.site_publish_requests
    where id = request_id and status = 'sending';
   if not found then
     raise exception 'No publish request % is being sent', request_id;
   end if;
+  newer_waiting := exists (select 1 from public.site_publish_requests where status = 'pending');
+
+  update public.site_publish_requests
+     set status = case when ok then 'succeeded'
+                       when newer_waiting then 'superseded'
+                       when attempts >= 5 then 'failed'
+                       else 'pending' end,
+         last_error = case when ok then null else error_text end,
+         finished_at = case when ok or newer_waiting or attempts >= 5
+                            then clock_timestamp() end
+   where id = request_id;
+
+  -- Belt and braces: anything changed after this build started must be sent.
+  if ok and (select last_change_at from public.site_catalogue_state) > req.claimed_at then
+    insert into public.site_publish_requests (reason)
+    values ('Catalogue changed while the last build was running')
+    on conflict do nothing;
+  end if;
 end;
 $$;
 
--- One-row answer to "is the website showing today's prices?"
+-- One-row answer to "is the website showing the latest catalogue?"
+-- The website is up to date when the last successful build STARTED after the
+-- last catalogue change (a build started earlier can't contain that change).
 create view public.site_price_status
 with (security_invoker = true)
 as
+with last_ok as (
+  select claimed_at, finished_at from public.site_publish_requests
+   where status = 'succeeded' order by claimed_at desc limit 1
+)
 select
-  (select max(price_updated_at) from public.products)                            as last_price_change,
-  (select max(finished_at) from public.site_publish_requests
-    where status = 'succeeded')                                                   as last_successful_publish,
+  (select last_change_at from public.site_catalogue_state)                     as last_catalogue_change,
+  (select last_change from public.site_catalogue_state)                        as last_change,
+  (select max(price_updated_at) from public.products)                          as last_price_change,
+  (select finished_at from last_ok)                                            as last_successful_publish,
+  (select claimed_at from last_ok)                                             as website_catalogue_as_of,
   (select count(*) from public.site_publish_requests
-    where status in ('pending', 'sending'))                                        as waiting_requests,
-  (select count(*) from public.site_publish_requests where status = 'failed')     as failed_requests,
-  coalesce((select max(price_updated_at) from public.products)
-           > (select max(finished_at) from public.site_publish_requests
-               where status = 'succeeded'), true)                                 as website_out_of_date;
+    where status in ('pending', 'sending'))                                     as waiting_requests,
+  (select count(*) from public.site_publish_requests where status = 'failed')  as failed_requests,
+  coalesce((select last_change_at from public.site_catalogue_state)
+           > (select claimed_at from last_ok), true)                           as website_out_of_date;
 
 -- What the public website may read: published products only, and no price
 -- where price_visible is off. This view deliberately runs with the owner's
@@ -715,6 +799,57 @@ begin
   return c;
 end;
 $$;
+
+-- Correct a customer's details (name, phone, area, notes). The code never
+-- changes. The audit log keeps the before and after automatically.
+create function public.update_customer(
+  p_customer_id bigint,
+  p_phone       text,
+  p_name        text,
+  p_area        text,
+  p_notes       text
+)
+returns public.customers
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  c public.customers;
+begin
+  perform tcp_private.require_role('owner', 'sales');
+  update public.customers
+     set phone = public.normalise_gh_phone(p_phone),
+         name  = nullif(trim(p_name), ''),
+         area  = nullif(trim(p_area), ''),
+         notes = nullif(trim(p_notes), '')
+   where id = p_customer_id and merged_into is null
+  returning * into c;
+  if c.id is null then
+    raise exception 'No such customer, or it was merged into another record';
+  end if;
+  return c;
+end;
+$$;
+
+-- Customers' codes and merge links are never changed by hand.
+create function tcp_private.guard_customers()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.code is distinct from old.code then
+    raise exception 'A customer code never changes' using errcode = '42501';
+  end if;
+  if old.merged_into is not null then
+    raise exception 'A merged customer record cannot be changed' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+create trigger customers_guard
+  before update on public.customers
+  for each row execute function tcp_private.guard_customers();
 
 -- Other customers already using this phone number (for a "possible duplicate"
 -- warning before adding someone).
@@ -876,8 +1011,9 @@ begin
   if not exists (select 1 from public.invoice_lines where invoice_id = p_invoice_id) then
     raise exception 'An invoice needs at least one line before it is issued';
   end if;
-  if (select sum(line_total) from public.invoice_lines where invoice_id = p_invoice_id) < 0 then
-    raise exception 'An invoice total cannot be below zero';
+  -- No zero or negative invoices (TCP has no complimentary sales for now).
+  if (select sum(line_total) from public.invoice_lines where invoice_id = p_invoice_id) <= 0 then
+    raise exception 'An invoice total must be more than zero';
   end if;
   num := tcp_private.next_number('invoice');
   update public.invoices
@@ -1142,6 +1278,7 @@ alter table public.invoice_lines         enable row level security;
 alter table public.payments              enable row level security;
 alter table public.audit_log             enable row level security;
 alter table public.site_publish_requests enable row level security;
+alter table public.site_catalogue_state  enable row level security;
 
 -- Staff may read the business records.
 grant usage on schema tcp_private to authenticated;
@@ -1150,7 +1287,7 @@ grant execute on function tcp_private.is_staff() to authenticated;
 
 grant select on public.customers, public.customer_code_aliases, public.products,
                 public.invoices, public.invoice_lines, public.payments,
-                public.site_publish_requests
+                public.site_publish_requests, public.site_catalogue_state
   to authenticated;
 grant select on public.invoice_summary, public.overdue_invoices, public.site_price_status
   to authenticated;
@@ -1162,6 +1299,7 @@ create policy staff_read on public.invoices              for select to authentic
 create policy staff_read on public.invoice_lines         for select to authenticated using (tcp_private.is_staff());
 create policy staff_read on public.payments              for select to authenticated using (tcp_private.is_staff());
 create policy staff_read on public.site_publish_requests for select to authenticated using (tcp_private.is_staff());
+create policy staff_read on public.site_catalogue_state  for select to authenticated using (tcp_private.is_staff());
 
 -- Only the owner reads the staff list and the audit log.
 grant select on public.staff, public.audit_log to authenticated;
@@ -1174,6 +1312,7 @@ create policy owner_read on public.audit_log for select to authenticated
 grant execute on function
   public.normalise_gh_phone(text),
   public.create_customer(text, text, text, text),
+  public.update_customer(bigint, text, text, text, text),
   public.customers_with_phone(text),
   public.find_customer_by_code(text),
   public.create_draft_invoice(bigint, text, text, text, date, text),

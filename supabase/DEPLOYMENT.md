@@ -71,9 +71,12 @@ When TCP moves to Cloudflare:
 4. `site_price_status` shows whether the website has the latest prices; the
    admin screen will show a warning when `website_out_of_date` is true.
 
-Safeguards already built in: one waiting request at a time (repeated changes
-don't pile up), up to 5 retries with the error kept, the time of the last
-successful publish, and a failed state that stays visible.
+Safeguards already built in: one waiting request and one build at a time
+(repeated changes don't pile up); a change made during a build queues another
+build, so it is never lost; any public change counts (name, unit, price,
+published, price visible); a build that never reports back is retried after
+15 minutes; up to 5 retries with the error kept; and the "out of date" flag
+compares the last change with the moment the last successful build started.
 
 ## 7. Overdue reminders
 

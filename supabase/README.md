@@ -38,7 +38,8 @@ supabase/
 | `payments` | Receipts (TCP-RCT-0001): payments, corrections and refunds. Never edited or deleted |
 | `audit_log` | Every change, who made it, and the values before and after. Cannot be edited or deleted |
 | `staff` | Staff logins and their role (owner, sales, finance) |
-| `site_publish_requests` | Price changes waiting to be sent to the website |
+| `site_publish_requests` | Catalogue changes waiting to be sent to the website |
+| `site_catalogue_state` | When the public catalogue last changed, and what changed |
 
 Totals, balances and statuses are never stored. They are calculated by the
 `invoice_summary` view every time, so they can't go out of step with the
@@ -47,10 +48,12 @@ payments. Statuses are draft, unpaid, part paid, paid, overdue and cancelled.
 ## How a sale works
 
 1. `create_customer` (or find an existing one with `customers_with_phone` /
-   `find_customer_by_code`).
+   `find_customer_by_code`). Details are corrected with `update_customer`;
+   the code never changes.
 2. `create_draft_invoice`, then `add_invoice_line` for each product, the agreed
    delivery charge and any discount. Drafts can be changed freely.
 3. `issue_invoice`: the invoice gets its permanent number and is locked.
+   Invoices of GH₵0 or less are refused.
 4. `record_payment` for each payment (part payments allowed, overpayments
    refused).
 5. Mistakes are fixed without rewriting history:
@@ -65,7 +68,7 @@ payments. Statuses are draft, unpaid, part paid, paid, overdue and cancelled.
 | Action | Owner | Sales | Finance | Logged in, not staff | Public |
 | --- | :-: | :-: | :-: | :-: | :-: |
 | Read customers, invoices, payments | ✓ | ✓ | ✓ | – | – |
-| Add customers, prepare and issue invoices | ✓ | ✓ | – | – | – |
+| Add and edit customers, prepare and issue invoices | ✓ | ✓ | – | – | – |
 | Record payments | ✓ | ✓ | ✓ | – | – |
 | Corrections and refunds | ✓ | – | ✓ | – | – |
 | Cancel invoices, merge customers, change prices | ✓ | – | – | – | – |
@@ -98,10 +101,15 @@ folder (`.github/workflows/database-tests.yml`).
 | `07_merge_customers` | Invoices move to the kept record unchanged; old codes kept as aliases and still work, through chains of merges; merged records can't be reused; owner only |
 | `08_site_publishing` | Price changes queue one request, never a pile; success recorded; failures retried with the error kept, given up after 5 and shown; "out of date" flag correct; the catalogue shows the new price |
 | `09_status_and_precision` | Unpaid, part paid, overdue and paid worked out correctly; overdue list; exact money on large and awkward amounts (1,234.567 tons); prices and payments rounded to the pesewa |
+| `11_customer_updates_and_zero_invoices` | Customer details corrected with before/after in the audit log; codes never change; merged records locked; finance and strangers can't edit; zero or negative invoices refused without using up a number |
+| `12_site_publishing_races` | A change made while a build is running queues a new request and is never lost; one build at a time; name, unpublish and hidden-price changes count, not just prices; a failed build is superseded by a newer waiting one; a build stuck for 15 minutes is taken back; an identical save queues nothing |
+| `13_issue_versus_line_race` | Issuing an invoice while a line is being removed or added at the same moment (timing made certain, both orders): no line slips in or out mid-issue |
 | `10_concurrency` | 20 invoices issued at the same moment get 0001 to 0020 with no gaps or repeats; two payments, two refunds or two corrections racing each other can never overpay or double up |
 
-The concurrency test was itself checked: with the payment lock removed, it
-fails (both racing payments go through), so a pass means the lock works.
+The race tests were themselves checked: with the payment lock removed,
+`10_concurrency` fails (both racing payments go through); with the invoice
+lock in the line guard removed, `13_issue_versus_line_race` fails (a line is
+removed from an invoice mid-issue). So a pass means the locks work.
 
 ## Limits worth knowing
 
