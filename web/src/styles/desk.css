@@ -1,0 +1,64 @@
+/* ==========================================================================
+   desk.css - the private Invoice Desk (/invoice-desk/), screen only
+   --------------------------------------------------------------------------
+   Plain working screens in the site's colours (tokens.css): white cards on
+   the neutral page, charcoal text, the ochre button colour for the main
+   actions. Light only. Phone first: one column, large touch targets
+   (at least 44 px), 16 px text in every box so phones do not zoom in.
+   The printed invoice is styled by print.css, like the estimate PDF.
+   ========================================================================== */
+body.desk{margin:0;background:var(--bg);color:var(--ink);font:var(--w-text) 16px/1.5 var(--font)}
+.dk{max-width:760px;margin:0 auto;padding:16px 14px 48px;overflow-wrap:anywhere}
+.dk-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 2px 16px}
+.dk-head img{height:28px;width:auto}
+.dk-head h1{margin:0;font-size:15px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.dk-card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:12px}
+.dk-card h2{display:flex;align-items:center;gap:10px;margin:0 0 8px;font-size:18px;font-weight:800}
+.dk-no{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:4px;background:var(--lno-bg);color:var(--lno-ink);font-size:14px;font-weight:800}
+.dk-help{margin:0 0 10px;color:var(--mute);font-size:14px}
+.dk label{display:block;font-size:13px;font-weight:700;color:var(--mute);margin:0 0 4px}
+.dk input,.dk select,.dk textarea{box-sizing:border-box;width:100%;min-height:44px;padding:9px 11px;border:1px solid var(--field-line);border-radius:4px;background:var(--field);color:var(--ink);font:16px/1.4 var(--font)}
+.dk textarea{resize:vertical}
+.dk input:focus,.dk select:focus,.dk textarea:focus{outline:2px solid var(--y);outline-offset:1px;border-color:var(--ink)}
+.dk-grid{display:grid;gap:12px}
+@media (min-width:600px){.dk-grid{grid-template-columns:1fr 1fr}.dk-grid .wide{grid-column:1/-1}}
+.dk-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;align-items:center}
+/* The product list for "Add item" has long option texts; without
+   min-width:0 it widened the whole page on phones. */
+.dk-row select{flex:1 1 100%;min-width:0;width:100%}
+@media (min-width:600px){.dk-row select{flex:1 1 300px;width:auto}}
+.dk-btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border:1.5px solid var(--ink);border-radius:4px;background:var(--card);color:var(--ink);font:700 15px var(--font);text-decoration:none;cursor:pointer}
+.dk-btn.primary{background:var(--y);border-color:var(--y);color:var(--on-y)}
+.dk-btn.ghost{border-color:var(--line);color:var(--mute);margin-top:12px}
+.dk-btn:disabled,.dk-btn.off{opacity:.45;cursor:not-allowed}
+.dk-btn:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.dk-msg{margin:10px 0 0;font-size:14px;font-weight:600}
+.dk-msg:empty{display:none}
+.sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+#gate form{display:grid;gap:10px;max-width:360px}
+/* Item lines: name across the top, then quantity, price and amount */
+.dk-line{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;padding:12px 0;border-top:1px solid var(--line)}
+.dk-line:first-child{border-top:0;padding-top:0}
+.dk-ln-name{grid-column:1/-1}
+.dk-ln-name small{color:var(--mute)}
+.dk-flag,.dk-note{display:block;margin-top:4px;font-size:13px}
+.dk-flag{color:#8a3b00;font-weight:700}
+.dk-note{color:var(--mute)}
+.dk-line label{margin:0;font-size:12px}
+.dk-amt{align-self:end;font-weight:800;font-variant-numeric:tabular-nums}
+.dk-amt small{display:block;font-size:12px;font-weight:600;color:var(--mute)}
+.dk-x{justify-self:end;align-self:end;min-height:44px;padding:0 4px;border:0;background:none;color:var(--mute);font:600 14px var(--font);text-decoration:underline;cursor:pointer}
+@media (min-width:600px){.dk-line{grid-template-columns:110px 130px 1fr auto}.dk-amt{text-align:right}}
+/* Delivery choices */
+.dk-opts{display:grid;gap:6px}
+.dk-opts label{display:flex;align-items:center;gap:10px;min-height:44px;margin:0;padding:0 12px;border:1px solid var(--line);border-radius:4px;color:var(--ink);font-size:15px;font-weight:600;cursor:pointer}
+.dk-opts input{width:20px;min-height:0;height:20px;margin:0;accent-color:var(--ink)}
+.dk-opts label:has(input:checked){border-color:var(--ink);background:var(--y-tint)}
+.dk-fee{margin-top:12px;max-width:220px}
+/* Summary */
+.dk-sum>div{display:flex;justify-content:space-between;gap:12px;padding:6px 0;font-variant-numeric:tabular-nums}
+.dk-sum>div span{color:var(--mute);font-weight:600}
+.dk-sum .dk-no-line{flex-wrap:wrap}
+.dk-sum .dk-no-line b{font-size:14px;letter-spacing:.02em;white-space:nowrap}
+.dk-sum .dk-total{margin-top:6px;padding:12px;background:var(--dark);color:var(--on-dark);border-left:5px solid var(--y);border-radius:3px;font-size:18px}
+.dk-sum .dk-total span{color:var(--on-dark)}
