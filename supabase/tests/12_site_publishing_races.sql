@@ -103,3 +103,34 @@ select public.save_product('c1', 'Supacem Supa Fast 32.5R', 'Cement', '50 kg bag
 reset role;
 select tcp_test.ok((select count(*) from public.site_publish_requests where status = 'pending') = 0,
                    'an identical save queues nothing');
+
+-- A build that gets stuck EVERY time is not retried forever: after 5 attempts
+-- (the same limit as reported failures) it is marked failed and stays visible.
+set role authenticated;
+select public.save_product('c1', 'Supacem Supa Fast 32.5R', 'Cement', '50 kg bag', 79);
+reset role;
+set role service_role;
+select (public.claim_site_publish()).id as stuck \gset
+reset role;
+select tcp_test.ok((select attempts from public.site_publish_requests where id = :stuck) = 1, 'attempt 1');
+-- Attempts 2 to 5: each time the worker never reports and 16 minutes pass.
+update public.site_publish_requests set claimed_at = clock_timestamp() - interval '16 minutes' where id = :stuck;
+set role service_role; select public.claim_site_publish(); reset role;
+update public.site_publish_requests set claimed_at = clock_timestamp() - interval '16 minutes' where id = :stuck;
+set role service_role; select public.claim_site_publish(); reset role;
+update public.site_publish_requests set claimed_at = clock_timestamp() - interval '16 minutes' where id = :stuck;
+set role service_role; select public.claim_site_publish(); reset role;
+update public.site_publish_requests set claimed_at = clock_timestamp() - interval '16 minutes' where id = :stuck;
+set role service_role; select public.claim_site_publish(); reset role;
+select tcp_test.ok((select attempts from public.site_publish_requests where id = :stuck) = 5, '5 attempts used');
+select tcp_test.ok((select status from public.site_publish_requests where id = :stuck) = 'sending', 'fifth attempt running');
+-- The fifth attempt gets stuck too: the next check marks it failed, no 6th try.
+update public.site_publish_requests set claimed_at = clock_timestamp() - interval '16 minutes' where id = :stuck;
+set role service_role;
+select tcp_test.ok((public.claim_site_publish()).id is null, 'no sixth attempt');
+reset role;
+select tcp_test.ok((select status from public.site_publish_requests where id = :stuck) = 'failed', 'marked failed after 5');
+select tcp_test.ok((select attempts from public.site_publish_requests where id = :stuck) = 5, 'still 5 attempts');
+select tcp_test.ok((select last_error from public.site_publish_requests where id = :stuck) like 'No report%', 'error kept');
+select tcp_test.ok((select failed_requests from public.site_price_status) >= 1, 'failure visible');
+select tcp_test.ok((select website_out_of_date from public.site_price_status), 'website shown as out of date');

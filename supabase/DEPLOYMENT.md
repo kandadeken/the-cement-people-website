@@ -31,10 +31,51 @@ website, never in a chat.
 
 ## 3. Apply the database
 
-1. Run the migration in `migrations/` through the Supabase command-line tool
-   (`supabase db push`), or by pasting it into the SQL editor once.
-2. Load the starting price list from `seed.sql` (once).
-3. Check: `select * from public.public_catalogue` shows the 17 products.
+There are two ways. **Route A is the preferred one**, because it is repeatable
+and records in Supabase which migrations have been applied. Route B is the
+fallback if the command-line tool can't be used.
+
+Whichever route is used, first run `bash supabase/run-tests.sh` on the exact
+commit being deployed and confirm all tests pass.
+
+### Route A: Supabase command-line tool (CLI)
+
+Run from the top folder of the repository, on a computer with the Supabase CLI
+installed (`npm install -g supabase`, or `npx supabase ...` each time):
+
+1. `supabase init`, once. This creates `supabase/config.toml`, the CLI's
+   project settings file. It deliberately isn't in the repository yet: it is
+   created at go-live and committed in the go-live pull request. Keep the
+   existing `migrations/` and `seed.sql`, which are already where the CLI
+   expects them.
+2. `supabase login` (opens the browser), then
+   `supabase link --project-ref <project ref>`. The project ref is in the
+   project's dashboard address. It asks for the database password set when the
+   project was created; that password is never written into any file.
+3. `supabase db push --dry-run` lists what would be applied: exactly the one
+   migration file. Check it, then run `supabase db push` for real.
+4. Load the starting price list once:
+   `supabase db push --include-seed` (or paste `seed.sql` into the SQL editor).
+5. `supabase migration list` should show the migration as applied both locally
+   and remotely.
+
+Later changes follow the same path: a new file in `migrations/`, tested here,
+reviewed in a pull request, then `supabase db push`.
+
+### Route B: SQL editor (fallback)
+
+1. In the Supabase dashboard, SQL editor, paste the whole migration file and
+   run it once. It runs as one unit: if anything fails, nothing is applied.
+2. Paste `seed.sql` and run it once.
+3. Because Supabase didn't record this migration, run Route A's
+   `supabase migration repair --status applied 20261121120000` before any later
+   CLI use, so the CLI doesn't try to apply it a second time.
+
+### Check (both routes)
+
+- `select count(*) from public.public_catalogue` returns 17.
+- `select * from public.site_price_status` shows the website as out of date
+  (nothing published from the database yet). That is expected.
 
 ## 4. Make Daniel the owner
 

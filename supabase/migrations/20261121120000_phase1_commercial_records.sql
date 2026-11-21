@@ -662,14 +662,18 @@ begin
   lock table public.site_publish_requests in share row exclusive mode;
 
   -- Recover a request stuck in "sending" (the worker crashed or timed out).
-  -- If a newer request is already waiting, the stuck one is superseded by it;
-  -- otherwise it goes back to waiting and is retried.
+  -- The same 5-attempt limit applies as for reported failures:
+  --   - a newer request already waiting: the stuck one is superseded by it
+  --   - 5 attempts used: marked failed (stays visible as out of date)
+  --   - otherwise: back to waiting, to be retried
   update public.site_publish_requests
      set status = case when exists (select 1 from public.site_publish_requests
-                                     where status = 'pending')
-                       then 'superseded' else 'pending' end,
+                                     where status = 'pending') then 'superseded'
+                       when attempts >= 5 then 'failed'
+                       else 'pending' end,
          last_error = 'No report after 15 minutes',
-         finished_at = case when exists (select 1 from public.site_publish_requests
+         finished_at = case when attempts >= 5
+                              or exists (select 1 from public.site_publish_requests
                                           where status = 'pending')
                             then clock_timestamp() end
    where status = 'sending' and claimed_at < clock_timestamp() - interval '15 minutes';
