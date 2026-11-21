@@ -1,0 +1,38 @@
+name: Database tests
+
+# Runs every test in supabase/tests/ against a throwaway Postgres database,
+# on every pull request that touches the database files. A red cross means a
+# change broke one of the money or permission rules and must not be merged.
+# Nothing here touches the real Supabase project.
+
+on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - ".github/workflows/database-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  database-tests:
+    name: Run the database tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # Postgres 16 from the official Postgres package archive, the same
+      # family Supabase runs. Only the programs are used; run-tests.sh starts
+      # its own temporary server.
+      - name: Install Postgres 16
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-16 postgresql-client-16
+
+      - name: Run the tests
+        run: bash supabase/run-tests.sh
