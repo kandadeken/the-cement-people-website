@@ -1,5 +1,5 @@
 /* ==========================================================================
-   desk.css - the private Invoice Desk (/invoice-desk/), screen only
+   desk.css - the private TCP Back Office (/back-office/), screen only
    --------------------------------------------------------------------------
    Plain working screens in the site's colours (tokens.css): white cards on
    the neutral page, charcoal text, the ochre button colour for the main
@@ -10,7 +10,7 @@
    matches, the saved/unsaved state line and the issued-invoice card.
    ========================================================================== */
 body.desk{margin:0;background:var(--bg);color:var(--ink);font:var(--w-text) 16px/1.5 var(--font)}
-.dk{max-width:760px;margin:0 auto;padding:16px 14px 48px;overflow-wrap:anywhere}
+.dk{max-width:760px;margin:0 auto;padding:16px 14px 96px;overflow-wrap:anywhere}
 .dk-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 2px 16px}
 .dk-head img{height:28px;width:auto}
 .dk-head h1{margin:0;font-size:15px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
@@ -62,7 +62,8 @@ body.desk{margin:0;background:var(--bg);color:var(--ink);font:var(--w-text) 16px
 .dk-fee{margin-top:12px;max-width:220px}
 /* Summary */
 .dk-sum>div{display:flex;justify-content:space-between;gap:12px;padding:6px 0;font-variant-numeric:tabular-nums}
-.dk-sum>div span{color:var(--mute);font-weight:600}
+.dk-sum>div span{color:var(--mute);font-weight:600;flex:none}
+.dk-sum>div b{text-align:right}
 .dk-sum .dk-no-line{flex-wrap:wrap}
 .dk-sum .dk-no-line b{font-size:14px;letter-spacing:.02em;white-space:nowrap}
 .dk-sum .dk-total{margin-top:6px;padding:12px;background:var(--dark);color:var(--on-dark);border-left:5px solid var(--y);border-radius:3px;font-size:18px}
@@ -85,3 +86,49 @@ body.desk{margin:0;background:var(--bg);color:var(--ink);font:var(--w-text) 16px
 .dk-pay-txt b{font-variant-numeric:tabular-nums}
 .dk-pay-txt span{color:var(--ink);font-size:14px}
 .dk-pay-txt small{display:block;margin-top:2px;color:var(--mute);font-size:12px;letter-spacing:.02em}
+/* TCP Back Office v1.1 (22 Nov 2026): tab bar, Home figures, the invoice
+   list, filters, the read-only invoice view, warnings and the copy box.
+   The tab bar sits along the bottom of a phone (thumb reach) and stays in
+   the page column on a laptop. */
+.dk-tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;justify-content:center;background:var(--card);border-top:1px solid var(--line);padding:6px max(8px,env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom))}
+.dk-tabs a{flex:1 1 0;max-width:252px;display:grid;place-items:center;min-height:48px;margin:0 4px;border-radius:4px;color:var(--mute);font:700 15px var(--font);text-decoration:none}
+.dk-tabs a.on{background:var(--y-tint);color:var(--ink)}
+.dk-tabs a:focus-visible{outline:3px solid var(--ink);outline-offset:-3px}
+.dk-wide{display:flex;width:100%;margin-top:12px;box-sizing:border-box}
+a.dk-btn{text-decoration:none}
+.dk-owed{display:block;padding:12px;margin:4px 0 12px;background:var(--dark);color:var(--on-dark);border-left:5px solid var(--y);border-radius:3px;text-decoration:none}
+.dk-owed b{display:block;font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+.dk-owed small{color:var(--on-dark);opacity:.8;font-size:13px}
+.dk-figs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (min-width:600px){.dk-figs{grid-template-columns:repeat(4,1fr)}}
+.dk-fig{display:flex;flex-direction:column;justify-content:center;min-height:64px;padding:10px 12px;border:1px solid var(--line);border-radius:4px;color:var(--ink);text-decoration:none}
+.dk-fig b{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.dk-fig span{color:var(--mute);font-size:13px;font-weight:700}
+.dk-fig.warn b{color:#b3261e}
+.dk-fig:focus-visible,.dk-owed:focus-visible,.dk-inv:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.dk-search input{width:100%;box-sizing:border-box}
+.dk-chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.dk-chips button{min-height:40px;padding:0 12px;border:1px solid var(--line);border-radius:20px;background:var(--card);color:var(--ink);font:700 14px var(--font);cursor:pointer}
+.dk-chips button.on{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.dk-list{display:flex;flex-direction:column}
+.dk-inv{display:flex;flex-direction:column;gap:2px;padding:12px 4px;border-top:1px solid var(--line);color:var(--ink);text-decoration:none;min-height:44px}
+.dk-inv:first-child{border-top:0}
+.dk-inv-top,.dk-inv-bot{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.dk-inv-top b{font-size:15px;letter-spacing:.02em}
+.dk-inv-who{font-size:14px;color:var(--ink)}
+.dk-inv-bot small{color:var(--mute);font-size:13px}
+.dk-inv-bot b{font-variant-numeric:tabular-nums;text-align:right}
+.dk-badge{font-style:normal;font-size:12px;font-weight:800;padding:2px 8px;border-radius:10px;background:var(--bg);color:var(--mute);white-space:nowrap}
+.dk-badge.s-overdue{background:#fbe9e7;color:#b3261e}
+.dk-badge.s-paid{background:#e6f4ea;color:#1e6b34}
+.dk-badge.s-part_paid,.dk-badge.s-unpaid{background:var(--y-tint);color:var(--ink)}
+.dk-badge.s-cancelled{text-decoration:line-through}
+.dk-alert{border-color:var(--ink);border-left:5px solid var(--y)}
+.dk-alert a{color:var(--ink);font-weight:800}
+.dk-danger{color:#b3261e;border-color:#b3261e}
+.dk-vlines{margin-top:10px;border-top:1px solid var(--line)}
+.dk-vline{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.dk-vline small{display:block;color:var(--mute);font-size:13px}
+.dk-vline b{font-variant-numeric:tabular-nums;white-space:nowrap}
+.dk-copy{margin-top:10px}
+.dk-copy textarea{width:100%;box-sizing:border-box}

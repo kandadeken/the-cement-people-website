@@ -30,7 +30,29 @@ Supabase. It only ever holds made-up records.
 The starting price list (`seed.sql`) is not loaded by the link on its own;
 it is added to the test project separately after the first deployment.
 
-## Invoice Desk on the test project (phase 1)
+## TCP Back Office on the test project
+
+**Since the Back Office (22 Nov 2026):** the staff app lives at
+`thecementpeople.com/back-office/`; the old `/invoice-desk/` address only
+forwards there, keeping everything after `?` and `#`, so older sign-in emails
+still work. After the Back Office is merged, Daniel changes once:
+
+- Authentication → URL Configuration: **Site URL** →
+  `https://thecementpeople.com/back-office/`, and add the same address under
+  **Redirect URLs**. Keep the `/invoice-desk/` entry for about a week, then
+  remove it.
+- Phone bookmarks or home-screen shortcuts → the new address.
+
+**An invitation that is not opened within the hour** (22 Nov 2026): email
+links last about an hour. An invited person who has not opened the link stays
+"unconfirmed", and with sign-ups off Supabase then refuses them a sign-in
+email ("Signups not allowed"). Fix: send a new invitation (Authentication →
+Users → the user → "Send invitation" again, opened within the hour), or on the
+test project mark the login confirmed in the SQL editor:
+`update auth.users set email_confirmed_at = now() where id = '<user id>' and email_confirmed_at is null;`
+
+The steps below were written for the Invoice Desk (phase 1); read
+"Back Office" and `/back-office/` for "desk" and `/invoice-desk/`.
 
 The desk at `thecementpeople.com/invoice-desk/` talks to the database
 directly from the phone, using the **anon (public) key** and the signed-in

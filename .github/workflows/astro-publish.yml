@@ -40,7 +40,7 @@ jobs:
     name: Build, check and package the Astro site
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Where the Invoice Desk (/invoice-desk/) finds its database. Repository
+    # Where the Back Office (/back-office/) finds its database. Repository
     # variables (Settings -> Secrets and variables -> Actions -> Variables),
     # not secrets: the project address and the public "anon" key are safe in
     # a browser, because every permission is enforced inside the database.
