@@ -74,7 +74,12 @@ function supabaseApi(){
   const sb=window.supabase.createClient(D.supabaseUrl,D.supabaseKey,{auth:{persistSession:true,autoRefreshToken:true}});
   const out=r=>{if(r.error)throw r.error;return r.data;};
   return{
-    sendCode:email=>sb.auth.signInWithOtp({email,options:{shouldCreateUser:false}}).then(out),
+    // The email's link brings the person back to this page, signed in.
+    // (Supabase's free plan sends its standard email, which has a link but
+    // no 6-digit code; the code box is for when TCP's own email sending is
+    // set up and the template can include the code.) The page address must
+    // be allowed under Authentication -> URL Configuration.
+    sendCode:email=>sb.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:location.origin+location.pathname}}).then(out),
     verifyCode:(email,token)=>sb.auth.verifyOtp({email,token,type:"email"}).then(out),
     user:async()=>{const{data}=await sb.auth.getSession();return data.session?data.session.user:null;},
     // "local": forget the session on this phone even when it has expired
@@ -118,7 +123,7 @@ $("#emailForm").addEventListener("submit",async e=>{
   e.preventDefault();const m=$("#signMsg"),email=$("#email").value.trim();
   if(!email){m.textContent="Enter your email address.";return;}
   m.textContent="Sending the code…";
-  try{await api.sendCode(email);m.textContent=`A 6-digit code was sent to ${email}. It can take a minute to arrive.`;
+  try{await api.sendCode(email);m.textContent=`A sign-in email was sent to ${email}. It can take a minute to arrive. Open its link on this phone.`;
     show("#codeForm",true);$("#code").focus();}
   catch(err){m.textContent=kind(err)==="offline"?"No connection. Check your signal and try again.":"The code could not be sent. Check the email address, or ask the owner to invite you.";}
 });
@@ -601,6 +606,10 @@ $("#pdfBtn").addEventListener("click",async()=>{
 // Not connected to a database (no project address in this build): say so.
 if(!api){screen("setup");}
 else{
+  // A sign-in link that has expired or was already used comes back with
+  // the reason in the address. Say so, and tidy the address.
+  const back=new URLSearchParams((location.hash||"").replace(/^#/,"")+"&"+location.search.replace(/^\?/,""));
+  const linkError=back.get("error_code")||back.get("error");
   // Signed out by Supabase itself (the sign-in could not be renewed): the
   // same as an expired sign-in. (Our own sign-outs clear ME first, so they
   // don't come through here.)
@@ -608,7 +617,10 @@ else{
   // any Supabase function inside it can freeze the page. So the notice only
   // schedules the work for just afterwards, and does nothing else.
   if(api.onSignOut)api.onSignOut(()=>{setTimeout(()=>{if(ME)expire();},0);});
-  enter().catch(err=>{screen("signin");$("#signMsg").textContent=kind(err)==="offline"?"No connection. Check your signal and reload.":"";});
+  enter().then(()=>{
+    if(linkError&&!ME){screen("signin");$("#signMsg").textContent="That sign-in link has expired or was already used. Send a new one.";}
+    if(linkError||back.get("access_token"))history.replaceState(null,"",location.pathname);
+  }).catch(err=>{screen("signin");$("#signMsg").textContent=kind(err)==="offline"?"No connection. Check your signal and reload.":"";});
 }
 
 // For the tests (and nothing else): the desk's own functions.

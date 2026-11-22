@@ -40,9 +40,10 @@ repository or the browser.
 
 Daniel does these once, in this order, before testing on his phone:
 
-1. **Email sign-in code.** Supabase dashboard → Authentication → Emails →
-   "Magic Link" template: make sure it contains `{{ .Token }}` (the 6-digit
-   code) as well as the link, e.g. "Your TCP code is {{ .Token }}".
+1. **Where the sign-in link leads.** Authentication → URL Configuration:
+   set **Site URL** to `https://thecementpeople.com/invoice-desk/` and add the
+   same address under **Redirect URLs**. The email's link then brings staff
+   back to the desk, signed in.
 2. **Close public sign-ups.** Authentication → Sign In / Providers → turn off
    "Allow new users to sign up". The desk only signs in people who already
    exist (`shouldCreateUser: false`), and this makes sure of it.
@@ -54,6 +55,17 @@ Daniel does these once, in this order, before testing on his phone:
    design): `TCP_SUPABASE_URL` = the project address above, and
    `TCP_SUPABASE_ANON_KEY` = the project's anon / publishable key. The next
    site build picks them up. Without them the desk page says "Not connected".
+
+**About the email.** Since 3 June 2026, new free-plan Supabase projects can't
+edit their sign-in email unless they use their own email sending (custom
+SMTP), so the email `tcp-test` sends has a **link but no 6-digit code**. The
+desk therefore signs in through the link; its code box stays ready. Before
+anyone other than Daniel uses the desk, TCP should send its own email (for
+example Brevo or Resend, from an address at thecementpeople.com, which needs
+a few DNS records). That unlocks the template, so the code can be added
+(`{{ .Token }}`), and lifts Supabase's very low limit on emails from its
+built-in sender. On Android, a link can open in a different browser from the
+one the desk was started in; the code avoids that.
 
 Until the real project exists, the desk points at `tcp-test`, so anything
 made on it is test data, numbered from TCP-INV-0001.

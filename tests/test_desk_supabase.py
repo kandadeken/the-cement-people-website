@@ -13,7 +13,8 @@ API server could not be installed in the build environment.
 
   S01  kept out of search engines; not in the sitemap; no link to it
   S02  a build without database settings says "Not connected"
-  S03  signing in: email, then the 6-digit code; a wrong code is refused;
+  S03  signing in: email, then the 6-digit code (or the email's link); a
+       wrong code is refused;
        someone who is not active staff sees "No access"; finance too
   S04  a real estimate from the home page fills in every item, matched to
        the database price list, with the drop-off location
@@ -35,6 +36,7 @@ API server could not be installed in the build environment.
        when opening the desk
   S13  a customer with no phone number, answer lost: added once (request id)
   S14  the sign-out notice from Supabase: no calls made inside its lock
+  S15  an expired or used sign-in link says so, and the address is tidied
 """
 import base64
 import io
@@ -245,7 +247,7 @@ def test_s03_sign_in_with_email_code(browser):
     page.fill("#email", OWNER["email"])
     page.click("#emailForm button")
     page.wait_for_selector("#codeForm:not([hidden])")
-    assert "6-digit code was sent" in page.text_content("#signMsg")
+    assert "sign-in email was sent" in page.text_content("#signMsg")
     page.fill("#code", "999999")
     page.click("#codeForm button")
     page.wait_for_function("document.querySelector('#signMsg').textContent.includes('not right')")
@@ -539,4 +541,20 @@ def test_s14_sign_out_notice_makes_no_calls_inside_the_lock(browser):
     page.wait_for_selector("#signin:not([hidden])")
     assert page.evaluate("__db.lockViolations") == []
     assert page.evaluate("localStorage.getItem('tcp-desk-work-u-owner')") is None
+    assert not errors
+
+
+# S15: Supabase's free plan sends a link, not a code. A link that has
+# expired or was already used comes back with the reason in the address.
+def test_s15_expired_sign_in_link(browser):
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True)
+    page = ctx.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.add_init_script(_standin())
+    page.goto(DESK + "#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired",
+              wait_until="load")
+    page.wait_for_function("document.querySelector('#signMsg').textContent.includes('expired or was already used')")
+    assert page.locator("#signin").is_visible()
+    assert "error" not in page.url
     assert not errors
