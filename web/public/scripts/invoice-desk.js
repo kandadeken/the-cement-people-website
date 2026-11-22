@@ -122,13 +122,18 @@ function kind(e){
 // browser on Android. Staff join by invitation only, so no account is ever
 // created from this page.
 let ME=null,PRODUCTS=[];
+// Whether the email carries a 6-digit code (see emailCode in the page's
+// settings). Off on Supabase's free-plan email, which has only the link, so
+// the code box stays hidden. (The test stand-in can switch it on.)
+const CODE=!!(D.emailCode||(api&&api.emailCode));
 function screen(name){["#setup","#signin","#noaccess","#tool"].forEach(s=>show(s,s==="#"+name));}
 $("#emailForm").addEventListener("submit",async e=>{
   e.preventDefault();const m=$("#signMsg"),email=$("#email").value.trim();
   if(!email){m.textContent="Enter your email address.";return;}
   m.textContent="Sending the sign-in email…";
-  try{await api.sendCode(email);m.textContent=`A sign-in email was sent to ${email}. It can take a minute to arrive. Open its link on this phone.`;
-    show("#codeForm",true);$("#code").focus();}
+  try{await api.sendCode(email);m.textContent=CODE?`A sign-in email was sent to ${email}. Type the 6-digit code from it below, or open its link on this phone.`
+                                       :`A sign-in email was sent to ${email}. It can take a minute to arrive. Open its link on this phone.`;
+    if(CODE){show("#codeForm",true);$("#code").focus();}}
   catch(err){m.textContent=kind(err)==="offline"?"No connection. Check your signal and try again.":"The sign-in email could not be sent. Check the email address, or ask the owner to invite you.";}
 });
 $("#codeForm").addEventListener("submit",async e=>{

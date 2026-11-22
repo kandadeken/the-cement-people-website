@@ -37,6 +37,7 @@ API server could not be installed in the build environment.
   S13  a customer with no phone number, answer lost: added once (request id)
   S14  the sign-out notice from Supabase: no calls made inside its lock
   S15  an expired or used sign-in link says so, and the address is tidied
+  S16  with the free-plan email (link only), no code box is shown
 """
 import base64
 import io
@@ -105,6 +106,7 @@ STANDIN = r"""
     throw new Error("Not a Ghana phone number: " + p); };
   const total = id => db.lines.filter(l => l.invoice_id === id).reduce((a, l) => a + Math.round(l.quantity * l.unit_price * 100), 0) / 100;
   window.TCPDeskApi = {
+    emailCode: cfg.emailCode,
     sendCode: email => net("sendCode", () => { db.codeFor = email; }),
     verifyCode: (email, code) => net("verifyCode", () => {
       if (code !== "123456" || email !== db.codeFor) throw new Error("Token has expired or is invalid");
@@ -157,8 +159,10 @@ STANDIN = r"""
 """
 
 
-def _standin(staff=None, users=None):
-    cfg = {"products": DB_PRODUCTS,
+def _standin(staff=None, users=None, email_code=True):
+    # email_code: the sign-in email carries a 6-digit code (TCP's own email
+    # sending). False is today's free-plan email: a link only.
+    cfg = {"products": DB_PRODUCTS, "emailCode": email_code,
            "staff": staff if staff is not None else [{"user_id": OWNER["id"], "full_name": "Test Owner", "role": "owner", "active": True}],
            "users": users if users is not None else [OWNER]}
     return STANDIN.replace("%CFG%", json.dumps(json.dumps(cfg)))
@@ -557,4 +561,18 @@ def test_s15_expired_sign_in_link(browser):
     page.wait_for_function("document.querySelector('#signMsg').textContent.includes('expired or was already used')")
     assert page.locator("#signin").is_visible()
     assert "error" not in page.url
+    assert not errors
+
+
+# S16: today's free-plan email has a link and no code, so after sending it
+# the desk only says to open the link: no code box to confuse anyone.
+def test_s16_link_only_email_shows_no_code_box(browser):
+    page, errors = _desk(browser, signed_in=False, email_code=False)
+    page.wait_for_selector("#signin:not([hidden])")
+    page.fill("#email", OWNER["email"])
+    page.click("#emailForm button")
+    page.wait_for_function("document.querySelector('#signMsg').textContent.includes('Open its link')")
+    assert "code" not in page.text_content("#signMsg").lower()
+    assert not page.locator("#codeForm").is_visible()
+    assert "sendCode" in page.evaluate("__db.calls")
     assert not errors

@@ -38,6 +38,9 @@ body.desk{margin:0;background:var(--bg);color:var(--ink);font:var(--w-text) 16px
 .dk-msg:empty{display:none}
 .sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .dk-signin{display:grid;gap:10px;max-width:360px;margin-top:10px}
+/* "hidden" must win over the display rules above (e.g. the code box,
+   hidden until the email carries a code). */
+[hidden]{display:none!important}
 /* Item lines: name across the top, then quantity, price and amount */
 .dk-line{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;padding:12px 0;border-top:1px solid var(--line)}
 .dk-line:first-child{border-top:0;padding-top:0}

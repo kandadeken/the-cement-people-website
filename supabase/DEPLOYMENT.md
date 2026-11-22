@@ -64,7 +64,9 @@ anyone other than Daniel uses the desk, TCP should send its own email (for
 example Brevo or Resend, from an address at thecementpeople.com, which needs
 a few DNS records). That unlocks the template, so the code can be added
 (`{{ .Token }}`), and lifts Supabase's very low limit on emails from its
-built-in sender. On Android, a link can open in a different browser from the
+built-in sender. Once the template has the code, set the repository variable
+`TCP_EMAIL_CODE` to `true`: the desk then shows the code box (it stays hidden
+until then, because today's email has no code in it). On Android, a link can open in a different browser from the
 one the desk was started in; the code avoids that.
 
 Until the real project exists, the desk points at `tcp-test`, so anything
