@@ -89,7 +89,7 @@ BY_SITE = {p["site_id"]: p for p in DB_PRODUCTS}
 OWNER = {"id": "u-owner", "email": "owner@test.invalid"}
 
 # The stand-in for Supabase. window.TCPDeskApi replaces the real connection
-# (see section 2 of public/scripts/invoice-desk.js). window.__db lets a test
+# (see section 2 of public/scripts/back-office.js). window.__db lets a test
 # look inside, switch the connection off, or remove someone's access.
 STANDIN = r"""
 (() => {
