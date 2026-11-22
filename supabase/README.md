@@ -15,7 +15,8 @@ review of v3.
 ```
 supabase/
 ├─ migrations/
-│  └─ 20261121120000_phase1_commercial_records.sql   the whole database, commented
+│  ├─ 20261121120000_phase1_commercial_records.sql   the whole database, commented
+│  └─ 20261121180000_desk_phase1.sql                 additions for the Invoice Desk
 ├─ seed.sql            the 17 products on the website today (starting price list)
 ├─ run-tests.sh        runs every test on a throwaway database
 ├─ tests/
@@ -104,6 +105,8 @@ folder (`.github/workflows/database-tests.yml`).
 | `11_customer_updates_and_zero_invoices` | Customer details corrected with before/after in the audit log; codes never change; merged records locked; finance and strangers can't edit; zero or negative invoices refused without using up a number |
 | `12_site_publishing_races` | A change made while a build is running queues a new request and is never lost; one build at a time; name, unpublish and hidden-price changes count, not just prices; a failed build is superseded by a newer waiting one; a build stuck for 15 minutes is taken back; a build stuck every time stops after 5 attempts and shows as failed; an identical save queues nothing |
 | `13_issue_versus_line_race` | Issuing an invoice while a line is being removed or added at the same moment (timing made certain, both orders): no line slips in or out mid-issue |
+| `14_desk_phase1_additions` | Issued invoices keep the "billed to" name and phone as they were at issue, even after the customer is renamed; who issued is recorded; a draft saves in one step and a repeated save with the same request id makes no second draft; a repeated payment, refund or correction with the same request id is recorded once, and a different request reusing an id is refused; each receipt keeps the balance after it; the invoice and receipt documents and the invoice list; only staff can read them |
+| `15_request_id_races` | Two identical payment, refund or correction requests arriving at the same moment are recorded once |
 | `10_concurrency` | 20 invoices issued at the same moment get 0001 to 0020 with no gaps or repeats; two payments, two refunds or two corrections racing each other can never overpay or double up |
 
 The race tests were themselves checked: with the payment lock removed,
@@ -120,5 +123,10 @@ removed from an invoice mid-issue). So a pass means the locks work.
 - **The website doesn't read from here yet.** The `public_catalogue` view and
   the publish queue are ready; connecting the website (and the small Supabase
   Edge Function that calls Cloudflare) is the next piece of work.
-- **No screens yet.** This is the database only. The Invoice Desk will be
-  rebuilt on top of these functions once the database is approved.
+- **The Invoice Desk (phase 1)** is built on these functions: staff sign in
+  by email code, find or add a customer, save drafts, issue, and share the
+  PDF on WhatsApp. Payments, receipts and the invoice list on screen are
+  phases 2 and 3. Setup steps are in `DEPLOYMENT.md`.
+- **The desk's screen tests use a stand-in for Supabase's API**
+  (`tests/test_desk_supabase.py`); the database rules themselves are tested
+  here on real Postgres, and end to end on `tcp-test` from a phone.

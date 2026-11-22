@@ -40,6 +40,15 @@ jobs:
     name: Build, check and package the Astro site
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Where the Invoice Desk (/invoice-desk/) finds its database. Repository
+    # variables (Settings -> Secrets and variables -> Actions -> Variables),
+    # not secrets: the project address and the public "anon" key are safe in
+    # a browser, because every permission is enforced inside the database.
+    # Never put the service-role key here. Empty = the desk says "Not
+    # connected" and does nothing. Today these point at the tcp-test project.
+    env:
+      PUBLIC_SUPABASE_URL: ${{ vars.TCP_SUPABASE_URL }}
+      PUBLIC_SUPABASE_ANON_KEY: ${{ vars.TCP_SUPABASE_ANON_KEY }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
