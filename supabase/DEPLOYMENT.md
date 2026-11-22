@@ -59,7 +59,8 @@ Daniel does these once, in this order, before testing on his phone:
 **About the email.** Since 3 June 2026, new free-plan Supabase projects can't
 edit their sign-in email unless they use their own email sending (custom
 SMTP), so the email `tcp-test` sends has a **link but no 6-digit code**. The
-desk therefore signs in through the link; its code box stays ready. Before
+desk therefore signs in through the link. Code sign-in is still built
+into the desk but hidden (see `TCP_EMAIL_CODE` below). Before
 anyone other than Daniel uses the desk, TCP should send its own email (for
 example Brevo or Resend, from an address at thecementpeople.com, which needs
 a few DNS records). That unlocks the template, so the code can be added
