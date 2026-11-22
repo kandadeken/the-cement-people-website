@@ -49,6 +49,9 @@ jobs:
     env:
       PUBLIC_SUPABASE_URL: ${{ vars.TCP_SUPABASE_URL }}
       PUBLIC_SUPABASE_ANON_KEY: ${{ vars.TCP_SUPABASE_ANON_KEY }}
+      # "true" only once TCP sends its own sign-in email with a 6-digit code;
+      # until then the desk signs in through the email's link only.
+      PUBLIC_TCP_EMAIL_CODE: ${{ vars.TCP_EMAIL_CODE }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4

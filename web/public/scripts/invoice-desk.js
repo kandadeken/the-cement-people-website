@@ -9,7 +9,7 @@
    database functions (supabase/migrations/). The phone keeps only work that
    has not been sent yet, and never an issued invoice as a record.
 
-   Phase 1 covers: signing in with a 6-digit email code, finding or adding
+   Phase 1 covers: signing in with the email's sign-in link, finding or adding
    the customer, preparing the invoice (from a pasted WhatsApp estimate or
    from scratch), saving it as a draft, issuing it, and sharing the PDF.
    Payments and receipts (phase 2) and lists and search (phase 3) come later.
@@ -17,7 +17,7 @@
    Sections:
      1. Settings and helpers   (money in pesewas, reading numbers)
      2. The connection         (Supabase, or a stand-in during tests)
-     3. Signing in             (email code, staff check, signing out)
+     3. Signing in             (email link or code, staff check, signing out)
      4. Reading the estimate   (unchanged from PR #31)
      5. The invoice being prepared (kept on this phone until saved)
      6. Saving and issuing     (the database functions)
@@ -74,7 +74,12 @@ function supabaseApi(){
   const sb=window.supabase.createClient(D.supabaseUrl,D.supabaseKey,{auth:{persistSession:true,autoRefreshToken:true}});
   const out=r=>{if(r.error)throw r.error;return r.data;};
   return{
-    sendCode:email=>sb.auth.signInWithOtp({email,options:{shouldCreateUser:false}}).then(out),
+    // The email's link brings the person back to this page, signed in.
+    // (Supabase's free plan sends its standard email, which has a link but
+    // no 6-digit code; the code box is for when TCP's own email sending is
+    // set up and the template can include the code.) The page address must
+    // be allowed under Authentication -> URL Configuration.
+    sendCode:email=>sb.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:location.origin+location.pathname}}).then(out),
     verifyCode:(email,token)=>sb.auth.verifyOtp({email,token,type:"email"}).then(out),
     user:async()=>{const{data}=await sb.auth.getSession();return data.session?data.session.user:null;},
     // "local": forget the session on this phone even when it has expired
@@ -108,19 +113,28 @@ function kind(e){
 }
 
 // ---- 3. Signing in -------------------------------------------------------------
-// A 6-digit code is sent to the staff member's email and typed in here. A
-// code works whichever app or browser opens the email (a sign-in link can
-// fail on Android when it opens in a different browser). Staff join by
-// invitation only, so no account is ever created from this page.
+// A sign-in email is sent to the staff member. Its link brings them back to
+// this page, signed in (Supabase reads the session from the address when the
+// page opens). Supabase's free plan only sends its standard email, which has
+// the link but no 6-digit code; once TCP has its own email sending, the
+// email can carry a code too, typed into the box below. A code works
+// whichever browser opens the email, while a link can open in a different
+// browser on Android. Staff join by invitation only, so no account is ever
+// created from this page.
 let ME=null,PRODUCTS=[];
+// Whether the email carries a 6-digit code (see emailCode in the page's
+// settings). Off on Supabase's free-plan email, which has only the link, so
+// the code box stays hidden. (The test stand-in can switch it on.)
+const CODE=!!(D.emailCode||(api&&api.emailCode));
 function screen(name){["#setup","#signin","#noaccess","#tool"].forEach(s=>show(s,s==="#"+name));}
 $("#emailForm").addEventListener("submit",async e=>{
   e.preventDefault();const m=$("#signMsg"),email=$("#email").value.trim();
   if(!email){m.textContent="Enter your email address.";return;}
-  m.textContent="Sending the code…";
-  try{await api.sendCode(email);m.textContent=`A 6-digit code was sent to ${email}. It can take a minute to arrive.`;
-    show("#codeForm",true);$("#code").focus();}
-  catch(err){m.textContent=kind(err)==="offline"?"No connection. Check your signal and try again.":"The code could not be sent. Check the email address, or ask the owner to invite you.";}
+  m.textContent="Sending the sign-in email…";
+  try{await api.sendCode(email);m.textContent=CODE?`A sign-in email was sent to ${email}. Type the 6-digit code from it below, or open its link on this phone.`
+                                       :`A sign-in email was sent to ${email}. It can take a minute to arrive. Open its link on this phone.`;
+    if(CODE){show("#codeForm",true);$("#code").focus();}}
+  catch(err){m.textContent=kind(err)==="offline"?"No connection. Check your signal and try again.":"The sign-in email could not be sent. Check the email address, or ask the owner to invite you.";}
 });
 $("#codeForm").addEventListener("submit",async e=>{
   e.preventDefault();const m=$("#signMsg"),code=$("#code").value.replace(/\D/g,"");
@@ -601,6 +615,10 @@ $("#pdfBtn").addEventListener("click",async()=>{
 // Not connected to a database (no project address in this build): say so.
 if(!api){screen("setup");}
 else{
+  // A sign-in link that has expired or was already used comes back with
+  // the reason in the address. Say so, and tidy the address.
+  const back=new URLSearchParams((location.hash||"").replace(/^#/,"")+"&"+location.search.replace(/^\?/,""));
+  const linkError=back.get("error_code")||back.get("error");
   // Signed out by Supabase itself (the sign-in could not be renewed): the
   // same as an expired sign-in. (Our own sign-outs clear ME first, so they
   // don't come through here.)
@@ -608,7 +626,10 @@ else{
   // any Supabase function inside it can freeze the page. So the notice only
   // schedules the work for just afterwards, and does nothing else.
   if(api.onSignOut)api.onSignOut(()=>{setTimeout(()=>{if(ME)expire();},0);});
-  enter().catch(err=>{screen("signin");$("#signMsg").textContent=kind(err)==="offline"?"No connection. Check your signal and reload.":"";});
+  enter().then(()=>{
+    if(linkError&&!ME){screen("signin");$("#signMsg").textContent="That sign-in link has expired or was already used. Send a new one.";}
+    if(linkError||back.get("access_token"))history.replaceState(null,"",location.pathname);
+  }).catch(err=>{screen("signin");$("#signMsg").textContent=kind(err)==="offline"?"No connection. Check your signal and reload.":"";});
 }
 
 // For the tests (and nothing else): the desk's own functions.

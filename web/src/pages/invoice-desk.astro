@@ -9,7 +9,8 @@
    PDF layout are reused.
 
    HOW IT WORKS
-   1. Sign in: enter your email, then the 6-digit code that arrives by email.
+   1. Sign in: enter your email, then open the sign-in link that arrives by
+      email (or type the 6-digit code, once our own email sending is set up).
       Staff are invited by the owner; nobody can sign up from this page.
    2. Paste the customer's WhatsApp estimate (or start without one).
    3. The customer: type their phone number to find them; tap an existing
@@ -67,6 +68,9 @@ const deskData = {
   },
   supabaseUrl: import.meta.env.PUBLIC_SUPABASE_URL || "",
   supabaseKey: import.meta.env.PUBLIC_SUPABASE_ANON_KEY || "",
+  // "true" once TCP sends its own email and the template carries the
+  // 6-digit code (repo variable TCP_EMAIL_CODE). Until then: link only.
+  emailCode: import.meta.env.PUBLIC_TCP_EMAIL_CODE === "true",
 };
 const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
 ---
@@ -96,14 +100,14 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
     <p>This copy of the Invoice Desk is not connected to a database yet.</p>
   </section>
 
-  <!-- Signing in: email, then the 6-digit code -->
+  <!-- Signing in: email, then the link in the email (or a 6-digit code) -->
   <section id="signin" class="dk-card" hidden>
     <h2>Sign in</h2>
-    <p class="dk-help">Enter your email. We send you a 6-digit code to type in here. Staff are invited by the owner.</p>
+    <p class="dk-help">Enter your email. We send you a sign-in link: open it on this phone and it brings you back here, signed in. Staff are invited by the owner.</p>
     <form id="emailForm" class="dk-signin" autocomplete="on">
       <label for="email">Email</label>
       <input id="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" required>
-      <button type="submit" class="dk-btn primary">Send code</button>
+      <button type="submit" class="dk-btn primary">Send sign-in email</button>
     </form>
     <form id="codeForm" class="dk-signin" autocomplete="off" hidden>
       <label for="code">6-digit code from the email</label>
