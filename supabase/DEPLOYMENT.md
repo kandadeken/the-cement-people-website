@@ -30,6 +30,34 @@ Supabase. It only ever holds made-up records.
 The starting price list (`seed.sql`) is not loaded by the link on its own;
 it is added to the test project separately after the first deployment.
 
+## Invoice Desk on the test project (phase 1)
+
+The desk at `thecementpeople.com/invoice-desk/` talks to the database
+directly from the phone, using the **anon (public) key** and the signed-in
+staff member's login. The database's own rules decide what each person can
+do; the service-role key is never used by the desk and never goes in the
+repository or the browser.
+
+Daniel does these once, in this order, before testing on his phone:
+
+1. **Email sign-in code.** Supabase dashboard → Authentication → Emails →
+   "Magic Link" template: make sure it contains `{{ .Token }}` (the 6-digit
+   code) as well as the link, e.g. "Your TCP code is {{ .Token }}".
+2. **Close public sign-ups.** Authentication → Sign In / Providers → turn off
+   "Allow new users to sign up". The desk only signs in people who already
+   exist (`shouldCreateUser: false`), and this makes sure of it.
+3. **Daniel's login.** Authentication → Users → "Invite user" with Daniel's
+   email. Then in the SQL editor, add his staff row as owner:
+   `insert into staff (user_id, full_name, role) select id, 'Daniel', 'owner' from auth.users where email = '<his email>';`
+4. **Connect the website build.** GitHub → repository → Settings → Secrets and
+   variables → Actions → **Variables** (not secrets; these two are public by
+   design): `TCP_SUPABASE_URL` = the project address above, and
+   `TCP_SUPABASE_ANON_KEY` = the project's anon / publishable key. The next
+   site build picks them up. Without them the desk page says "Not connected".
+
+Until the real project exists, the desk points at `tcp-test`, so anything
+made on it is test data, numbered from TCP-INV-0001.
+
 ## 1. Create the Supabase project
 
 - Plan: **Pro** (about $25 a month) before any real record goes in. Pro

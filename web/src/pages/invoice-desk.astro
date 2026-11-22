@@ -1,0 +1,228 @@
+---
+/* ===========================================================================
+   invoice-desk.astro - TCP Invoice Desk (thecementpeople.com/invoice-desk/)
+   ---------------------------------------------------------------------------
+   The private staff page for TCP's sales records, connected to Supabase.
+   Phase 1 of "TCP Invoice Desk on Supabase: Design (v2.1)", approved by
+   ChatGPT and Daniel on 21 Nov 2026. Replaces the browser-only desk of
+   PRs #31 and #32 (which stay unmerged); their estimate reader, screens and
+   PDF layout are reused.
+
+   HOW IT WORKS
+   1. Sign in: enter your email, then the 6-digit code that arrives by email.
+      Staff are invited by the owner; nobody can sign up from this page.
+   2. Paste the customer's WhatsApp estimate (or start without one).
+   3. The customer: type their phone number to find them; tap an existing
+      customer, or a new one is added when the invoice is saved.
+   4. Check the items and agreed prices, choose the delivery.
+   5. "Save draft" keeps it in the database; "Issue invoice" gives it its
+      number (TCP-INV-0001 onwards) and locks it.
+   6. "Share invoice" makes the PDF from the issued record and opens the
+      phone's share menu with it and one short line.
+
+   WHERE THE RULES LIVE
+   Every rule (who may do what, numbering, totals, what can change) is in
+   the database: supabase/migrations/. This page only asks. It holds the
+   project address and the public "anon" key, which are safe in a browser;
+   the secret service-role key is never here.
+
+   CONNECTION
+   The project address and anon key come from the build settings
+   PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_ANON_KEY (GitHub repository
+   variables, see .github/workflows/astro-publish.yml). Without them the
+   page says it is not connected and does nothing else.
+
+   Not a tax invoice: TCP is not VAT-registered (see DOC_TITLE in
+   public/scripts/invoice-desk.js).
+
+   Kept out of search engines: "noindex, nofollow" below, not in the
+   sitemap, and no link to it anywhere on the site.
+   =========================================================================== */
+import "../styles/tokens.css";
+import "../styles/desk.css";
+
+import { business } from "../config/business";
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { join } from "node:path";
+
+// Fingerprint of the desk script, so a phone never runs an old copy
+// against a new page (the same reason as for quote-engine.js).
+const deskVersion = createHash("sha256")
+  .update(readFileSync(join(process.cwd(), "public/scripts/invoice-desk.js")))
+  .digest("hex")
+  .slice(0, 10);
+
+// What the desk script reads from the page: the business details printed on
+// the invoice, and where the database is. Prices come from the database.
+const deskData = {
+  currency: business.currencySymbol,
+  business: {
+    name: business.name,
+    phone: business.phone,
+    website: business.website,
+    email: business.publicEmail,
+    town: business.town,
+    pickup: `${business.address.area}, ${business.address.locality}`,
+  },
+  supabaseUrl: import.meta.env.PUBLIC_SUPABASE_URL || "",
+  supabaseKey: import.meta.env.PUBLIC_SUPABASE_ANON_KEY || "",
+};
+const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
+---
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ffffff">
+<title>TCP Invoice Desk</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body class="desk">
+
+<main id="desk" class="dk">
+  <header class="dk-head">
+    <img src="/brand/tcp-logo-horizontal-on-light.svg" alt="The Cement People" width="592" height="100">
+    <h1>Invoice Desk</h1>
+  </header>
+
+  <!-- Shown when this build has no database settings -->
+  <section id="setup" class="dk-card" hidden>
+    <h2>Not connected</h2>
+    <p>This copy of the Invoice Desk is not connected to a database yet.</p>
+  </section>
+
+  <!-- Signing in: email, then the 6-digit code -->
+  <section id="signin" class="dk-card" hidden>
+    <h2>Sign in</h2>
+    <p class="dk-help">Enter your email. We send you a 6-digit code to type in here. Staff are invited by the owner.</p>
+    <form id="emailForm" class="dk-signin" autocomplete="on">
+      <label for="email">Email</label>
+      <input id="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" required>
+      <button type="submit" class="dk-btn primary">Send code</button>
+    </form>
+    <form id="codeForm" class="dk-signin" autocomplete="off" hidden>
+      <label for="code">6-digit code from the email</label>
+      <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" pattern="[0-9 ]*" required>
+      <button type="submit" class="dk-btn primary">Sign in</button>
+    </form>
+    <p id="signMsg" class="dk-msg" role="alert"></p>
+  </section>
+
+  <!-- Signed in, but not active TCP staff (or a role without invoices) -->
+  <section id="noaccess" class="dk-card" hidden>
+    <h2>No access</h2>
+    <p>You are signed in as <b id="noEmail"></b>, but this account cannot use the Invoice Desk.</p>
+    <p id="noWhy" class="dk-help">Ask the owner to give you access.</p>
+    <button type="button" id="noSignOut" class="dk-btn">Sign out</button>
+  </section>
+
+  <div id="tool" hidden>
+    <div class="dk-who"><span id="who"></span><button type="button" id="signOut" class="dk-link">Sign out</button></div>
+
+    <!-- Start: paste the estimate -->
+    <section id="start" class="dk-card">
+      <h2><span class="dk-no">1</span>Customer's estimate</h2>
+      <p class="dk-help">Copy the estimate message the customer sent on WhatsApp and paste it here. Or start an invoice without one.</p>
+      <label for="paste" class="sr">WhatsApp estimate</label>
+      <textarea id="paste" rows="6" placeholder="Hello The Cement People, … *Estimate TCP-…* …"></textarea>
+      <div class="dk-row">
+        <button type="button" id="readBtn" class="dk-btn primary">Read estimate</button>
+        <button type="button" id="blankBtn" class="dk-btn">Start without an estimate</button>
+      </div>
+      <p id="readMsg" class="dk-msg" role="status"></p>
+    </section>
+
+    <div id="form" hidden>
+      <!-- Customer -->
+      <section class="dk-card">
+        <h2><span class="dk-no">2</span>Customer</h2>
+        <div class="dk-grid">
+          <div><label for="cPhone">Phone</label><input id="cPhone" type="tel" inputmode="tel" autocomplete="off" placeholder="024 123 4567"></div>
+          <div><label for="cName">Name</label><input id="cName" autocomplete="off"></div>
+        </div>
+        <div id="matches"></div>
+        <p id="custPicked" class="dk-msg" role="status"></p>
+      </section>
+
+      <!-- Items -->
+      <section class="dk-card">
+        <h2><span class="dk-no">3</span>Items</h2>
+        <p class="dk-help">Change a price if you agreed a different one with the customer. The price list does not change.</p>
+        <div id="items"></div>
+        <div class="dk-row">
+          <label for="addSel" class="sr">Add a product</label>
+          <select id="addSel"></select>
+          <button type="button" id="addBtn" class="dk-btn">Add item</button>
+        </div>
+      </section>
+
+      <!-- Delivery -->
+      <section class="dk-card">
+        <h2><span class="dk-no">4</span>Delivery</h2>
+        <div class="dk-opts" role="radiogroup" aria-label="Delivery">
+          <label><input type="radio" name="dl" value="pending" checked> Not agreed yet</label>
+          <label><input type="radio" name="dl" value="free"> Free delivery</label>
+          <label><input type="radio" name="dl" value="fee"> Delivery fee</label>
+          <label><input type="radio" name="dl" value="pickup"> Customer pickup</label>
+        </div>
+        <div id="feeBox" class="dk-fee" hidden>
+          <label for="fee">Delivery fee agreed (GH₵)</label>
+          <input id="fee" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
+        </div>
+        <div class="dk-grid dk-site">
+          <div class="wide"><label for="cSite">Site or drop-off location</label><input id="cSite" autocomplete="off"></div>
+          <div><label for="cContact">Site contact (optional)</label><input id="cContact" autocomplete="off"></div>
+          <div><label for="cContactPhone">Site contact phone (optional)</label><input id="cContactPhone" type="tel" inputmode="tel" autocomplete="off"></div>
+        </div>
+      </section>
+
+      <!-- Details -->
+      <section class="dk-card">
+        <h2><span class="dk-no">5</span>Invoice details</h2>
+        <div class="dk-grid">
+          <div><label for="iDue">Pay by (optional)</label><input id="iDue" type="date"></div>
+          <div class="wide"><label for="iNote">Note to the customer (optional, printed on the invoice)</label><textarea id="iNote" rows="2" placeholder="e.g. MTN MoMo number and name, or bank details"></textarea></div>
+        </div>
+      </section>
+
+      <!-- Summary and actions -->
+      <section class="dk-card dk-sum" aria-live="polite">
+        <div><span>Materials</span><b id="sMat"></b></div>
+        <div><span>Delivery</span><b id="sDel"></b></div>
+        <div class="dk-total"><span>Total</span><b id="sTot"></b></div>
+        <p id="state" class="dk-state" role="status"></p>
+        <p id="sMsg" class="dk-msg" role="alert"></p>
+        <div class="dk-row">
+          <button type="button" id="issueBtn" class="dk-btn primary">Issue invoice</button>
+          <button type="button" id="saveBtn" class="dk-btn">Save draft</button>
+        </div>
+        <p class="dk-help">"Save draft" keeps it in TCP's records so you can finish later. "Issue invoice" gives it its number and locks it; then you can share the PDF.</p>
+        <button type="button" id="newBtn" class="dk-btn ghost">New invoice</button>
+      </section>
+    </div>
+
+    <!-- An issued invoice: read-only, with its PDF -->
+    <section id="issuedSec" class="dk-card" hidden>
+      <h2>Invoice issued</h2>
+      <div id="issued"></div>
+      <p id="iMsg" class="dk-msg" role="status"></p>
+      <div class="dk-row">
+        <button type="button" id="shareBtn" class="dk-btn primary">Share invoice</button>
+        <button type="button" id="pdfBtn" class="dk-btn">Download PDF</button>
+      </div>
+      <p class="dk-help">"Share invoice" opens your phone's share menu with the PDF and a short message: choose WhatsApp, then the customer. The PDF is always made from TCP's records, so it can be shared again at any time.</p>
+      <button type="button" id="newBtn2" class="dk-btn ghost">New invoice</button>
+    </section>
+  </div>
+</main>
+
+<script is:inline type="application/json" id="desk-data" set:html={deskJson}></script>
+<script is:inline src="/scripts/vendor/supabase.js"></script>
+<script is:inline src={`/scripts/invoice-desk.js?v=${deskVersion}`}></script>
+</body>
+</html>
