@@ -77,12 +77,17 @@ function supabaseApi(){
     sendCode:email=>sb.auth.signInWithOtp({email,options:{shouldCreateUser:false}}).then(out),
     verifyCode:(email,token)=>sb.auth.verifyOtp({email,token,type:"email"}).then(out),
     user:async()=>{const{data}=await sb.auth.getSession();return data.session?data.session.user:null;},
-    signOut:()=>sb.auth.signOut().then(()=>null),
+    // "local": forget the session on this phone even when it has expired
+    // (a global sign-out needs a working session to reach the server).
+    signOut:()=>sb.auth.signOut({scope:"local"}).then(()=>null),
+    // Supabase runs this callback while it holds its sign-in lock (see the
+    // start of the desk, section 9, for how that is handled).
     onSignOut:fn=>sb.auth.onAuthStateChange(ev=>{if(ev==="SIGNED_OUT")fn();}),
-    staff:uid=>sb.from("staff").select("full_name,role,active").eq("user_id",uid).maybeSingle().then(out),
+    // Name and role of the signed-in person; refused unless active staff.
+    myStaff:()=>sb.rpc("my_staff").then(out),
     products:()=>sb.from("products").select("id,site_id,name,category,unit,current_price").order("category").order("id").then(out),
     customersWithPhone:phone=>sb.rpc("customers_with_phone",{p_phone:phone}).then(out),
-    createCustomer:(phone,name)=>sb.rpc("create_customer",{p_phone:phone||null,p_name:name||null}).then(out),
+    createCustomer:(phone,name,requestId)=>sb.rpc("create_customer",{p_phone:phone||null,p_name:name||null,p_request_id:requestId||null}).then(out),
     saveDraft:a=>sb.rpc("save_draft_invoice",a).then(out),
     issue:id=>sb.rpc("issue_invoice",{p_invoice_id:id}).then(out),
     document:id=>sb.rpc("invoice_document",{p_invoice_id:id}).then(out),
@@ -90,11 +95,14 @@ function supabaseApi(){
 }
 // What kind of failure an error is:
 //   "revoked" - not (or no longer) active TCP staff: clear and sign out
+//   "expired" - the sign-in itself ran out: sign in again, work is kept
 //   "offline" - the request never got an answer
 //   "refused" - the database said no, with a reason to show
 function kind(e){
   const m=String(e&&(e.message||e)||"");
-  if(/only TCP staff/i.test(m)||(e&&e.code==="PGRST301")||/JWT expired/i.test(m))return"revoked";
+  if(/only TCP staff/i.test(m))return"revoked";
+  if((e&&(e.code==="PGRST301"||e.code==="PGRST303"||e.status===401||e.name==="AuthSessionMissingError"))
+     ||/JWT expired|invalid jwt|refresh token|session (is )?missing/i.test(m))return"expired";
   if(e instanceof TypeError||/fetch|network|offline|timed? ?out/i.test(m))return"offline";
   return"refused";
 }
@@ -127,24 +135,52 @@ async function enter(){
   const u=await api.user();
   if(!u){screen("signin");return;}
   let st=null;
-  try{st=await api.staff(u.id);}catch(err){if(kind(err)==="offline"){screen("signin");$("#signMsg").textContent="No connection. Check your signal and reload.";return;}}
-  if(!st||!st.active){ME=null;screen("noaccess");$("#noEmail").textContent=u.email||"";return;}
+  try{st=await api.myStaff();}
+  catch(err){
+    const k=kind(err);
+    if(k==="offline"){screen("signin");$("#signMsg").textContent="No connection. Check your signal and reload.";return;}
+    if(k==="expired"){await expire();return;}
+    if(k!=="revoked")throw err;
+  }
+  if(!st){
+    // Not (or no longer) staff: nothing of TCP's stays on this phone.
+    try{localStorage.removeItem("tcp-desk-work-"+u.id)}catch(e){}
+    ME=null;screen("noaccess");$("#noEmail").textContent=u.email||"";return;
+  }
   ME={id:u.id,name:st.full_name,role:st.role};
   $("#who").textContent=`${ME.name} · ${ME.role}`;
   if(ME.role==="finance"){screen("noaccess");$("#noWhy").textContent="Invoices are prepared by the owner or sales. Payments come in the next phase.";return;}
-  try{PRODUCTS=await api.products();}catch(err){return failed(err,"#readMsg");}
+  try{PRODUCTS=await api.products()||[];if(!PRODUCTS.length)await stillStaff();}
+  catch(err){screen("tool");return failed(err,"#readMsg");}
   fillAdd();screen("tool");restore();
 }
+// Plain reads (the price list, a phone lookup) come back EMPTY rather than
+// refused once someone's access is removed. So an empty answer is checked:
+// my_staff() refuses clearly, and that refusal signs them out.
+async function stillStaff(){await api.myStaff();}
 // Removing access (or a session that can no longer be used) clears every
 // record from the screen and the phone's memory, then signs out
 // (Design v2.1, point C).
 async function revoke(why){
   const key=draftKey();
-  S=blank();DOC=null;ME=null;PRODUCTS=[];NOTE="";LOOKED="";
   try{localStorage.removeItem(key)}catch(e){}
-  ["#items","#issued","#matches"].forEach(s=>{const el=$(s);if(el)el.innerHTML="";});
+  await leave(why||"You have been signed out.");
+}
+// The sign-in ran out (not the same as access removed): the unsaved work
+// stays on this phone, under this staff member's name only, and comes back
+// when they sign in again. Everything is cleared from the screen meanwhile.
+async function expire(){
+  keep();
+  await leave("Your sign-in has expired. Sign in again: your unsaved work is kept on this phone.");
+}
+// Clears the screen and memory, then signs out. ME is cleared first, so the
+// "signed out" notice that follows does not run a second time.
+async function leave(why){
+  S=blank();DOC=null;ME=null;PRODUCTS=[];NOTE="";LOOKED="";
+  ["#items","#issued","#matches","#custPicked"].forEach(s=>{const el=$(s);if(el)el.innerHTML="";});
+  ["#paste","#cName","#cPhone"].forEach(s=>{const el=$(s);if(el)el.value="";});
+  screen("signin");$("#signMsg").textContent=why;
   try{await api.signOut();}catch(e){}
-  screen("signin");$("#signMsg").textContent=why||"You have been signed out.";
 }
 $("#signOut").addEventListener("click",()=>revoke("Signed out."));
 $("#noSignOut").addEventListener("click",()=>revoke("Signed out."));
@@ -189,7 +225,7 @@ let S=blank(),DOC=null;
 // NOTE: the last message from saving or issuing ("Draft saved.", "Not
 // saved: no connection…"). It stays until the next edit.
 let NOTE="",LOOKED="";
-function blank(){return{invoiceId:null,draftRequest:newId(),ref:null,customerId:null,customerCode:null,
+function blank(){return{invoiceId:null,draftRequest:newId(),customerRequest:newId(),ref:null,customerId:null,customerCode:null,
   name:"",phone:"",site:"",contact:"",contactPhone:"",items:[],dl:"pending",fee:"",due:"",note:"",dirty:false};}
 const draftKey=()=>"tcp-desk-work-"+(ME?ME.id:"none");
 function keep(){if(!ME)return;try{localStorage.setItem(draftKey(),JSON.stringify(S))}catch(e){}}
@@ -272,7 +308,8 @@ $("#addBtn").addEventListener("click",()=>{const p=PRODUCTS.find(x=>String(x.id)
   .forEach(([sel,k])=>$(sel).addEventListener("input",e=>{S[k]=e.target.value;changed();}));
 // Changing the name or phone means a different (or new) customer.
 [["#cName","name"],["#cPhone","phone"]].forEach(([sel,k])=>$(sel).addEventListener("input",e=>{
-  S[k]=e.target.value;S.customerId=null;S.customerCode=null;$("#custPicked").textContent="";changed();}));
+  // Different details are a different request: a new request id.
+  S[k]=e.target.value;S.customerId=null;S.customerCode=null;S.customerRequest=newId();$("#custPicked").textContent="";changed();}));
 document.querySelectorAll('input[name="dl"]').forEach(r=>r.addEventListener("change",()=>{S.dl=r.value;S.dirty=true;render();}));
 
 // Existing customers with this phone number (families and companies can
@@ -286,11 +323,13 @@ async function findCustomers(){
   LOOKED=ph;
   if(ph.length<9){box.innerHTML="";return;}
   try{const list=await api.customersWithPhone(S.phone);
-    if(!list||!list.length){box.innerHTML=`<p class="dk-help">New customer: they will be added when the invoice is saved.</p>`;return;}
+    if(!list||!list.length){await stillStaff();box.innerHTML=`<p class="dk-help">New customer: they will be added when the invoice is saved.</p>`;return;}
     box.innerHTML=`<p class="dk-help">Customers with this number. Tap one to use it:</p>`+list.map(c=>
       `<button type="button" class="dk-btn dk-match" data-cid="${c.id}" data-code="${esc(c.code)}" data-name="${esc(c.name||"")}">${esc(c.name||"(no name)")} · ${esc(c.code)}</button>`).join("");
-  }catch(err){if(kind(err)==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
-    box.innerHTML=`<p class="dk-help">Could not check existing customers (no connection). You can carry on.</p>`;}
+  }catch(err){const k=kind(err);
+    if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+    if(k==="expired")return expire();
+    LOOKED="";box.innerHTML=`<p class="dk-help">Could not check existing customers (no connection). You can carry on.</p>`;}
 }
 $("#matches").addEventListener("click",e=>{const b=e.target.closest("[data-cid]");if(!b)return;
   S.customerId=+b.dataset.cid;S.customerCode=b.dataset.code;S.phone=$("#cPhone").value;if(b.dataset.name){S.name=b.dataset.name;$("#cName").value=S.name;}
@@ -322,7 +361,8 @@ $("#newBtn").addEventListener("click",newInvoice);$("#newBtn2").addEventListener
 function busy(btn,on,label){btn.disabled=on;if(on){btn.dataset.label=btn.textContent;btn.textContent=label;}else if(btn.dataset.label)btn.textContent=btn.dataset.label;}
 function failed(err,where){
   const k=kind(err);
-  if(k==="revoked")return revoke("Your access has ended, or your sign-in expired. Sign in again; ask the owner if this is a mistake.");
+  if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+  if(k==="expired")return expire();
   const text=k==="offline"?"Not saved: no connection. Your work is kept on this phone. Tap again when you have signal."
                           :"Not saved: "+String(err&&err.message||err);
   if(!where||where==="#sMsg"){NOTE=text;refresh();}else $(where).textContent=text;
@@ -336,7 +376,9 @@ async function ensureCustomer(){
     const same=list.find(c=>(c.name||"").trim().toLowerCase()===S.name.trim().toLowerCase());
     if(same){S.customerId=same.id;S.customerCode=same.code;return same.id;}
   }
-  const c=await api.createCustomer(S.phone.trim(),S.name.trim());
+  // The request id makes a retry return the customer already added, even
+  // one with no phone number (nothing to look them up by).
+  const c=await api.createCustomer(S.phone.trim(),S.name.trim(),S.customerRequest);
   S.customerId=c.id;S.customerCode=c.code;keep();
   return c.id;
 }
@@ -559,7 +601,13 @@ $("#pdfBtn").addEventListener("click",async()=>{
 // Not connected to a database (no project address in this build): say so.
 if(!api){screen("setup");}
 else{
-  if(api.onSignOut)api.onSignOut(()=>{if(ME)revoke("Your sign-in has ended. Sign in again.");});
+  // Signed out by Supabase itself (the sign-in could not be renewed): the
+  // same as an expired sign-in. (Our own sign-outs clear ME first, so they
+  // don't come through here.)
+  // Supabase delivers this notice while it holds its sign-in lock: calling
+  // any Supabase function inside it can freeze the page. So the notice only
+  // schedules the work for just afterwards, and does nothing else.
+  if(api.onSignOut)api.onSignOut(()=>{setTimeout(()=>{if(ME)expire();},0);});
   enter().catch(err=>{screen("signin");$("#signMsg").textContent=kind(err)==="offline"?"No connection. Check your signal and reload.":"";});
 }
 

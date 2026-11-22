@@ -22,6 +22,15 @@
 --   Plus save_draft_invoice(): saves a whole draft (customer, delivery and
 --   every line) in one step, so a weak connection can never leave a draft
 --   half-saved. Its request id stops a retry from creating a second draft.
+--   Plus (after ChatGPT's review of PR #35):
+--   6. A request id on create_customer, so a retry never adds a twin
+--      customer, even one with no phone number to match on.
+--   7. Two calls with the same request id at the same moment are taken one
+--      after the other (request_lock), so the second gets the first one's
+--      draft or customer instead of an error.
+--   8. my_staff(): "am I still active staff?" that refuses clearly, because
+--      plain reads (products, customer lookups, the invoice list) return
+--      an empty answer, not an error, once someone's access is removed.
 --
 -- Nothing here has been applied to any database yet. The tests in
 -- supabase/tests/ run it on a throwaway Postgres; merging it into main
@@ -137,6 +146,97 @@ $$;
 
 
 -- -----------------------------------------------------------------------------
+-- 7. One request id at a time
+--   Holds a lock on the request id until the end of the transaction. A
+--   second call with the same id waits here, then finds what the first one
+--   made (each statement after the wait sees the first call's committed
+--   work). Different ids never wait for each other.
+-- -----------------------------------------------------------------------------
+create function tcp_private.request_lock(p_request_id uuid)
+returns void
+language sql
+set search_path = ''
+as $$
+  select pg_advisory_xact_lock(('x' || substr(md5(p_request_id::text), 1, 16))::bit(64)::bigint);
+$$;
+
+
+-- -----------------------------------------------------------------------------
+-- 6. Customers: request id
+-- -----------------------------------------------------------------------------
+alter table public.customers add column request_id uuid;
+create unique index customers_request_id_unique
+  on public.customers (request_id) where request_id is not null;
+comment on column public.customers.request_id is
+  'Made once on the phone when a new customer is first saved; a retry returns this customer.';
+
+-- create_customer gains p_request_id (optional). Everything else is as in
+-- the first migration. A repeat must ask for exactly the same customer.
+drop function public.create_customer(text, text, text, text);
+create function public.create_customer(
+  p_phone      text default null,
+  p_name       text default null,
+  p_area       text default null,
+  p_notes      text default null,
+  p_request_id uuid default null
+)
+returns public.customers
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  c public.customers;
+begin
+  perform tcp_private.require_role('owner', 'sales');
+  if p_request_id is not null then
+    perform tcp_private.request_lock(p_request_id);
+    select * into c from public.customers where request_id = p_request_id;
+    if found then
+      if c.phone is distinct from public.normalise_gh_phone(p_phone)
+         or c.name  is distinct from nullif(trim(p_name), '')
+         or c.area  is distinct from nullif(trim(p_area), '')
+         or c.notes is distinct from nullif(trim(p_notes), '') then
+        raise exception 'This request id was already used for a different customer';
+      end if;
+      return c;
+    end if;
+  end if;
+  insert into public.customers (code, phone, name, area, notes, request_id)
+  values (tcp_private.next_number('customer'),
+          public.normalise_gh_phone(p_phone),
+          nullif(trim(p_name), ''),
+          nullif(trim(p_area), ''),
+          nullif(trim(p_notes), ''),
+          p_request_id)
+  returning * into c;
+  return c;
+end;
+$$;
+
+
+-- -----------------------------------------------------------------------------
+-- 8. my_staff: who am I, and am I still allowed in?
+--   Returns the caller's name and role, or refuses with the same message as
+--   every action ("only TCP staff"). The desk asks this whenever a read comes
+--   back empty, so a removed staff member is signed out instead of being
+--   shown an empty price list or "new customer".
+-- -----------------------------------------------------------------------------
+create function public.my_staff()
+returns jsonb
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  st public.staff;
+begin
+  perform tcp_private.require_role('owner', 'sales', 'finance');
+  select * into st from public.staff where user_id = auth.uid();
+  return jsonb_build_object('full_name', st.full_name, 'role', st.role);
+end;
+$$;
+
+
+-- -----------------------------------------------------------------------------
 -- save_draft_invoice: the whole draft in one step
 --   p_invoice_id null = a new draft (with p_request_id, a retry returns the
 --   same draft). Otherwise the draft is updated and its lines replaced.
@@ -169,8 +269,11 @@ begin
   end if;
 
   if inv_id is null then
-    -- A retry of a draft that was already created: carry on with it.
+    -- A retry of a draft that was already created: carry on with it. The
+    -- lock makes a simultaneous retry wait for the first call, then find
+    -- its draft (instead of failing on the unique request id).
     if p_request_id is not null then
+      perform tcp_private.request_lock(p_request_id);
       select id into inv_id from public.invoices where request_id = p_request_id;
     end if;
     if inv_id is null then
@@ -553,10 +656,15 @@ revoke all on function public.invoice_document(bigint) from public, anon, authen
 revoke all on function public.receipt_document(bigint) from public, anon, authenticated;
 revoke all on function tcp_private.repeat_of(uuid, text, bigint, bigint, numeric, text, text) from public, anon, authenticated;
 revoke all on function tcp_private.staff_name(uuid) from public, anon, authenticated;
+revoke all on function tcp_private.request_lock(uuid) from public, anon, authenticated;
+revoke all on function public.create_customer(text, text, text, text, uuid) from public, anon, authenticated;
+revoke all on function public.my_staff() from public, anon, authenticated;
 revoke all on public.invoice_list from anon, authenticated;
 
 grant execute on function
   public.save_draft_invoice(bigint, bigint, text, text, text, date, text, jsonb, uuid),
+  public.create_customer(text, text, text, text, uuid),
+  public.my_staff(),
   public.record_payment(bigint, numeric, text, text, date, uuid),
   public.correct_payment(bigint, text, uuid),
   public.refund_payment(bigint, numeric, text, text, text, uuid),

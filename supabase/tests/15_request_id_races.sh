@@ -6,7 +6,8 @@
 #
 #   A. two payments with the same request id  -> one receipt
 #   B. two refunds with the same request id   -> one refund
-#   C. two new drafts with the same request id -> one draft
+#   C. two new drafts with the same request id -> one draft, both answered
+#   D. two new customers with the same request id -> one customer, both answered
 # =============================================================================
 set -euo pipefail
 DB="${TCP_TEST_DB:?run this through run-tests.sh}"
@@ -50,12 +51,25 @@ psql -X -q -t -A -v ON_ERROR_STOP=1 -d "$DB" -c "$LOGIN" \
   -c "begin; $DRAFT; select pg_sleep(2); commit;" >/dev/null &
 first=$!
 sleep 0.7
-# The second call waits for the first; it then either returns the same draft
-# or is refused by the unique request id. Either way: never a second draft.
-run "$DRAFT;" >/dev/null 2>&1 || true
+# The second call waits for the first, then returns the SAME draft (no
+# error, no second draft).
+second_out="$(run "$DRAFT;")" || fail "the repeated draft save was refused instead of answered"
 wait $first || fail "the first draft save failed"
+[ "$second_out" = "2" ] || fail "repeat draft save got '$second_out' instead of draft 2"
 [ "$(q "select count(*) from public.invoices where request_id = 'e0000000-0000-4000-8000-000000000003'")" = "1" ] \
   || fail "two drafts for one request id"
 [ "$(q "select count(*) from public.invoices")" = "2" ] || fail "unexpected number of invoices"
+
+# ---------------------------------------------- D. same new customer, twice at once
+CUST="select (public.create_customer(null, 'Foreman Yaw', null, null, 'e0000000-0000-4000-8000-000000000004')).code"
+psql -X -q -t -A -v ON_ERROR_STOP=1 -d "$DB" -c "$LOGIN" \
+  -c "begin; $CUST; select pg_sleep(2); commit;" > /tmp/tcp_rc1_$$ &
+first=$!
+sleep 0.7
+second_out="$(run "$CUST;")" || fail "the repeated customer was refused instead of answered"
+wait $first || fail "the first customer save failed"
+[ "$(q "select count(*) from public.customers where name = 'Foreman Yaw'")" = "1" ] || fail "two customers for one request id"
+grep -qx "$second_out" /tmp/tcp_rc1_$$ || fail "repeat got '$second_out', not the first call's customer"
+rm -f /tmp/tcp_rc1_$$
 
 echo "request-id race checks passed"

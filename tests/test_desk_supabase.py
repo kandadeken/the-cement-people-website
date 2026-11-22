@@ -30,6 +30,11 @@ API server could not be installed in the build environment.
   S09  an issued invoice is reopened from the database after a reload,
        never from the phone's copy
   S10  fits a 360 px and a 390 px phone without sideways scrolling
+  S11  an expired sign-in keeps the unsent invoice; it returns after signing in
+  S12  removed access: an empty lookup is checked and signs out; "No access"
+       when opening the desk
+  S13  a customer with no phone number, answer lost: added once (request id)
+  S14  the sign-out notice from Supabase: no calls made inside its lock
 """
 import base64
 import io
@@ -63,20 +68,33 @@ STANDIN = r"""
   const db = window.__db = {
     products: cfg.products, staff: cfg.staff, users: cfg.users,
     customers: [], invoices: [], lines: [], counters: {customer: 0, invoice: 0},
-    offline: false, offlineOnce: 0, calls: [], session: null,
+    offline: false, offlineOnce: 0, dropReply: 0, expired: false, calls: [], session: null,
+    signOutFns: [], inAuthCallback: false, lockViolations: [],
   };
+  // Like Supabase: the sign-out notice is delivered while the sign-in lock is
+  // held. Any call made during it is recorded as a violation (on a real
+  // phone it can freeze the page).
+  db.fireSignOut = () => { db.session = null; sessionStorage.removeItem("standin-session");
+    db.inAuthCallback = true; try { db.signOutFns.forEach(f => f()); } finally { db.inAuthCallback = false; } };
   try { const s = sessionStorage.getItem("standin-session"); if (s) db.session = JSON.parse(s); } catch (e) {}
   try { const d = sessionStorage.getItem("standin-db"); if (d) Object.assign(db, JSON.parse(d), {calls: []}); } catch (e) {}
   const persist = () => { try { sessionStorage.setItem("standin-db", JSON.stringify(
       {customers: db.customers, invoices: db.invoices, lines: db.lines, counters: db.counters, staff: db.staff})); } catch (e) {} };
   const pad = n => String(n).padStart(4, "0");
   const net = async (name, fn) => {
+    if (db.inAuthCallback) db.lockViolations.push(name);
     db.calls.push(name);
     await new Promise(r => setTimeout(r, 5));
     if (db.offline || db.offlineOnce > 0) { if (db.offlineOnce > 0) db.offlineOnce--; throw new TypeError("Failed to fetch"); }
-    const out = fn(); persist(); return JSON.parse(JSON.stringify(out === undefined ? null : out));
+    if (db.expired && db.session) throw Object.assign(new Error("JWT expired"), {code: "PGRST301", status: 401});
+    const out = fn(); persist();
+    // The database did the work, but the answer was lost on the way back.
+    if (db.dropReply > 0) { db.dropReply--; throw new TypeError("Failed to fetch"); }
+    return JSON.parse(JSON.stringify(out === undefined ? null : out));
   };
   const me = () => db.session && db.staff.find(s => s.user_id === db.session.id && s.active);
+  // Plain reads under row-level security: empty, not refused, for non-staff.
+  const rlsRead = rows => me() ? rows : [];
   const staffOnly = (...roles) => { const s = me();
     if (!s) throw Object.assign(new Error("Not allowed: only TCP staff can do this"), {code: "42501"});
     if (roles.length && !roles.includes(s.role)) throw Object.assign(new Error("Not allowed: the " + s.role + " role cannot do this"), {code: "42501"}); };
@@ -91,13 +109,18 @@ STANDIN = r"""
       const u = db.users.find(x => x.email === email); if (!u) throw new Error("Signups not allowed");
       db.session = u; sessionStorage.setItem("standin-session", JSON.stringify(u)); return {user: u}; }),
     user: async () => db.session,
-    signOut: async () => { db.session = null; sessionStorage.removeItem("standin-session"); db.calls.push("signOut"); },
-    staff: uid => net("staff", () => { const s = db.staff.find(x => x.user_id === uid); return s ? {full_name: s.full_name, role: s.role, active: s.active} : null; }),
-    products: () => net("products", () => { staffOnly(); return db.products; }),
-    customersWithPhone: p => net("customersWithPhone", () => { staffOnly(); const ph = phone(p); return db.customers.filter(c => c.phone === ph); }),
-    createCustomer: (p, name) => net("createCustomer", () => { staffOnly("owner", "sales");
+    signOut: async () => { if (db.inAuthCallback) db.lockViolations.push("signOut");
+      const was = db.session; db.session = null; sessionStorage.removeItem("standin-session"); db.calls.push("signOut");
+      if (was) { db.inAuthCallback = true; try { db.signOutFns.forEach(f => f()); } finally { db.inAuthCallback = false; } } },
+    onSignOut: fn => { db.signOutFns.push(fn); },
+    myStaff: () => net("myStaff", () => { staffOnly(); const s = me(); return {full_name: s.full_name, role: s.role}; }),
+    products: () => net("products", () => rlsRead(db.products)),
+    customersWithPhone: p => net("customersWithPhone", () => { const ph = phone(p); return rlsRead(db.customers.filter(c => c.phone === ph)); }),
+    createCustomer: (p, name, req) => net("createCustomer", () => { staffOnly("owner", "sales");
       if (!p && !name) throw new Error('violates check constraint "customer_needs_phone_or_name"');
-      const c = {id: db.customers.length + 1, code: "TCP-C-" + pad(++db.counters.customer), phone: phone(p), name: name || null};
+      const again = req && db.customers.find(c => c.request_id === req);
+      if (again) { if (again.phone !== phone(p) || again.name !== (name || null)) throw new Error("This request id was already used for a different customer"); return again; }
+      const c = {id: db.customers.length + 1, code: "TCP-C-" + pad(++db.counters.customer), phone: phone(p), name: name || null, request_id: req || null};
       db.customers.push(c); return c; }),
     saveDraft: a => net("saveDraft", () => { staffOnly("owner", "sales");
       let inv = a.p_invoice_id ? db.invoices.find(i => i.id === a.p_invoice_id) : (a.p_request_id && db.invoices.find(i => i.request_id === a.p_request_id));
@@ -416,4 +439,104 @@ def test_s10_fits_a_phone(browser, width):
     for sel in ["#shareBtn", "#pdfBtn"]:
         box = page.locator(sel).bounding_box()
         assert box["height"] >= 44
+    assert not errors
+
+
+# ---- After ChatGPT's review of PR #35 ------------------------------------------
+
+def _sign_in(page):
+    page.wait_for_selector("#signin:not([hidden])")
+    page.fill("#email", OWNER["email"]); page.click("#emailForm button")
+    page.wait_for_selector("#codeForm:not([hidden])")
+    page.fill("#code", "123456"); page.click("#codeForm button")
+
+
+# S11: an expired sign-in is not removed access: the unsent invoice is kept
+# and comes back after signing in again.
+def test_s11_expired_sign_in_keeps_unsent_work(browser):
+    page, errors = _desk(browser)
+    _ready_invoice(page, browser)
+    page.evaluate("__db.expired = true")
+    page.click("#saveBtn")
+    page.wait_for_selector("#signin:not([hidden])")
+    assert "expired" in page.text_content("#signMsg") and "kept" in page.text_content("#signMsg")
+    assert not page.locator("#tool").is_visible()
+    assert page.evaluate("TCPDesk.state().items.length") == 0, "nothing left in the page's memory"
+    kept = page.evaluate("JSON.parse(localStorage.getItem('tcp-desk-work-u-owner'))")
+    assert len(kept["items"]) == 4 and kept["name"] == "Ama Owusu"
+    page.evaluate("__db.expired = false")
+    _sign_in(page)
+    page.wait_for_selector("#form:not([hidden])")
+    assert page.input_value("#cName") == "Ama Owusu"
+    assert len(page.evaluate("TCPDesk.state().items")) == 4
+    page.click("#saveBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent === 'Draft saved.'")
+    assert page.evaluate("__db.invoices.length") == 1
+    assert not errors
+
+
+# S12: once access is removed, a phone lookup comes back EMPTY (row-level
+# security), not refused. The desk must sign out, not offer "New customer".
+def test_s12_empty_lookup_after_removal_signs_out(browser):
+    page, errors = _desk(browser)
+    _ready_invoice(page, browser, phone="0200000000")
+    page.evaluate("__db.staff[0].active = false")
+    page.click("#newBtn")
+    page.click("#blankBtn")
+    page.fill("#cPhone", "0241234567")
+    page.dispatch_event("#cPhone", "change")
+    page.wait_for_selector("#signin:not([hidden])")
+    assert "access has ended" in page.text_content("#signMsg")
+    assert page.evaluate("localStorage.getItem('tcp-desk-work-u-owner')") is None
+    assert not errors
+
+
+# S12b: opening the desk after removal: "No access", and any work left on
+# the phone from before is removed.
+def test_s12b_removed_staff_opening_the_desk(browser):
+    page, errors = _desk(browser, staff=[{"user_id": OWNER["id"], "full_name": "Test Owner", "role": "owner", "active": False}])
+    page.wait_for_selector("#noaccess:not([hidden])")
+    assert "products" not in page.evaluate("__db.calls")
+    assert not errors
+
+
+# S13: a new customer with no phone number, and the answer lost on the way
+# back: the retry uses the same request id, so there is no twin.
+def test_s13_customer_without_phone_added_once(browser):
+    page, errors = _desk(browser)
+    page.wait_for_selector("#tool:not([hidden])")
+    page.click("#blankBtn")
+    page.fill("#cName", "Site foreman Yaw")
+    page.select_option("#addSel", str(BY_SITE["c1"]["id"]))
+    page.click("#addBtn")
+    page.evaluate("__db.dropReply = 1")
+    page.click("#saveBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent.includes('no connection')")
+    assert page.evaluate("__db.customers.length") == 1, "the database did add them"
+    page.click("#saveBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent === 'Draft saved.'")
+    assert page.evaluate("__db.customers.length") == 1, "the retry returned the same customer"
+    assert page.evaluate("__db.invoices.length") == 1
+    assert not errors
+
+
+# S14: Supabase signs the phone out by itself (the sign-in could not be
+# renewed). The notice arrives while Supabase holds its sign-in lock: the
+# desk makes no call during it, then treats it as an expired sign-in.
+def test_s14_sign_out_notice_makes_no_calls_inside_the_lock(browser):
+    page, errors = _desk(browser)
+    _ready_invoice(page, browser)
+    page.evaluate("__db.fireSignOut()")
+    page.wait_for_selector("#signin:not([hidden])")
+    assert page.evaluate("__db.lockViolations") == []
+    assert "expired" in page.text_content("#signMsg")
+    assert len(page.evaluate("JSON.parse(localStorage.getItem('tcp-desk-work-u-owner'))")["items"]) == 4
+    # Our own sign-out (the button) clears everything, also without calls
+    # inside the lock.
+    _sign_in(page)
+    page.wait_for_selector("#form:not([hidden])")
+    page.click("#signOut")
+    page.wait_for_selector("#signin:not([hidden])")
+    assert page.evaluate("__db.lockViolations") == []
+    assert page.evaluate("localStorage.getItem('tcp-desk-work-u-owner')") is None
     assert not errors
