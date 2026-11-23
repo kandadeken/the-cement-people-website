@@ -118,6 +118,9 @@ phone so it is never recorded twice):
        24 hours is dropped; another staff member never sees it; while the
        outcome can't be checked nothing new can be recorded
   P16  the note holds no customer name or phone, only the allowed fields
+  P17  a record found by request id that is a DIFFERENT operation (other
+       invoice, kind, payment or amount) is never taken as success, and
+       nothing new can be recorded
 """
 import base64
 import io
@@ -322,7 +325,8 @@ STANDIN = r"""
     // A plain read of the payments table by request id (row-level security:
     // nothing for non-staff).
     byRequest: req => net("byRequest", () => { const p = me() && db.payments.find(x => x.request_id === req);
-      return p ? {id: p.id, receipt_no: p.receipt_no, kind: p.kind} : null; }),
+      return p ? {id: p.id, receipt_no: p.receipt_no, kind: p.kind, invoice_id: p.invoice_id,
+        reverses_payment_id: p.reverses_payment_id || null, amount: p.amount} : null; }),
     receipt: id => net("receipt", () => { staffOnly(); const p = db.payments.find(x => x.id === id);
       if (!p) throw new Error("No such receipt");
       const doc = window.TCPDeskApi.__doc(p.invoice_id), earlier = db.payments.filter(x => x.invoice_id === p.invoice_id && x.id < p.id);
@@ -1818,4 +1822,27 @@ def test_p16_the_note_holds_nothing_about_the_customer(browser):
         assert private not in raw, private
     everything = page.evaluate("JSON.stringify(Object.fromEntries(Object.entries(localStorage)))")
     assert "Yaw" not in everything and "552331234" not in everything
+    assert not errors
+
+
+
+@pytest.mark.parametrize("change", ["invoice", "kind", "payment", "amount"])
+def test_p17_request_id_match_alone_is_not_success(browser, change):
+    page, errors = _bo(browser, seed=MIX, route="#/invoices")
+    page.wait_for_selector("#listV:not([hidden])")
+    # A real refund of GH₵40 from TCP-RCT-0001 (invoice 3), request id R.
+    page.evaluate("""TCPDeskApi.refundPayment({p_payment_id: 1, p_amount: 40, p_method: 'cash', p_reason: 'r',
+        p_request_id: '33333333-3333-4333-8333-333333333333'})""")
+    note = {"user": "u-owner", "type": "refund", "invoiceId": 3, "payId": 1, "req": "33333333-3333-4333-8333-333333333333",
+            "amount": 40, "method": "cash", "ref": None, "date": None, "reason": "r"}
+    note.update({"invoice": {"invoiceId": 2}, "kind": {"type": "correction"}, "payment": {"payId": 2},
+                 "amount": {"amount": 41}}[change])
+    page.evaluate("o => localStorage.setItem('tcp-desk-op-u-owner', JSON.stringify({...o, at: Date.now()}))", note)
+    page.evaluate(f"location.hash = '#/invoice/{note['invoiceId']}'")
+    page.wait_for_function("document.querySelector('#opMsg').textContent.includes('matches a different record')")
+    assert "TCP-RCT-0003" in page.text_content("#opMsg")
+    assert not page.locator("#rcptSec").is_visible(), "not shown as its receipt"
+    assert not page.locator("#payBtn").is_visible() and page.locator("[data-fix]").count() == 0, "nothing new can be recorded"
+    assert page.evaluate("TCPDesk.op()") is not None
+    assert page.evaluate("__db.payments.length") == 3
     assert not errors

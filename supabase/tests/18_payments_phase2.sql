@@ -6,6 +6,11 @@
 --      earlier days are fine.
 --   D. The functions are still refused to the public and to non-staff, and
 --      the phase 1 fields of invoice_document are all still there.
+--   E. The Back Office's recovery lookup (Option B, 23 Nov 2026): a plain
+--      read of payments by request_id, under row-level security, finds the
+--      operation with its whole identity (invoice, kind, the payment it
+--      reverses, amount) for every staff role; non-staff, retired staff and
+--      the public get nothing.
 \set QUIET on
 
 -- An issued invoice of GH₵1,100 (10 bags of product 3 at GH₵110), and a
@@ -89,4 +94,54 @@ reset role;
 set role anon;
 select tcp_test.fails(format($$select public.record_payment(%s, 10, 'cash')$$, :inv), 'permission denied');
 select tcp_test.fails(format($$select public.invoice_document(%s)$$, :inv), 'permission denied');
+reset role;
+
+-- ------------------------------------------------ E. the recovery lookup
+-- A payment by sales and a refund by finance, each with a request id, as
+-- the Back Office sends them.
+set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';  -- sales
+set role authenticated;
+select (public.record_payment(:inv, 50, 'cash', null, current_date,
+        'aaaaaaaa-0000-4000-8000-000000000001')).id as pe \gset
+reset role;
+set request.jwt.claim.sub = '33333333-3333-3333-3333-333333333333';  -- finance
+set role authenticated;
+select (public.refund_payment(:p2, 20, 'cash', 'Lookup test', null,
+        'aaaaaaaa-0000-4000-8000-000000000002')).id as re \gset
+reset role;
+-- Exactly what the browser asks: select … where request_id = <id>.
+create temp table lookup_seen (who text, rows int, ok boolean);
+grant all on lookup_seen to authenticated, anon;
+do $$
+declare
+  who record;
+begin
+  for who in select * from (values ('owner', '11111111-1111-1111-1111-111111111111'),
+                                   ('sales', '22222222-2222-2222-2222-222222222222'),
+                                   ('finance', '33333333-3333-3333-3333-333333333333'),
+                                   ('stranger', '44444444-4444-4444-4444-444444444444'),
+                                   ('retired', '55555555-5555-5555-5555-555555555555')) v(name, sub) loop
+    perform set_config('request.jwt.claim.sub', who.sub, true);
+    execute 'set local role authenticated';
+    insert into lookup_seen
+      select who.name, count(*),
+             bool_and(case request_id
+               when 'aaaaaaaa-0000-4000-8000-000000000001' then kind = 'payment' and reverses_payment_id is null and amount = 50
+               when 'aaaaaaaa-0000-4000-8000-000000000002' then kind = 'refund' and amount = -20
+             end)
+      from public.payments
+      where request_id in ('aaaaaaaa-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000002');
+    execute 'reset role';
+  end loop;
+end $$;
+select tcp_test.ok((select bool_and(rows = 2 and ok) from lookup_seen where who in ('owner', 'sales', 'finance')),
+                   'owner, sales and finance all find both operations by request id, with the right kind and amount');
+select tcp_test.ok((select reverses_payment_id from public.payments where request_id = 'aaaaaaaa-0000-4000-8000-000000000002') = :p2
+                   and (select invoice_id from public.payments where request_id = 'aaaaaaaa-0000-4000-8000-000000000001') = :inv,
+                   'the lookup row carries the invoice and the payment a refund reverses');
+select tcp_test.ok((select bool_and(rows = 0) from lookup_seen where who in ('stranger', 'retired')),
+                   'non-staff and retired staff find nothing (row-level security)');
+set role anon;
+select tcp_test.fails($$select id from public.payments where request_id = 'aaaaaaaa-0000-4000-8000-000000000001'$$,
+                      'permission denied');
 reset role;

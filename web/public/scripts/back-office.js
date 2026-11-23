@@ -104,7 +104,7 @@ function supabaseApi(){
     refundPayment:a=>sb.rpc("refund_payment",a).then(out),
     receipt:id=>sb.rpc("receipt_document",{p_payment_id:id}).then(out),
     // Was this request recorded? The receipt it made, or null.
-    byRequest:req=>sb.from("payments").select("id,receipt_no,kind").eq("request_id",req).maybeSingle().then(out),
+    byRequest:req=>sb.from("payments").select("id,receipt_no,kind,invoice_id,reverses_payment_id,amount").eq("request_id",req).maybeSingle().then(out),
     // Discarding a draft = the owner-only cancel_invoice (kept, with a reason).
     cancel:(id,reason)=>sb.rpc("cancel_invoice",{p_invoice_id:id,p_reason:reason}).then(out),
     // The Home figures, worked out by the database (back_office_home).
@@ -879,6 +879,17 @@ function dropOp(){try{localStorage.removeItem(opKey())}catch(e){}}
 // A database refusal carries a Postgres error code: then nothing was saved.
 // Any other failure leaves the outcome unknown.
 const definite=e=>kind(e)==="refused"&&/^[0-9A-Z]{5}$/.test(String(e&&e.code||""));
+// Ask the database whether this operation was recorded. A row with the same
+// request id counts only if it is the SAME operation: invoice, kind, the
+// payment it reverses and the amount must all match. Anything else is not
+// taken as success, and nothing new is recorded (the database would refuse
+// that request id for a different operation anyway).
+async function recorded(op){
+  const r=await api.byRequest(op.req);if(!r)return null;
+  const same=+r.invoice_id===+op.invoiceId&&r.kind===op.type&&(r.reverses_payment_id==null?null:+r.reverses_payment_id)===(op.payId==null?null:+op.payId)
+    &&Math.abs(Math.abs(toP(r.amount))-Math.abs(toP(op.amount)))===0;
+  if(!same)throw Object.assign(new Error(`This request matches a different record (${r.receipt_no}), so it was not taken as recorded and nothing new was recorded. Ask the owner to check ${r.receipt_no}.`),{mismatch:true});
+  return r;}
 
 // The invoice's receipts, oldest first, with Correct and Refund where they
 // still apply (the database works out "corrected" and "refunded").
@@ -909,8 +920,9 @@ async function checkOp(op){
   const w=OP_WORD[op.type],amt=money(toP(op.amount));
   $("#opMsg").textContent=`Checking whether the ${w} of ${amt} was recorded…`;show("#opCheck",false);
   let r;
-  try{r=await api.byRequest(op.req);}
-  catch(err){const k=kind(err);
+  try{r=await recorded(op);}
+  catch(err){if(err.mismatch){$("#opMsg").textContent=err.message;return;}
+    const k=kind(err);
     if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
     if(k==="expired")return expire();
     $("#opMsg").textContent=`Could not check whether the ${w} of ${amt} was recorded${k==="offline"?": no connection":""}. Nothing new can be recorded on this invoice until it is checked.`;
@@ -925,7 +937,7 @@ $("#opCheck").addEventListener("click",()=>{const op=pendingOp();if(op)checkOp(o
 // Send a money operation. A retry of one whose outcome is unknown first
 // asks the database, and gives back the original receipt if it was saved.
 async function sendOp(op,state,call){
-  if(state.sent){const r=await api.byRequest(op.req);if(r)return{r,again:true};}
+  if(state.sent){const r=await recorded(op);if(r)return{r,again:true};}
   keepOp(op);state.sent=true;
   return{r:await call(),again:false};}
 function opDone({r,again}){dropOp();PAY=null;FIX=null;
@@ -936,10 +948,13 @@ function opDone({r,again}){dropOp();PAY=null;FIX=null;
 // refusal means nothing was saved; anything else leaves the outcome
 // unknown, and the retry asks the database first.
 async function opFailed(err,state,where){const k=kind(err);
+  if(err&&err.mismatch){$(where).textContent=err.message;return;}
   if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
   if(k==="expired")return expire();
   if(definite(err)&&/request id was already used/.test(err.message||"")){
-    try{const r=await api.byRequest(state.req);if(r)return opDone({r,again:true});}catch(e){}}
+    const op=pendingOp();
+    try{const r=op&&op.req===state.req&&await recorded(op);if(r)return opDone({r,again:true});}
+    catch(e){if(e.mismatch){$(where).textContent=e.message;return;}}}
   if(definite(err)){dropOp();state.sent=false;$(where).textContent="Not recorded: "+String(err.message||err);return;}
   $(where).textContent=k==="offline"
     ?"No connection: it may or may not have been recorded. Tap Record it again when you have signal: it is checked first, and never recorded twice."
@@ -947,8 +962,10 @@ async function opFailed(err,state,where){const k=kind(err);
 // Cancel: an operation that was sent with no answer is checked first.
 async function cancelOp(state,where,close){
   if(state&&state.sent){let r;
-    try{r=await api.byRequest(state.req);}
-    catch(err){const k=kind(err);if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+    const op=pendingOp();
+    try{r=op&&op.req===state.req?await recorded(op):await api.byRequest(state.req);}
+    catch(err){if(err.mismatch){$(where).textContent=err.message;return;}
+      const k=kind(err);if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
       if(k==="expired")return expire();
       $(where).textContent="Can't cancel yet: it could not be checked whether this was recorded. Try again when you have signal.";return;}
     if(r)return opDone({r,again:true});}
