@@ -83,6 +83,44 @@ Plan", approved by ChatGPT and Daniel):
   B15  /invoice-desk/ forwards with the query and the whole fragment kept;
        an old sign-in link and an expired link still work
   B16  every Back Office screen fits a 360 px and a 390 px phone
+
+Phase 2, payments and receipts ("TCP Back Office: Phase 2 Design, Payments
+and Receipts (v1)", GitHub issue #39):
+  P01  a part payment, then the full balance: receipts, balances, PAID IN
+       FULL, the invoice becomes paid and Record payment goes away
+  P02  amounts checked on the form: empty, not a number, zero, more than is
+       owed; a reference is needed for Mobile Money and bank, not cash
+  P03  a date in the future is refused on the form and by the "database"
+  P04  a lost reply, no connection and a double tap: recorded once, the
+       retry keeps the same request id and gives back the same receipt
+  P05  an expired sign-in keeps the unfinished payment (and its request id)
+       and brings it back after signing in; removed access clears it
+  P06  the receipt PDF: A4, RECEIPT, the figures as recorded (paid before,
+       balance after) even after later payments; PAID IN FULL when cleared
+  P07  sharing a receipt: the PDF only, the message copied (with "paid in
+       full" when cleared); a refund can be shared, a correction cannot
+  P08  correcting a payment (finance): reason needed, confirm step, the
+       balance goes back up, the payment is marked corrected
+  P09  refunds: partial, more than is left refused, "All that is left",
+       correcting after a refund refused
+  P10  roles: sales records payments but sees no Correct or Refund (and the
+       "database" refuses them); finance and the owner see both
+  P11  drafts, cancelled and paid invoices have no Record payment
+  P12  the payment, refund and receipt screens fit 360 px and 390 px phones
+
+Amendment, 23 Nov 2026 (Option B: an unconfirmed operation is noted on the
+phone so it is never recorded twice):
+  P13  a refund saved by the database with its reply lost, then the
+       sign-in expires and the page reloads: after signing in it is found
+       by its request id, exactly one refund, the original receipt shown
+  P14  the same for a correction
+  P15  sign-out warns first and then removes the note; a note older than
+       24 hours is dropped; another staff member never sees it; while the
+       outcome can't be checked nothing new can be recorded
+  P16  the note holds no customer name or phone, only the allowed fields
+  P17  a record found by request id that is a DIFFERENT operation (other
+       invoice, kind, payment or amount) is never taken as success, and
+       nothing new can be recorded
 """
 import base64
 import io
@@ -119,7 +157,7 @@ STANDIN = r"""
   const cfg = JSON.parse(%CFG%);
   const db = window.__db = {
     products: cfg.products, staff: cfg.staff, users: cfg.users,
-    customers: [], invoices: [], lines: [], counters: {customer: 0, invoice: 0},
+    customers: [], invoices: [], lines: [], payments: [], counters: {customer: 0, invoice: 0, receipt: 0},
     offline: false, offlineOnce: 0, dropReply: 0, expired: false, calls: [], session: null,
     signOutFns: [], inAuthCallback: false, lockViolations: [],
   };
@@ -131,12 +169,13 @@ STANDIN = r"""
   try { const s = sessionStorage.getItem("standin-session"); if (s) db.session = JSON.parse(s); } catch (e) {}
   try { const d = sessionStorage.getItem("standin-db"); if (d) Object.assign(db, JSON.parse(d), {calls: []}); } catch (e) {}
   const persist = () => { try { sessionStorage.setItem("standin-db", JSON.stringify(
-      {customers: db.customers, invoices: db.invoices, lines: db.lines, counters: db.counters, staff: db.staff})); } catch (e) {} };
+      {customers: db.customers, invoices: db.invoices, lines: db.lines, payments: db.payments, counters: db.counters, staff: db.staff})); } catch (e) {} };
   const pad = n => String(n).padStart(4, "0");
   const net = async (name, fn) => {
     if (db.inAuthCallback) db.lockViolations.push(name);
     db.calls.push(name);
     await new Promise(r => setTimeout(r, 5));
+    if ((db.offlineFor || []).includes(name)) throw new TypeError("Failed to fetch");
     if (db.offline || db.offlineOnce > 0) { if (db.offlineOnce > 0) db.offlineOnce--; throw new TypeError("Failed to fetch"); }
     if (db.expired && db.session) throw Object.assign(new Error("JWT expired"), {code: "PGRST301", status: 401});
     const out = fn(); persist();
@@ -154,16 +193,18 @@ STANDIN = r"""
     if (d.length === 10 && d[0] === "0") return "+233" + d.slice(1); if (d.length === 12 && d.startsWith("233")) return "+" + d; if (d.length === 9) return "+233" + d;
     throw new Error("Not a Ghana phone number: " + p); };
   const total = id => db.lines.filter(l => l.invoice_id === id).reduce((a, l) => a + Math.round(l.quantity * l.unit_price * 100), 0) / 100;
-  // Status as invoice_summary works it out (payments: inv.paid).
-  const today = new Date().toISOString().slice(0, 10);
+  // Paid = the sum of every receipt on the invoice (refunds and corrections
+  // are stored below zero), as invoice_summary works it out.
+  const paidOf = id => Math.round(db.payments.filter(p => p.invoice_id === id).reduce((a, p) => a + Math.round(p.amount * 100), 0)) / 100;
+  const pd = new Date(), today = pd.getFullYear() + "-" + String(pd.getMonth() + 1).padStart(2, "0") + "-" + String(pd.getDate()).padStart(2, "0");
   const status = inv => inv.state === "draft" ? "draft" : inv.state === "cancelled" ? "cancelled"
-    : (inv.paid || 0) >= total(inv.id) ? "paid" : inv.due_date && inv.due_date < today ? "overdue" : (inv.paid || 0) > 0 ? "part_paid" : "unpaid";
+    : paidOf(inv.id) >= total(inv.id) ? "paid" : inv.due_date && inv.due_date < today ? "overdue" : paidOf(inv.id) > 0 ? "part_paid" : "unpaid";
   let clock = 0;
   const stamp = () => new Date(Date.UTC(2026, 10, 22, 8, 0, 0) + 1000 * (clock++)).toISOString();
   // invoice_list, as the view builds it.
   const listRow = inv => { const c = db.customers.find(x => x.id === inv.customer_id), t = total(inv.id);
     return {id: inv.id, invoice_no: inv.invoice_no, state: inv.state, status: status(inv), issued_at: inv.issued_at || null,
-      created_at: inv.created_at, due_date: inv.due_date || null, total: t, balance: Math.round((t - (inv.paid || 0)) * 100) / 100,
+      created_at: inv.created_at, due_date: inv.due_date || null, total: t, balance: Math.round((t - paidOf(inv.id)) * 100) / 100,
       billed_to_name: inv.invoice_no ? inv.billed_to_name : c.name, billed_to_phone: inv.invoice_no ? inv.billed_to_phone : c.phone}; };
   // PostgREST "ilike" with * as the wildcard.
   const ilike = (v, pat) => v != null && new RegExp("^" + pat.split("*").map(p => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$", "i").test(String(v));
@@ -172,14 +213,29 @@ STANDIN = r"""
     let c = db.customers.find(x => x.phone === o.phone && x.name === o.name);
     if (!c) { c = {id: db.customers.length + 1, code: "TCP-C-" + pad(++db.counters.customer), phone: o.phone || null, name: o.name || null}; db.customers.push(c); }
     const inv = {id: db.invoices.length + 1, state: o.state || "draft", invoice_no: null, customer_id: c.id, due_date: o.due || null,
-      paid: o.paid || 0, created_at: o.created_at || stamp(), notes: o.notes || null, deliver_to_location: null};
+      created_at: o.created_at || stamp(), notes: o.notes || null, deliver_to_location: null};
     db.invoices.push(inv);
     (o.lines || [{qty: o.qty || 10}]).forEach((l, k) => db.lines.push({invoice_id: inv.id, position: k + 1, kind: "product",
       product_id: 1, description: "Supacem 32.5R", unit: "50 kg bag", quantity: l.qty, unit_price: l.price == null ? 75 : l.price}));
     if (inv.state !== "draft" && !o.never_issued) Object.assign(inv, {invoice_no: "TCP-INV-" + pad(++db.counters.invoice),
       issued_at: inv.created_at, issued_by: "Test Owner", billed_to_name: c.name, billed_to_phone: c.phone});
     if (o.state === "cancelled") inv.cancel_reason = "seeded";
+    // "paid" in the test data = one cash receipt for that amount.
+    if (o.paid) addPay({invoice_id: inv.id, kind: "payment", amount: o.paid, method: "cash", reference: null, paid_on: inv.created_at.slice(0, 10), recorded_by: "Test Owner"});
     persist(); });
+  // A new receipt: the next number, and the balance after it, stored.
+  function addPay(p) { const row = {id: db.payments.length + 1, receipt_no: "TCP-RCT-" + pad(++db.counters.receipt), reason: null,
+      reverses_payment_id: null, request_id: null, ...p};
+    db.payments.push(row); row.balance_after = Math.round((total(row.invoice_id) - paidOf(row.invoice_id)) * 100) / 100; persist(); return row; }
+  // tcp_private.repeat_of: the same request id gives back the first receipt;
+  // a different request under that id is refused.
+  // A database refusal (raise exception) carries a Postgres error code.
+  const dbErr = m => Object.assign(new Error(m), {code: "P0001"});
+  function repeatOf(req, kind, inv, rev, amt, method, reason) { if (!req) return null;
+    const e = db.payments.find(p => p.request_id === req); if (!e) return null;
+    if (e.kind !== kind || e.invoice_id !== inv || (e.reverses_payment_id || null) !== (rev || null) || Math.abs(e.amount - amt) > 1e-9
+        || e.method !== method || (e.reason || "").trim() !== (reason || "").trim()) throw dbErr("This request id was already used for a different payment");
+    return e; }
   window.TCPDeskApi = {
     emailCode: cfg.emailCode,
     sendCode: email => net("sendCode", () => { db.codeFor = email; }),
@@ -219,7 +275,9 @@ STANDIN = r"""
       const c = db.customers.find(x => x.id === inv.customer_id);
       Object.assign(inv, {state: "issued", invoice_no: "TCP-INV-" + pad(++db.counters.invoice), issued_at: new Date().toISOString(),
         issued_by: me().full_name, billed_to_name: c.name, billed_to_phone: c.phone}); return inv.invoice_no; }),
-    document: id => net("document", () => { staffOnly(); const inv = db.invoices.find(i => i.id === id);
+    // invoice_document's answer, built without a network call (the receipt
+    // uses it too).
+    __doc: id => { const inv = db.invoices.find(i => i.id === id);
       if (!inv) throw new Error("No such invoice"); const c = db.customers.find(x => x.id === inv.customer_id);
       const issued = !!inv.invoice_no, t = total(id);
       return {id: inv.id, invoice_no: inv.invoice_no, state: inv.state, status: status(inv), cancel_reason: inv.cancel_reason || null, created_at: inv.created_at,
@@ -228,7 +286,55 @@ STANDIN = r"""
         billed_to_name: issued ? inv.billed_to_name : c.name, billed_to_phone: issued ? inv.billed_to_phone : c.phone,
         deliver_to_location: inv.deliver_to_location, deliver_to_contact: inv.deliver_to_contact, deliver_to_phone: inv.deliver_to_phone,
         lines: db.lines.filter(l => l.invoice_id === id).map(l => ({...l, line_total: Math.round(l.quantity * l.unit_price * 100) / 100})),
-        total: t, paid: inv.paid || 0, balance: t - (inv.paid || 0), payments: []}; }),
+        total: t, paid: paidOf(id), balance: Math.round((t - paidOf(id)) * 100) / 100, payments: db.payments.filter(p => p.invoice_id === id).map(p => ({...p,
+          reverses_receipt_no: p.reverses_payment_id ? db.payments.find(o => o.id === p.reverses_payment_id).receipt_no : null,
+          corrected: p.kind === "payment" && db.payments.some(c => c.reverses_payment_id === p.id && c.kind === "correction"),
+          refunded: p.kind === "payment" ? -db.payments.filter(r => r.reverses_payment_id === p.id && r.kind === "refund").reduce((a, r) => a + r.amount, 0) : null}))}; },
+    document: id => net("document", () => { staffOnly(); return window.TCPDeskApi.__doc(id); }),
+    // Phase 2, with record_payment / correct_payment / refund_payment's rules.
+    recordPayment: a => net("recordPayment", () => { staffOnly("owner", "sales", "finance");
+      const again = repeatOf(a.p_request_id, "payment", a.p_invoice_id, null, Math.round(a.p_amount * 100) / 100, a.p_method, null); if (again) return again;
+      const inv = db.invoices.find(i => i.id === a.p_invoice_id);
+      if (!inv || inv.state !== "issued") throw dbErr("Payments can only be recorded against an issued invoice");
+      if (!(a.p_amount > 0)) throw dbErr("A payment must be more than zero");
+      if (!a.p_paid_on || a.p_paid_on > today) throw dbErr("A payment date cannot be in the future");
+      const owed = Math.round((total(inv.id) - paidOf(inv.id)) * 100) / 100;
+      if (a.p_amount > owed) throw dbErr(`GH₵ ${a.p_amount.toFixed(2)} is more than the GH₵ ${owed.toFixed(2)} still owed`);
+      return addPay({invoice_id: inv.id, kind: "payment", amount: Math.round(a.p_amount * 100) / 100, method: a.p_method, reference: a.p_reference || null,
+        paid_on: a.p_paid_on, request_id: a.p_request_id, recorded_by: me().full_name}); }),
+    correctPayment: a => net("correctPayment", () => { staffOnly("owner", "finance");
+      const o = db.payments.find(p => p.id === a.p_payment_id);
+      const again = o && repeatOf(a.p_request_id, "correction", o.invoice_id, o.id, -o.amount, o.method, a.p_reason); if (again) return again;
+      if (!o || o.kind !== "payment") throw dbErr("Only a payment can be corrected");
+      if (!a.p_reason || !a.p_reason.trim()) throw dbErr("A reason is needed");
+      if (db.payments.some(c => c.reverses_payment_id === o.id && c.kind === "correction")) throw dbErr("This payment has already been corrected");
+      if (db.payments.some(c => c.reverses_payment_id === o.id && c.kind === "refund")) throw dbErr("This payment has refunds against it and can no longer be corrected");
+      return addPay({invoice_id: o.invoice_id, kind: "correction", amount: -o.amount, method: o.method, reference: o.reference, paid_on: today,
+        reverses_payment_id: o.id, reason: a.p_reason.trim(), request_id: a.p_request_id, recorded_by: me().full_name}); }),
+    refundPayment: a => net("refundPayment", () => { staffOnly("owner", "finance");
+      const o = db.payments.find(p => p.id === a.p_payment_id), amt = Math.round(a.p_amount * 100) / 100;
+      const again = o && repeatOf(a.p_request_id, "refund", o.invoice_id, o.id, -amt, a.p_method, a.p_reason); if (again) return again;
+      if (!o || o.kind !== "payment") throw dbErr("Only a payment can be refunded");
+      if (db.payments.some(c => c.reverses_payment_id === o.id && c.kind === "correction")) throw dbErr("This payment was corrected; there is nothing left to refund");
+      if (!(amt > 0)) throw dbErr("A refund must be more than zero");
+      if (!a.p_reason || !a.p_reason.trim()) throw dbErr("A reason is needed");
+      const before = -db.payments.filter(r => r.reverses_payment_id === o.id && r.kind === "refund").reduce((x, r) => x + r.amount, 0);
+      if (before + amt > o.amount + 1e-9) throw dbErr(`Refunds would total GH₵ ${(before + amt).toFixed(2)}, more than the GH₵ ${o.amount.toFixed(2)} paid`);
+      return addPay({invoice_id: o.invoice_id, kind: "refund", amount: -amt, method: a.p_method, reference: a.p_reference || null, paid_on: today,
+        reverses_payment_id: o.id, reason: a.p_reason.trim(), request_id: a.p_request_id, recorded_by: me().full_name}); }),
+    // A plain read of the payments table by request id (row-level security:
+    // nothing for non-staff).
+    byRequest: req => net("byRequest", () => { const p = me() && db.payments.find(x => x.request_id === req);
+      return p ? {id: p.id, receipt_no: p.receipt_no, kind: p.kind, invoice_id: p.invoice_id,
+        reverses_payment_id: p.reverses_payment_id || null, amount: p.amount} : null; }),
+    receipt: id => net("receipt", () => { staffOnly(); const p = db.payments.find(x => x.id === id);
+      if (!p) throw new Error("No such receipt");
+      const doc = window.TCPDeskApi.__doc(p.invoice_id), earlier = db.payments.filter(x => x.invoice_id === p.invoice_id && x.id < p.id);
+      ["payments", "paid", "balance", "status"].forEach(k => delete doc[k]);
+      return {receipt_no: p.receipt_no, kind: p.kind, amount: p.amount, method: p.method, reference: p.reference, paid_on: p.paid_on,
+        reason: p.reason || null, reverses_receipt_no: p.reverses_payment_id ? db.payments.find(o => o.id === p.reverses_payment_id).receipt_no : null,
+        balance_after: p.balance_after, recorded_by: p.recorded_by, payments_before: earlier.length,
+        paid_before: Math.round(earlier.reduce((a, x) => a + x.amount * 100, 0)) / 100, invoice: doc}; }),
     cancel: (id, reason) => net("cancel", () => { staffOnly("owner");
       if (!reason || !reason.trim()) throw new Error("A reason is needed to cancel an invoice");
       const inv = db.invoices.find(i => i.id === id);
@@ -675,7 +781,9 @@ def _bo(browser, width=390, route="#/", staff=None, users=None, seed=None, signe
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.on("dialog", lambda d: d.accept())
     if signed_in:
-        page.add_init_script("sessionStorage.setItem('standin-session', JSON.stringify(%s))" % json.dumps(who or OWNER))
+        # Signed in on every load, unless a test has signed out for real
+        # and wants to sign in again after a true page reload.
+        page.add_init_script("if (!sessionStorage.getItem('no-auto-sign-in')) sessionStorage.setItem('standin-session', JSON.stringify(%s))" % json.dumps(who or OWNER))
     page.add_init_script(_standin(staff=staff, users=users))
     if seed:
         # Seeded once, before the first load (the stand-in keeps it per tab).
@@ -1244,4 +1352,497 @@ def test_f11_combining_on_issue_is_unsaved_work(browser):
     page.click("#guardBack")
     page.wait_for_selector("#guard", state="hidden")
     assert page.evaluate("TCPDesk.state().items.length") == 1 and page.evaluate("TCPDesk.state().items[0].qty") == 3
+    assert not errors
+
+
+# ---- Phase 2: payments and receipts -------------------------------------------
+# MIX: invoice 2 = TCP-INV-0001 Ama, GH₵750 unpaid; invoice 3 = TCP-INV-0002
+# Yaw, GH₵300 paid (receipt TCP-RCT-0001), GH₵450 left; invoice 4 = Efua,
+# paid in full (TCP-RCT-0002); 1 is a draft; 6 is cancelled.
+def _open_pay(page):
+    page.wait_for_selector("#payBtn:not([hidden])")
+    page.click("#payBtn")
+    page.wait_for_selector("#payForm:not([hidden])")
+
+
+def _pay(page, amount, method="cash", ref="", date=None, confirm=True):
+    page.fill("#pAmt", amount)
+    page.check(f'input[name="pm"][value="{method}"]')
+    page.fill("#pRef", ref)
+    if date:
+        page.fill("#pDate", date)
+    page.click("#pNext")
+    if confirm:
+        page.wait_for_selector("#pConfirm:not([hidden])")
+        page.click("#pYes")
+
+
+def _receipt_shown(page, no):
+    page.wait_for_selector("#rcptSec:not([hidden])")
+    page.wait_for_function(f"document.querySelector('#rTitle').textContent.includes('{no}')")
+    return {r.locator("span").text_content(): r.locator("b").text_content()
+            for r in page.locator("#rcpt .dk-sum > div").all()}
+
+
+def test_p01_part_then_full_payment(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/2")
+    _open_pay(page)
+    assert page.input_value("#pDate") == page.evaluate("new Date().toLocaleDateString('en-CA')"), "the date starts as today"
+    _pay(page, "300", "mobile_money", "MP2611231234", confirm=False)
+    page.wait_for_selector("#pConfirm:not([hidden])")
+    summary = page.text_content("#pSummary")
+    assert "GH₵300.00 by Mobile Money (ref MP2611231234) for TCP-INV-0001" in summary and "Balance after: GH₵450.00" in summary
+    assert page.evaluate("__db.payments.length") == 2, "nothing is recorded before the confirm step"
+    page.click("#pYes")
+    rows = _receipt_shown(page, "TCP-RCT-0003")
+    assert rows["Amount received"] == "GH₵300.00" and rows["Paid before this receipt"] == "GH₵0.00"
+    assert rows["Balance after"] == "GH₵450.00" and rows["Reference"] == "MP2611231234"
+    assert not page.locator(".dk-paidfull").is_visible()
+    # Back to the invoice: the receipt is listed, part paid.
+    page.click("#rInv")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert "TCP-RCT-0003" in page.text_content("#payList")
+    assert "Paid GH₵300.00" in page.text_content("#paySum") and "Left GH₵450.00" in page.text_content("#paySum")
+    assert page.evaluate("TCPDesk.doc().status") == "part_paid"
+    _open_pay(page)
+    page.click("#pFull")
+    assert page.input_value("#pAmt") == "450.00"
+    _pay(page, "450.00", "cash")
+    rows = _receipt_shown(page, "TCP-RCT-0004")
+    assert rows["Balance after"] == "GH₵0.00" and rows["Paid before this receipt"] == "GH₵300.00"
+    assert page.locator(".dk-paidfull").is_visible()
+    page.click("#rInv")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert page.evaluate("TCPDesk.doc().status") == "paid"
+    assert not page.locator("#payBtn").is_visible(), "nothing left to pay"
+    page.goto(BO + "#/")
+    page.wait_for_function("document.querySelector('#hOwed').textContent !== '—'")
+    assert page.text_content("#hOwed") == "GH₵1,200.00", "Home: 450 (Yaw) + 750 (Kwame) still owed"
+    assert not errors
+
+
+def test_p02_amount_and_reference_checks(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/3")
+    _open_pay(page)
+    for typed, msg in [("", "Enter the amount received."), ("abc", "Enter a number."), ("1.2.3", "Enter a number."),
+                       ("0", "more than GH₵0.00"), ("450.01", "more than the GH₵450.00 left to pay")]:
+        page.fill("#pAmt", typed); page.check('input[name="pm"][value="cash"]'); page.click("#pNext")
+        assert msg in page.text_content("#pAmtErr"), typed
+        assert not page.locator("#pConfirm").is_visible()
+    page.fill("#pAmt", "100")
+    for method, needed in [("mobile_money", "MoMo transaction ID"), ("bank_transfer", "bank reference")]:
+        page.check(f'input[name="pm"][value="{method}"]'); page.fill("#pRef", ""); page.click("#pNext")
+        assert needed in page.text_content("#pErr") and needed in page.text_content("#pRefLabel"), method
+    page.check('input[name="pm"][value="cash"]'); page.fill("#pRef", ""); page.click("#pNext")
+    page.wait_for_selector("#pConfirm:not([hidden])"), "cash needs no reference"
+    # Over the balance straight to the "database": refused there too.
+    err = page.evaluate("""() => TCPDeskApi.recordPayment({p_invoice_id: 3, p_amount: 500, p_method: 'cash', p_paid_on: '2026-01-10',
+        p_request_id: crypto.randomUUID()}).then(() => 'recorded', e => e.message)""")
+    assert "more than the GH₵ 450.00 still owed" in err
+    assert page.evaluate("__db.payments.length") == 2
+    assert not errors
+
+
+def test_p03_future_date_refused(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/2")
+    _open_pay(page)
+    assert page.get_attribute("#pDate", "max") == page.evaluate("new Date().toLocaleDateString('en-CA')")
+    _pay(page, "100", "cash", date="2099-01-01", confirm=False)
+    assert "can't be in the future" in page.text_content("#pErr")
+    assert not page.locator("#pConfirm").is_visible()
+    err = page.evaluate("""() => TCPDeskApi.recordPayment({p_invoice_id: 2, p_amount: 100, p_method: 'cash', p_paid_on: '2099-01-01',
+        p_request_id: crypto.randomUUID()}).then(() => 'recorded', e => e.message)""")
+    assert err == "A payment date cannot be in the future"
+    # A past date is fine and goes on the receipt.
+    page.fill("#pDate", "2026-11-01"); page.click("#pNext"); page.click("#pYes")
+    rows = _receipt_shown(page, "TCP-RCT-0003")
+    assert rows["Date"] == "1 November 2026"
+    assert not errors
+
+
+def test_p04_lost_reply_offline_and_double_tap_record_once(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/2")
+    _open_pay(page)
+    req = page.evaluate("TCPDesk.pay().req")
+    # The database records it, but the answer is lost on the way back.
+    page.evaluate("__db.dropReply = 1")
+    _pay(page, "200", "cash")
+    page.wait_for_function("document.querySelector('#pMsg').textContent.includes('No connection')")
+    assert "never recorded twice" in page.text_content("#pMsg")
+    assert page.evaluate("TCPDesk.op().req") == req, "noted on the phone until the outcome is known"
+    assert page.evaluate("__db.payments.length") == 3
+    assert page.evaluate("TCPDesk.pay().req") == req, "the retry keeps the same request id"
+    page.click("#pYes")
+    _receipt_shown(page, "TCP-RCT-0003")
+    assert page.evaluate("__db.payments.length") == 3, "the retry gave back the first receipt"
+    assert "already recorded" in page.text_content("#rMsg")
+    assert page.evaluate("TCPDesk.op()") is None
+    # No connection at all, then a double tap.
+    page.goto(BO + "#/invoice/2"); _open_pay(page)
+    page.evaluate("__db.offlineOnce = 1")
+    _pay(page, "100", "cash")
+    page.wait_for_function("document.querySelector('#pMsg').textContent.includes('No connection')")
+    assert page.evaluate("__db.payments.length") == 3
+    page.evaluate("__db.calls = []")
+    page.dblclick("#pYes")
+    _receipt_shown(page, "TCP-RCT-0004")
+    assert page.evaluate("__db.calls.filter(c => c === 'recordPayment').length") == 1
+    assert page.evaluate("__db.payments.length") == 4
+    # The same request id for a different amount is refused.
+    err = page.evaluate("""() => TCPDeskApi.recordPayment({p_invoice_id: 2, p_amount: 1, p_method: 'cash', p_paid_on: '2026-11-01',
+        p_request_id: __db.payments[3].request_id}).then(() => 'recorded', e => e.message)""")
+    assert err == "This request id was already used for a different payment"
+    assert not errors
+
+
+def test_p05_expired_sign_in_keeps_the_payment_removed_access_clears_it(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/2")
+    _open_pay(page)
+    req = page.evaluate("TCPDesk.pay().req")
+    assert page.evaluate("TCPDesk.op()") is None, "nothing is kept on the phone while the form is filled in"
+    page.evaluate("__db.expired = true")
+    _pay(page, "250", "bank_transfer", "GCB-77")
+    page.wait_for_selector("#signin:not([hidden])")
+    kept = page.evaluate("JSON.parse(localStorage.getItem('tcp-desk-op-u-owner'))")
+    assert kept["req"] == req and kept["amount"] == 250 and kept["ref"] == "GCB-77" and kept["type"] == "payment"
+    page.evaluate("__db.expired = false")
+    # Signing in by link reloads the page: a true reload, memory gone.
+    page.evaluate("sessionStorage.setItem('no-auto-sign-in', '1')"); page.reload()
+    assert page.evaluate("TCPDesk.pay()") is None
+    _sign_in(page)
+    # Straight back to its invoice; the database says it was not recorded,
+    # so it is offered again under the same request id.
+    page.wait_for_selector("#payForm:not([hidden])")
+    assert page.input_value("#pAmt") == "250.00" and page.input_value("#pRef") == "GCB-77"
+    assert page.is_checked('input[name="pm"][value="bank_transfer"]')
+    assert "not recorded" in page.text_content("#pMsg")
+    assert page.evaluate("TCPDesk.pay().req") == req
+    page.click("#pNext"); page.click("#pYes")
+    _receipt_shown(page, "TCP-RCT-0003")
+    assert page.evaluate("localStorage.getItem('tcp-desk-op-u-owner')") is None
+    # Removed access in the middle of a payment: signed out, nothing kept.
+    page.goto(BO + "#/invoice/3"); _open_pay(page)
+    page.evaluate("__db.staff[0].active = false")
+    _pay(page, "50", "cash")
+    page.wait_for_selector("#signin:not([hidden])")
+    assert "access has ended" in page.text_content("#signMsg")
+    assert page.evaluate("localStorage.getItem('tcp-desk-op-u-owner')") is None
+    assert page.evaluate("__db.payments.length") == 3
+    assert not errors
+
+
+def _receipt_pdf(page):
+    b64 = page.evaluate("async () => (await TCPDesk.makeReceiptPdf(TCPDesk.receipt())).output('datauristring').split(',')[1]")
+    reader = PdfReader(io.BytesIO(base64.b64decode(b64)))
+    return [tidy_pdf_text(p.extract_text()) for p in reader.pages], [(float(p.mediabox.width), float(p.mediabox.height)) for p in reader.pages]
+
+
+def test_p06_receipt_pdf_is_frozen_at_the_moment(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/3")
+    # TCP-RCT-0001: GH₵300 paid before anything else.
+    page.goto(BO + "#/receipt/1")
+    _receipt_shown(page, "TCP-RCT-0001")
+    texts, sizes = _receipt_pdf(page)
+    assert len(texts) == 1 and abs(sizes[0][0] - 595.28) < 1 and abs(sizes[0][1] - 841.89) < 1, "one A4 page"
+    t = texts[0]
+    for want in ["RECEIPT", "TCP-RCT-0001", "TCP-INV-0002", "Yaw Part", "GH₵300.00", "Cash", "Paid before this receipt GH₵0.00",
+                 "Balance after GH₵450.00", "Invoice TCP-INV-0002 total GH₵750.00", "Test Owner"]:
+        assert want in t, (want, t)
+    assert "PAID IN FULL" not in t
+    # A later payment clears the invoice; the first receipt does not change.
+    page.goto(BO + "#/invoice/3"); _open_pay(page); page.click("#pFull"); _pay(page, "450.00", "cash")
+    _receipt_shown(page, "TCP-RCT-0003")
+    t2 = _receipt_pdf(page)[0][0]
+    assert "PAID IN FULL" in t2 and "Paid before this receipt GH₵300.00" in t2 and "Balance after GH₵0.00" in t2
+    page.goto(BO + "#/receipt/1"); _receipt_shown(page, "TCP-RCT-0001")
+    assert _receipt_pdf(page)[0][0] == t, "an old receipt is drawn exactly as before"
+    assert not errors
+
+
+def _fake_share(page):
+    page.evaluate("""() => { window.__shared = [];
+        navigator.canShare = () => true;
+        navigator.share = d => { window.__shared.push({keys: Object.keys(d), files: (d.files || []).map(f => f.name), text: d.text}); return Promise.resolve(); }; }""")
+
+
+def test_p07_sharing_receipts(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/3", perms=["clipboard-read", "clipboard-write"], staff=TEAM, users=[OWNER, FIN, SALES])
+    _open_pay(page); _pay(page, "200", "mobile_money", "MP1")
+    _receipt_shown(page, "TCP-RCT-0003")
+    _fake_share(page)
+    page.click("#rShare")
+    page.wait_for_function("window.__shared.length === 1")
+    shared = page.evaluate("window.__shared[0]")
+    assert shared["files"] == ["TCP Receipt TCP-RCT-0003.pdf"] and "text" not in shared["keys"], shared
+    assert page.evaluate("navigator.clipboard.readText()") == \
+        "Hello Yaw, here is your receipt TCP-RCT-0003 for GH₵200.00 on invoice TCP-INV-0002. Balance: GH₵250.00."
+    assert "paste it as the caption" in page.text_content("#rMsg")
+    # Paid in full: the message says so.
+    page.goto(BO + "#/invoice/3"); _open_pay(page); page.click("#pFull"); _pay(page, "250.00", "cash")
+    _receipt_shown(page, "TCP-RCT-0004"); _fake_share(page)
+    page.click("#rShare"); page.wait_for_function("window.__shared.length === 1")
+    assert page.evaluate("navigator.clipboard.readText()") == \
+        "Hello Yaw, here is your receipt TCP-RCT-0004 for GH₵250.00 on invoice TCP-INV-0002. Invoice TCP-INV-0002 is now paid in full. Thank you."
+    # A refund can be shared; a correction cannot (decision 5).
+    page.evaluate("TCPDeskApi.refundPayment({p_payment_id: 3, p_amount: 50, p_method: 'cash', p_reason: 'Short delivery', p_request_id: crypto.randomUUID()})")
+    page.evaluate("TCPDeskApi.correctPayment({p_payment_id: 1, p_reason: 'Wrong invoice', p_request_id: crypto.randomUUID()})")
+    page.goto(BO + "#/receipt/5"); _receipt_shown(page, "TCP-RCT-0005")
+    assert page.text_content("#rTitle") == "Refund TCP-RCT-0005" and page.locator("#rShare").is_visible()
+    _fake_share(page); page.click("#rShare"); page.wait_for_function("window.__shared.length === 1")
+    assert page.evaluate("navigator.clipboard.readText()") == \
+        "Hello Yaw, here is your refund receipt TCP-RCT-0005 for GH₵50.00 on invoice TCP-INV-0002. Balance: GH₵50.00."
+    page.goto(BO + "#/receipt/6"); _receipt_shown(page, "TCP-RCT-0006")
+    assert page.text_content("#rTitle") == "Correction TCP-RCT-0006"
+    assert not page.locator("#rShare").is_visible() and page.locator("#rInternal").is_visible()
+    assert page.locator("#rPdf").is_visible(), "a correction still has its PDF"
+    t = _receipt_pdf(page)[0][0]
+    assert "CORRECTION" in t and "Wrong invoice" in t and "TCP-RCT-0001" in t
+    assert "AMOUNT REVERSED\n-GH₵300.00" in t and "This correction -GH₵300.00" in t, "a reversal never prints as money in"
+    assert not errors
+
+
+def test_p08_correcting_a_payment(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/3", staff=TEAM, users=[OWNER, FIN, SALES], who=FIN)
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    page.click('[data-fix="correction"][data-pid="1"]')
+    page.wait_for_selector("#fixForm:not([hidden])")
+    assert not page.locator("#fixMoney").is_visible(), "a correction reverses the whole payment"
+    page.click("#fNext")
+    assert "Give a reason" in page.text_content("#fErr")
+    page.fill("#fWhy", "Recorded on the wrong invoice")
+    page.click("#fNext")
+    page.wait_for_selector("#fConfirm:not([hidden])")
+    assert "Reverse TCP-RCT-0001 (GH₵300.00)" in page.text_content("#fSummary") and "Balance after: GH₵750.00" in page.text_content("#fSummary")
+    page.click("#fYes")
+    rows = _receipt_shown(page, "TCP-RCT-0003")
+    assert rows["Amount reversed"] == "−GH₵300.00" and rows["Reverses"] == "TCP-RCT-0001"
+    assert rows["Reason"] == "Recorded on the wrong invoice" and rows["Balance after"] == "GH₵750.00" and rows["Recorded by"] == "Fin"
+    page.click("#rInv"); page.wait_for_selector("#issuedSec:not([hidden])")
+    first = page.locator(".dk-pay").first
+    assert "corrected" in first.text_content()
+    assert first.locator("[data-fix]").count() == 0, "a corrected payment can't be corrected or refunded"
+    assert page.evaluate("TCPDesk.doc().status") == "unpaid"
+    err = page.evaluate("""() => TCPDeskApi.correctPayment({p_payment_id: 1, p_reason: 'again', p_request_id: crypto.randomUUID()})
+        .then(() => 'done', e => e.message)""")
+    assert err == "This payment has already been corrected"
+    assert not errors
+
+
+def test_p09_refunds_and_their_limits(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/3", staff=TEAM, users=[OWNER, FIN, SALES], who=FIN)
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    page.click('[data-fix="refund"][data-pid="1"]')
+    page.wait_for_selector("#fixForm:not([hidden])")
+    assert "Up to GH₵300.00 can be refunded" in page.text_content("#fixFor")
+    page.fill("#fAmt", "100"); page.check('input[name="fm"][value="mobile_money"]'); page.fill("#fWhy", "Two bags returned")
+    page.click("#fNext")
+    assert "MoMo transaction ID" in page.text_content("#fErr")
+    page.fill("#fRef", "MP99"); page.click("#fNext"); page.click("#fYes")
+    rows = _receipt_shown(page, "TCP-RCT-0003")
+    assert rows["Amount refunded"] == "−GH₵100.00" and rows["Balance after"] == "GH₵550.00"
+    page.click("#rInv"); page.wait_for_selector("#issuedSec:not([hidden])")
+    first = page.locator(".dk-pay").first
+    assert "GH₵100.00 refunded" in first.text_content()
+    assert first.locator('[data-fix="correction"]').count() == 0, "no correcting after a refund"
+    first.locator('[data-fix="refund"]').click()
+    page.wait_for_selector("#fixForm:not([hidden])")
+    page.fill("#fAmt", "250"); page.check('input[name="fm"][value="cash"]'); page.fill("#fWhy", "More returned"); page.click("#fNext")
+    assert "At most GH₵200.00 can be refunded from TCP-RCT-0001" in page.text_content("#fErr")
+    page.click("#fAll"); assert page.input_value("#fAmt") == "200.00"
+    page.click("#fNext"); page.click("#fYes")
+    _receipt_shown(page, "TCP-RCT-0004")
+    page.click("#rInv"); page.wait_for_selector("#issuedSec:not([hidden])")
+    assert page.locator(".dk-pay").first.locator("[data-fix]").count() == 0, "nothing left to refund"
+    for call, want in [("correctPayment({p_payment_id: 1, p_reason: 'x', p_request_id: crypto.randomUUID()})",
+                        "This payment has refunds against it and can no longer be corrected"),
+                       ("refundPayment({p_payment_id: 1, p_amount: 1, p_method: 'cash', p_reason: 'x', p_request_id: crypto.randomUUID()})",
+                        "Refunds would total GH₵ 301.00, more than the GH₵ 300.00 paid")]:
+        assert page.evaluate(f"() => TCPDeskApi.{call}.then(() => 'done', e => e.message)") == want
+    assert not errors
+
+
+@pytest.mark.parametrize("who,can_fix", [(SALES, False), (FIN, True), (OWNER, True)])
+def test_p10_roles(browser, who, can_fix):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/3", staff=TEAM, users=[OWNER, FIN, SALES], who=who)
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert page.locator("#payBtn").is_visible(), "every role records payments (decision 1)"
+    assert (page.locator("[data-fix]").count() == 2) == can_fix
+    if not can_fix:
+        err = page.evaluate("""() => TCPDeskApi.refundPayment({p_payment_id: 1, p_amount: 1, p_method: 'cash', p_reason: 'x',
+            p_request_id: crypto.randomUUID()}).then(() => 'done', e => e.message)""")
+        assert "sales role cannot do this" in err
+    _open_pay(page); _pay(page, "50", "cash")
+    _receipt_shown(page, "TCP-RCT-0003")
+    assert not errors
+
+
+@pytest.mark.parametrize("inv", [1, 4, 6])
+def test_p11_no_record_payment_on_drafts_cancelled_or_paid(browser, inv):
+    page, errors = _bo(browser, seed=MIX, route=f"#/invoice/{inv}")
+    # The owner's draft opens in the form; the others open read-only.
+    page.wait_for_selector("#form:not([hidden])" if inv == 1 else "#issuedSec:not([hidden])")
+    page.wait_for_timeout(200)
+    assert not page.locator("#payBtn").is_visible()
+    if inv == 1:
+        assert not page.locator("#payBox").is_visible(), "a draft has no payments section"
+    err = page.evaluate(f"""() => TCPDeskApi.recordPayment({{p_invoice_id: {inv}, p_amount: 1, p_method: 'cash', p_paid_on: '2026-01-10',
+        p_request_id: crypto.randomUUID()}}).then(() => 'recorded', e => e.message)""")
+    assert err != "recorded"
+    assert not errors
+
+
+@pytest.mark.parametrize("width", [360, 390])
+def test_p12_payment_screens_fit_a_phone(browser, width):
+    page, errors = _bo(browser, width=width, seed=MIX, route="#/invoice/3", staff=TEAM, users=[OWNER, FIN, SALES], who=FIN)
+    fits = lambda: page.evaluate("document.documentElement.scrollWidth") <= width
+    page.wait_for_selector("#payBtn:not([hidden])"); assert fits()
+    _open_pay(page); page.check('input[name="pm"][value="bank_transfer"]'); assert fits()
+    page.click("#pFull"); page.fill("#pRef", "GCB-1"); page.click("#pNext"); page.wait_for_selector("#pConfirm:not([hidden])"); assert fits()
+    page.click("#pYes"); _receipt_shown(page, "TCP-RCT-0003"); assert fits()
+    page.click("#rInv"); page.wait_for_selector("#issuedSec:not([hidden])")
+    page.click('[data-fix="refund"][data-pid="1"]'); page.wait_for_selector("#fixForm:not([hidden])"); assert fits()
+    assert not errors
+
+
+
+def _fix(page, kind, pid, why, amount=None, method="cash", ref=""):
+    page.click(f'[data-fix="{kind}"][data-pid="{pid}"]')
+    page.wait_for_selector("#fixForm:not([hidden])")
+    if amount:
+        page.fill("#fAmt", amount); page.check(f'input[name="fm"][value="{method}"]'); page.fill("#fRef", ref)
+    page.fill("#fWhy", why); page.click("#fNext")
+    page.wait_for_selector("#fConfirm:not([hidden])"); page.click("#fYes")
+
+
+@pytest.mark.parametrize("kind", ["refund", "correction"])
+def test_p13_p14_lost_reply_then_expired_sign_in_records_once(browser, kind):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/3", staff=TEAM, users=[OWNER, FIN, SALES], who=FIN)
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    # The database saves it, but the answer is lost on the way back.
+    page.evaluate("__db.dropReply = 1")
+    _fix(page, kind, 1, "Customer returned the goods", amount="120" if kind == "refund" else None)
+    page.wait_for_function("document.querySelector('#fMsg').textContent.includes('may or may not')")
+    req = page.evaluate("TCPDesk.fix().req")
+    assert page.evaluate(f"__db.payments.filter(p => p.kind === '{kind}').length") == 1
+    # Then the sign-in runs out on the retry, and the page is reloaded (as
+    # opening the sign-in email's link does): everything in memory is gone.
+    page.evaluate("__db.expired = true")
+    page.click("#fYes")
+    page.wait_for_selector("#signin:not([hidden])")
+    kept = page.evaluate("JSON.parse(localStorage.getItem('tcp-desk-op-u-f'))")
+    assert kept["req"] == req and kept["type"] == kind and kept["payId"] == 1
+    page.evaluate("__db.expired = false")
+    page.evaluate("sessionStorage.setItem('no-auto-sign-in', '1')"); page.reload()
+    assert page.evaluate("TCPDesk.fix()") is None, "a true reload: nothing left in memory"
+    page.wait_for_selector("#signin:not([hidden])")
+    page.fill("#email", FIN["email"]); page.click("#emailForm button")
+    page.wait_for_selector("#codeForm:not([hidden])"); page.fill("#code", "123456"); page.click("#codeForm button")
+    # The app goes to the invoice, finds the request in the database and
+    # shows the original receipt: nothing recorded twice.
+    _receipt_shown(page, "TCP-RCT-0003")
+    assert "already recorded" in page.text_content("#rMsg")
+    assert page.evaluate(f"__db.payments.filter(p => p.kind === '{kind}').length") == 1
+    assert page.evaluate("__db.payments.find(p => p.receipt_no === 'TCP-RCT-0003').request_id") == req
+    assert page.evaluate("localStorage.getItem('tcp-desk-op-u-f')") is None
+    page.click("#rInv"); page.wait_for_selector("#issuedSec:not([hidden])")
+    assert not page.locator("#opBox").is_visible() and page.locator("#payBtn").is_visible()
+    assert not errors
+
+
+def test_p15_sign_out_expiry_isolation_and_unknown_outcome(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/2")
+    _open_pay(page)
+    page.evaluate("__db.offline = true")
+    _pay(page, "100", "cash")
+    page.wait_for_function("document.querySelector('#pMsg').textContent.includes('No connection')")
+    # Cancel can't drop it while the outcome is unknown.
+    page.click("#pChange"); page.click("#pCancel")
+    page.wait_for_function("document.querySelector('#pMsg').textContent.includes(\"Can't cancel yet\")")
+    assert page.evaluate("TCPDesk.op()") is not None
+    # Reopening the invoice when the check can't reach the database:
+    # nothing new can be started, and "Check again" is offered.
+    page.evaluate("__db.offline = false; __db.offlineFor = ['byRequest']; location.hash = '#/invoices'")
+    page.wait_for_selector("#listV:not([hidden])")
+    page.evaluate("location.hash = '#/invoice/2'")
+    page.wait_for_selector("#opCheck:not([hidden])")
+    assert "Could not check" in page.text_content("#opMsg")
+    assert not page.locator("#payBtn").is_visible()
+    # Another invoice: told to check the first one, no Record payment.
+    page.evaluate("location.hash = '#/invoice/3'")
+    page.wait_for_selector("#opOpen:not([hidden])")
+    assert not page.locator("#payBtn").is_visible()
+    # Sign out warns first; "Sign out anyway" removes the note.
+    page.click("#signOut")
+    page.wait_for_selector("#soBox:not([hidden])")
+    assert "Signing out abandons it" in page.text_content("#soMsg") and page.locator("#tool").is_visible()
+    page.click("#soGo")
+    page.wait_for_selector("#signin:not([hidden])")
+    assert page.evaluate("localStorage.getItem('tcp-desk-op-u-owner')") is None
+    assert page.evaluate("__db.payments.length") == 2
+    # A note older than 24 hours is dropped.
+    page.evaluate("__db.offlineFor = []")
+    old = {"user": "u-owner", "at": 0, "type": "payment", "invoiceId": 2, "req": "11111111-1111-4111-8111-111111111111",
+           "amount": 100, "method": "cash", "ref": None, "date": "2026-11-01", "reason": None, "payId": None}
+    page.evaluate("o => localStorage.setItem('tcp-desk-op-u-owner', JSON.stringify(o))", old)
+    page.evaluate("o => localStorage.setItem('tcp-desk-op-u-f', JSON.stringify({...o, at: Date.now()}))", old)
+    # (The test's sign-in is restored on every load.)
+    page.evaluate("location.hash = '#/invoice/2'"); page.reload()
+    page.wait_for_selector("#payBtn:not([hidden])")
+    assert page.evaluate("localStorage.getItem('tcp-desk-op-u-owner')") is None, "over 24 hours: dropped"
+    assert not page.locator("#opBox").is_visible()
+    assert page.evaluate("__db.calls.filter(c => c === 'byRequest').length") == 0
+    assert not errors
+
+
+def test_p15b_another_staff_member_never_inherits_it(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/2", staff=TEAM, users=[OWNER, FIN, SALES], who=SALES)
+    fresh = {"user": "u-owner", "at": 0, "type": "payment", "invoiceId": 2, "req": "22222222-2222-4222-8222-222222222222",
+             "amount": 100, "method": "cash", "ref": None, "date": "2026-11-01", "reason": None, "payId": None}
+    # The owner's note, and a copy filed under the sales login but still
+    # naming the owner.
+    page.evaluate("o => { const now = {...o, at: Date.now()}; localStorage.setItem('tcp-desk-op-u-owner', JSON.stringify(now));"
+                  " localStorage.setItem('tcp-desk-op-u-s', JSON.stringify(now)); }", fresh)
+    page.reload(); page.wait_for_selector("#payBtn:not([hidden])")
+    assert not page.locator("#opBox").is_visible()
+    assert page.evaluate("localStorage.getItem('tcp-desk-op-u-s')") is None, "a note naming someone else is dropped"
+    assert page.evaluate("localStorage.getItem('tcp-desk-op-u-owner')") is not None, "the owner's own note is left for the owner"
+    assert not errors
+
+
+def test_p16_the_note_holds_nothing_about_the_customer(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/3", staff=TEAM, users=[OWNER, FIN, SALES], who=FIN)
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    page.evaluate("__db.offline = true")
+    _fix(page, "refund", 1, "Two bags returned", amount="50", method="mobile_money", ref="MP42")
+    page.wait_for_function("document.querySelector('#fMsg').textContent.includes('No connection')")
+    raw = page.evaluate("localStorage.getItem('tcp-desk-op-u-f')")
+    kept = json.loads(raw)
+    assert set(kept) == {"user", "at", "type", "invoiceId", "payId", "req", "amount", "method", "ref", "date", "reason"}
+    for private in ["Yaw", "Part", "233552331234", "552331234", "TCP-C-"]:
+        assert private not in raw, private
+    everything = page.evaluate("JSON.stringify(Object.fromEntries(Object.entries(localStorage)))")
+    assert "Yaw" not in everything and "552331234" not in everything
+    assert not errors
+
+
+
+@pytest.mark.parametrize("change", ["invoice", "kind", "payment", "amount"])
+def test_p17_request_id_match_alone_is_not_success(browser, change):
+    page, errors = _bo(browser, seed=MIX, route="#/invoices")
+    page.wait_for_selector("#listV:not([hidden])")
+    # A real refund of GH₵40 from TCP-RCT-0001 (invoice 3), request id R.
+    page.evaluate("""TCPDeskApi.refundPayment({p_payment_id: 1, p_amount: 40, p_method: 'cash', p_reason: 'r',
+        p_request_id: '33333333-3333-4333-8333-333333333333'})""")
+    note = {"user": "u-owner", "type": "refund", "invoiceId": 3, "payId": 1, "req": "33333333-3333-4333-8333-333333333333",
+            "amount": 40, "method": "cash", "ref": None, "date": None, "reason": "r"}
+    note.update({"invoice": {"invoiceId": 2}, "kind": {"type": "correction"}, "payment": {"payId": 2},
+                 "amount": {"amount": 41}}[change])
+    page.evaluate("o => localStorage.setItem('tcp-desk-op-u-owner', JSON.stringify({...o, at: Date.now()}))", note)
+    page.evaluate(f"location.hash = '#/invoice/{note['invoiceId']}'")
+    page.wait_for_function("document.querySelector('#opMsg').textContent.includes('matches a different record')")
+    assert "TCP-RCT-0003" in page.text_content("#opMsg")
+    assert not page.locator("#rcptSec").is_visible(), "not shown as its receipt"
+    assert not page.locator("#payBtn").is_visible() and page.locator("[data-fix]").count() == 0, "nothing new can be recorded"
+    assert page.evaluate("TCPDesk.op()") is not None
+    assert page.evaluate("__db.payments.length") == 3
     assert not errors

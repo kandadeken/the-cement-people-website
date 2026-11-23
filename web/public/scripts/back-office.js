@@ -20,6 +20,8 @@
      6. Saving and issuing     (the database functions); discarding a draft
      7. The PDF                (drawn from the issued record only)
      8. Sharing                (PDF + the message copied for the caption)
+     8b. Payments and receipts (phase 2: record, receipts, corrections,
+                               refunds)
      9. Screens and the address (Home, Invoices, one invoice, New invoice)
     10. Start
    =========================================================================== */
@@ -94,6 +96,15 @@ function supabaseApi(){
     saveDraft:a=>sb.rpc("save_draft_invoice",a).then(out),
     issue:id=>sb.rpc("issue_invoice",{p_invoice_id:id}).then(out),
     document:id=>sb.rpc("invoice_document",{p_invoice_id:id}).then(out),
+    // Phase 2: payments and receipts. Each takes a request id, made once when
+    // the form opens and kept for every retry, so the database never records
+    // the same payment twice (it returns the first receipt instead).
+    recordPayment:a=>sb.rpc("record_payment",a).then(out),
+    correctPayment:a=>sb.rpc("correct_payment",a).then(out),
+    refundPayment:a=>sb.rpc("refund_payment",a).then(out),
+    receipt:id=>sb.rpc("receipt_document",{p_payment_id:id}).then(out),
+    // Was this request recorded? The receipt it made, or null.
+    byRequest:req=>sb.from("payments").select("id,receipt_no,kind,invoice_id,reverses_payment_id,amount").eq("request_id",req).maybeSingle().then(out),
     // Discarding a draft = the owner-only cancel_invoice (kept, with a reason).
     cancel:(id,reason)=>sb.rpc("cancel_invoice",{p_invoice_id:id,p_reason:reason}).then(out),
     // The Home figures, worked out by the database (back_office_home).
@@ -171,7 +182,7 @@ async function enter(){
   }
   if(!st){
     // Not (or no longer) staff: nothing of TCP's stays on this phone.
-    try{localStorage.removeItem("tcp-desk-work-"+u.id)}catch(e){}
+    try{localStorage.removeItem("tcp-desk-work-"+u.id);localStorage.removeItem("tcp-desk-op-"+u.id)}catch(e){}
     ME=null;screen("noaccess");$("#noEmail").textContent=u.email||"";return;
   }
   ME={id:u.id,name:st.full_name,role:st.role};
@@ -181,7 +192,12 @@ async function enter(){
   ["#tabNew","#hNew","#newBtn2"].forEach(s=>show(s,canEdit()));
   try{PRODUCTS=await api.products()||[];if(!PRODUCTS.length)await stillStaff();}
   catch(err){const k=kind(err);if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");if(k==="expired")return expire();}
-  fillAdd();screen("tool");restore();await route();
+  fillAdd();screen("tool");restore();
+  // An operation left unconfirmed (e.g. the sign-in ran out while it was
+  // being recorded): go straight to its invoice, where it is checked.
+  const op=pendingOp();
+  if(op)history.replaceState(null,"",location.pathname+location.search+"#/invoice/"+op.invoiceId);
+  await route();
 }
 // Plain reads (the price list, a phone lookup) come back EMPTY rather than
 // refused once someone's access is removed. So an empty answer is checked:
@@ -192,7 +208,7 @@ async function stillStaff(){await api.myStaff();}
 // (Design v2.1, point C).
 async function revoke(why){
   const key=draftKey();
-  try{localStorage.removeItem(key)}catch(e){}
+  try{localStorage.removeItem(key);dropOp()}catch(e){}
   await leave(why||"You have been signed out.");
 }
 // The sign-in ran out (not the same as access removed): the unsaved work
@@ -208,12 +224,21 @@ async function leave(why){
   S=blank();DOC=null;ME=null;PRODUCTS=[];NOTE="";LOOKED="";HERE="#/";
   ["#items","#issued","#matches","#custPicked","#rows","#recent","#viewLines","#unsavedNote"].forEach(s=>{const el=$(s);if(el)el.innerHTML="";});
   ["#hOwed","#hUnpaid","#hPart","#hOverdue","#hDrafts"].forEach(s=>{$(s).textContent="—";});
-  ["#guard","#discardBox","#copyBox"].forEach(s=>show(s,false));
+  ["#guard","#discardBox","#copyBox","#rCopyBox"].forEach(s=>show(s,false));
+  PAY=null;FIX=null;RDOC=null;show("#soBox",false);["#payList","#rcpt"].forEach(s=>{$(s).innerHTML="";});
   ["#paste","#cName","#cPhone"].forEach(s=>{const el=$(s);if(el)el.value="";});
   screen("signin");$("#signMsg").textContent=why;
   try{await api.signOut();}catch(e){}
 }
-$("#signOut").addEventListener("click",()=>revoke("Signed out."));
+// Signing out removes an unconfirmed payment, correction or refund from this
+// phone, so it warns first.
+$("#signOut").addEventListener("click",()=>{const op=pendingOp();
+  // (A second tap on Sign out, with the warning showing, signs out.)
+  if(op&&$("#soBox").hidden){$("#soMsg").textContent=`A ${OP_WORD[op.type]} of ${money(toP(op.amount))} has not been confirmed as recorded. Signing out abandons it: open its invoice first to check it.`;
+    $("#soOpen").href="#/invoice/"+op.invoiceId;show("#soBox",true);return;}
+  revoke("Signed out.");});
+$("#soGo").addEventListener("click",()=>{show("#soBox",false);revoke("Signed out.");});
+$("#soOpen").addEventListener("click",()=>show("#soBox",false));
 $("#noSignOut").addEventListener("click",()=>revoke("Signed out."));
 
 // ---- 4. Reading the estimate (unchanged from PR #31) -------------------------
@@ -564,7 +589,7 @@ $("#issueBtn").addEventListener("click",async()=>{
 // finance) is shown read-only, with Share and PDF for an issued one.
 async function openInvoice(id){
   let doc;
-  try{doc=await api.document(id);}catch(err){view("#invV");showOnly("#issuedSec");$("#viewTitle").textContent="Invoice";$("#issued").innerHTML="";$("#viewLines").innerHTML="";show("#shareRow",false);show("#shareHelp",false);return readFailed(err,"#iMsg");}
+  try{doc=await api.document(id);}catch(err){view("#invV");showOnly("#issuedSec");$("#viewTitle").textContent="Invoice";$("#issued").innerHTML="";$("#viewLines").innerHTML="";show("#shareRow",false);show("#shareHelp",false);show("#payBox",false);return readFailed(err,"#iMsg");}
   if(doc.state==="draft"&&canEdit()){S=fromDraft(doc);showForm();return;}
   showView(doc);
 }
@@ -594,6 +619,7 @@ function showView(doc){
   $("#viewLines").innerHTML=(doc.lines||[]).map((l,i)=>`<div class="dk-vline"><span>${i+1}. ${esc(l.description)}<small>${fmtQ(l.quantity)} ${esc(UNIT_WORD(l.unit,l.quantity)||l.unit||"")} × ${money(toP(l.unit_price))}</small></span><b>${+l.unit_price===0&&l.kind==="product"?"Free item":money(toP(l.line_total))}</b></div>`).join("");
   $("#iMsg").textContent="";show("#copyBox",false);
   show("#shareRow",issued);show("#shareHelp",issued);
+  showPayments(doc);
   $("#shareBtn").disabled=!issued;$("#pdfBtn").disabled=!issued;
 }
 function fromDraft(doc){
@@ -806,6 +832,382 @@ $("#discardYes").addEventListener("click",async()=>{
   finally{busy(btn,false);}
 });
 
+// ---- 8b. Payments and receipts (phase 2) -----------------------------------
+// "TCP Back Office: Phase 2 Design, Payments and Receipts (v1)", approved by
+// ChatGPT and Daniel on 23 Nov 2026 (GitHub issue #39). The database does
+// the money work: record_payment never takes more than is owed, numbers each
+// receipt (TCP-RCT-0001…) and stores the balance after it; corrections and
+// refunds are new receipts with a reason, never edits. This section only
+// asks, and shows what the database says.
+//   Who: anyone on the staff records a payment (decision 1); only the owner
+//   and finance correct or refund (the database refuses anyone else).
+const METHOD={mobile_money:"Mobile Money",cash:"Cash",bank_transfer:"Bank transfer"};
+const REF_HINT={mobile_money:"MoMo transaction ID",bank_transfer:"bank reference",cash:"optional"};
+const canFix=()=>!!ME&&(ME.role==="owner"||ME.role==="finance");
+const canPay=()=>!!ME&&["owner","sales","finance"].includes(ME.role);
+// Signed money: refunds and corrections are stored below zero.
+const smoney=p=>p<0?"−"+money(-p):money(p);
+let PAY=null,FIX=null,RDOC=null;
+// -- The unfinished operation kept on this phone (Phase 2 design, amended
+//    23 Nov 2026, "Option B", approved by Daniel and ChatGPT).
+// When "Record it" is tapped, a payment, correction or refund is noted on
+// this phone BEFORE it is sent, and removed once the database has answered.
+// If the answer never comes (no connection, the reply lost, the sign-in ran
+// out), the note keeps its request id, so the app can ask the database later
+// whether it was recorded: if so it shows the original receipt, if not it
+// offers the same operation again under the SAME request id. A new request
+// id is never made while the outcome is unknown, so nothing is recorded
+// twice. The note is temporary recovery data, never a financial record (the
+// database is the only ledger). It holds only: invoice id, request id, kind,
+// the payment it reverses, amount, method, reference, date and the reason
+// (needed for the database to recognise the same request). No customer name
+// or phone. It belongs to one staff member, and is removed on success,
+// Cancel, sign-out, removed access, or after 24 hours.
+const OP_TTL=24*60*60*1000;
+const opKey=()=>"tcp-desk-op-"+(ME?ME.id:"");
+const OP_WORD={payment:"payment",correction:"correction",refund:"refund"};
+let RNOTE="";   // shown on the next receipt (e.g. "already recorded")
+function pendingOp(){if(!ME)return null;let o=null;
+  try{o=JSON.parse(localStorage.getItem(opKey())||"null")}catch(e){}
+  if(o&&(o.user!==ME.id||!(Date.now()-o.at<OP_TTL))){dropOp();return null;}
+  return o;}
+function keepOp(o){if(!ME)return;const was=pendingOp();
+  try{localStorage.setItem(opKey(),JSON.stringify({user:ME.id,at:was&&was.req===o.req?was.at:Date.now(),
+    type:o.type,invoiceId:o.invoiceId,payId:o.payId||null,req:o.req,amount:o.amount,method:o.method,
+    ref:o.ref||null,date:o.date||null,reason:o.reason||null}))}catch(e){}}
+function dropOp(){try{localStorage.removeItem(opKey())}catch(e){}}
+// A database refusal carries a Postgres error code: then nothing was saved.
+// Any other failure leaves the outcome unknown.
+const definite=e=>kind(e)==="refused"&&/^[0-9A-Z]{5}$/.test(String(e&&e.code||""));
+// Ask the database whether this operation was recorded. A row with the same
+// request id counts only if it is the SAME operation: invoice, kind, the
+// payment it reverses and the amount must all match. Anything else is not
+// taken as success, and nothing new is recorded (the database would refuse
+// that request id for a different operation anyway).
+async function recorded(op){
+  const r=await api.byRequest(op.req);if(!r)return null;
+  const same=+r.invoice_id===+op.invoiceId&&r.kind===op.type&&(r.reverses_payment_id==null?null:+r.reverses_payment_id)===(op.payId==null?null:+op.payId)
+    &&Math.abs(Math.abs(toP(r.amount))-Math.abs(toP(op.amount)))===0;
+  if(!same)throw Object.assign(new Error(`This request matches a different record (${r.receipt_no}), so it was not taken as recorded and nothing new was recorded. Ask the owner to check ${r.receipt_no}.`),{mismatch:true});
+  return r;}
+
+// The invoice's receipts, oldest first, with Correct and Refund where they
+// still apply (the database works out "corrected" and "refunded").
+function showPayments(doc){
+  const pays=doc.payments||[],issued=doc.state==="issued",op=pendingOp();
+  show("#payBox",issued||pays.length>0);
+  $("#payList").innerHTML=pays.length?pays.map(p=>{
+    const amt=toP(p.amount),what=p.kind==="payment"?"Payment":p.kind==="correction"?`Correction of ${esc(p.reverses_receipt_no||"")}`:`Refund of ${esc(p.reverses_receipt_no||"")}`;
+    const refunded=toP(p.refunded||0),left=amt-refunded;
+    const flag=p.kind!=="payment"?"":p.corrected?"corrected":refunded>0?`${money(refunded)} refunded`:"";
+    const acts=p.kind==="payment"&&canFix()&&!p.corrected&&!op?
+      `<span class="dk-pay-acts">${refunded===0?`<button type="button" class="dk-link" data-fix="correction" data-pid="${p.id}">Correct</button>`:""}${left>0?`<button type="button" class="dk-link" data-fix="refund" data-pid="${p.id}">Refund</button>`:""}</span>`:"";
+    return`<div class="dk-pay"><a href="#/receipt/${p.id}" data-rid="${p.id}">
+      <span class="dk-pay-top"><b>${esc(p.receipt_no)}</b><b class="${amt<0?"neg":""}">${smoney(amt)}</b></span>
+      <span class="dk-pay-bot"><small>${what} · ${shortDate(p.paid_on)} · ${esc(METHOD[p.method]||p.method)}${p.reference?" · ref "+esc(p.reference):""}</small><small>left ${money(toP(p.balance_after))}</small></span>
+      ${flag?`<span class="dk-pay-flag">${flag}</span>`:""}</a>${acts}</div>`;}).join(""):`<p class="dk-help">No payments yet.</p>`;
+  $("#paySum").innerHTML=issued||pays.length?`<span>Paid ${money(toP(doc.paid))}</span><span>Left ${money(toP(doc.balance))}</span>`:"";
+  // While an operation's outcome is unknown, nothing new can be started.
+  show("#payBtn",issued&&toP(doc.balance)>0&&canPay()&&!op);
+  show("#opBox",!!op);show("#opCheck",false);show("#opOpen",false);
+  if(op&&op.invoiceId!==doc.id){show("#payBox",true);
+    $("#opMsg").textContent=`A ${OP_WORD[op.type]} of ${money(toP(op.amount))} on another invoice has not been confirmed yet. Open that invoice to check it before recording anything new.`;
+    $("#opOpen").href="#/invoice/"+op.invoiceId;show("#opOpen",true);}
+  else if(op)checkOp(op);
+}
+// Ask the database whether a kept operation was recorded.
+async function checkOp(op){
+  const w=OP_WORD[op.type],amt=money(toP(op.amount));
+  $("#opMsg").textContent=`Checking whether the ${w} of ${amt} was recorded…`;show("#opCheck",false);
+  let r;
+  try{r=await recorded(op);}
+  catch(err){if(err.mismatch){$("#opMsg").textContent=err.message;return;}
+    const k=kind(err);
+    if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+    if(k==="expired")return expire();
+    $("#opMsg").textContent=`Could not check whether the ${w} of ${amt} was recorded${k==="offline"?": no connection":""}. Nothing new can be recorded on this invoice until it is checked.`;
+    show("#opCheck",true);return;}
+  if(r){dropOp();RNOTE=`This ${w} was already recorded. Here is its receipt.`;return go("#/receipt/"+r.id);}
+  // Not recorded: offer it again under the same request id.
+  if(op.type==="payment"){if(DOC&&DOC.state==="issued"&&canPay())return openPay(op);}
+  else{const pay=DOC&&(DOC.payments||[]).find(x=>x.id===op.payId);if(pay&&canFix())return openFix(op.type,pay,op);}
+  dropOp();if(DOC)showView(DOC);
+}
+$("#opCheck").addEventListener("click",()=>{const op=pendingOp();if(op)checkOp(op);else if(DOC)showView(DOC);});
+// Send a money operation. A retry of one whose outcome is unknown first
+// asks the database, and gives back the original receipt if it was saved.
+async function sendOp(op,state,call){
+  if(state.sent){const r=await recorded(op);if(r)return{r,again:true};}
+  keepOp(op);state.sent=true;
+  return{r:await call(),again:false};}
+function opDone({r,again}){dropOp();PAY=null;FIX=null;
+  if(again)RNOTE=`This ${OP_WORD[r.kind]||"payment"} was already recorded. Here is its receipt.`;
+  return go("#/receipt/"+r.id);}
+// Errors while recording money: removed access signs out (and clears the
+// note); an expired sign-in keeps the note for after signing in; a database
+// refusal means nothing was saved; anything else leaves the outcome
+// unknown, and the retry asks the database first.
+async function opFailed(err,state,where){const k=kind(err);
+  if(err&&err.mismatch){$(where).textContent=err.message;return;}
+  if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+  if(k==="expired")return expire();
+  if(definite(err)&&/request id was already used/.test(err.message||"")){
+    const op=pendingOp();
+    try{const r=op&&op.req===state.req&&await recorded(op);if(r)return opDone({r,again:true});}
+    catch(e){if(e.mismatch){$(where).textContent=e.message;return;}}}
+  if(definite(err)){dropOp();state.sent=false;$(where).textContent="Not recorded: "+String(err.message||err);return;}
+  $(where).textContent=k==="offline"
+    ?"No connection: it may or may not have been recorded. Tap Record it again when you have signal: it is checked first, and never recorded twice."
+    :"Could not confirm it was recorded. Tap Record it again: it is checked first, and never recorded twice.";}
+// Cancel: an operation that was sent with no answer is checked first.
+async function cancelOp(state,where,close){
+  if(state&&state.sent){let r;
+    const op=pendingOp();
+    try{r=op&&op.req===state.req?await recorded(op):await api.byRequest(state.req);}
+    catch(err){if(err.mismatch){$(where).textContent=err.message;return;}
+      const k=kind(err);if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+      if(k==="expired")return expire();
+      $(where).textContent="Can't cancel yet: it could not be checked whether this was recorded. Try again when you have signal.";return;}
+    if(r)return opDone({r,again:true});}
+  dropOp();close();}
+
+// -- Recording a payment (design section 3)
+function openPay(kept){
+  const doc=DOC;if(!doc)return;
+  // One request id per payment, made when the form opens, kept for every
+  // retry (double tap, no connection, lost reply) until it is recorded.
+  PAY=kept?{invoiceId:kept.invoiceId,req:kept.req,amt:(+kept.amount).toFixed(2),method:kept.method,ref:kept.ref||"",date:kept.date||today(),sent:false}
+    :{invoiceId:doc.id,req:newId(),amt:"",method:"",ref:"",date:today(),sent:false};
+  showOnly("#payForm");
+  $("#payFor").textContent=`${doc.invoice_no} · ${doc.billed_to_name||""} · left to pay ${money(toP(doc.balance))}`;
+  $("#pAmt").value=PAY.amt;$("#pRef").value=PAY.ref;$("#pDate").value=PAY.date;$("#pDate").max=today();
+  document.querySelectorAll('input[name="pm"]').forEach(r=>r.checked=r.value===PAY.method);
+  ["#pAmtErr","#pErr"].forEach(e=>{$(e).textContent="";});
+  $("#pMsg").textContent=kept?"This payment was not recorded. Check it, then tap Continue and Record it.":"";
+  show("#payFields",true);show("#pConfirm",false);refLabel("#pRefLabel",PAY.method);
+  window.scrollTo(0,0);
+}
+function refLabel(sel,m){$(sel).textContent="Reference"+(m?` (${REF_HINT[m]})`:"");}
+function payProblems(){
+  const doc=DOC,out={};const v=typedNum(PAY.amt),p=isNaN(v)?NaN:toP(v),bal=toP(doc.balance);
+  if(!String(PAY.amt).trim())out.amt="Enter the amount received.";
+  else if(isNaN(p))out.amt="Enter a number.";
+  else if(p<=0)out.amt="The amount must be more than GH₵0.00.";
+  else if(p>bal)out.amt=`That is more than the ${money(bal)} left to pay.`;
+  if(!PAY.method)out.rest="Choose how it was paid.";
+  else if(PAY.method!=="cash"&&!PAY.ref.trim())out.rest=`Enter the ${REF_HINT[PAY.method]}.`;
+  else if(!PAY.date)out.rest="Enter the date paid.";
+  else if(PAY.date>today())out.rest="The date paid can't be in the future.";
+  return{out,p};}
+["#pAmt","#pRef","#pDate"].forEach(sel=>$(sel).addEventListener("input",()=>{if(!PAY)return;
+  PAY.amt=$("#pAmt").value;PAY.ref=$("#pRef").value;PAY.date=$("#pDate").value;
+  $("#pAmtErr").textContent="";$("#pErr").textContent="";}));
+document.querySelectorAll('input[name="pm"]').forEach(r=>r.addEventListener("change",()=>{if(!PAY)return;
+  PAY.method=r.value;refLabel("#pRefLabel",PAY.method);$("#pErr").textContent="";}));
+$("#pFull").addEventListener("click",()=>{if(!PAY||!DOC)return;PAY.amt=(toP(DOC.balance)/100).toFixed(2);$("#pAmt").value=PAY.amt;$("#pAmtErr").textContent="";});
+$("#payBtn").addEventListener("click",()=>openPay(null));
+$("#pCancel").addEventListener("click",()=>cancelOp(PAY,"#pMsg",()=>{PAY=null;if(DOC)showView(DOC);}));
+$("#pNext").addEventListener("click",()=>{
+  const{out,p}=payProblems();$("#pAmtErr").textContent=out.amt||"";$("#pErr").textContent=out.rest||"";
+  if(out.amt||out.rest)return;
+  // Confirm before saving: a receipt number is permanent.
+  $("#pSummary").textContent=`${money(p)} by ${METHOD[PAY.method]}${PAY.ref.trim()?" (ref "+PAY.ref.trim()+")":""} for ${DOC.invoice_no}, paid ${shortDate(PAY.date)}. Balance after: ${money(toP(DOC.balance)-p)}.`;
+  show("#payFields",false);show("#pConfirm",true);$("#pMsg").textContent="";});
+$("#pChange").addEventListener("click",()=>{show("#pConfirm",false);show("#payFields",true);});
+$("#pYes").addEventListener("click",async()=>{
+  const btn=$("#pYes");if(btn.disabled||!PAY)return;
+  const{p}=payProblems(),st=PAY;busy(btn,true,"Recording…");$("#pMsg").textContent="";
+  const op={type:"payment",invoiceId:st.invoiceId,req:st.req,amount:p/100,method:st.method,ref:st.ref.trim(),date:st.date};
+  try{await opDone(await sendOp(op,st,()=>api.recordPayment({p_invoice_id:st.invoiceId,p_amount:p/100,p_method:st.method,
+      p_reference:st.ref.trim()||null,p_paid_on:st.date,p_request_id:st.req})));}
+  catch(err){await opFailed(err,st,"#pMsg");}
+  finally{busy(btn,false);}
+});
+
+// -- Correcting or refunding a payment (design section 6, owner and finance)
+document.addEventListener("click",e=>{const b=e.target.closest("[data-fix]");if(!b||!DOC)return;
+  const pay=(DOC.payments||[]).find(x=>x.id===+b.dataset.pid);if(pay)openFix(b.dataset.fix,pay,null);});
+function openFix(kindName,pay,kept){
+  FIX={kind:kindName,pay,req:kept?kept.req:newId(),amt:kept&&kindName==="refund"?(+kept.amount).toFixed(2):"",
+    method:kept&&kindName==="refund"?kept.method:"",ref:kept&&kept.ref||"",why:kept&&kept.reason||"",sent:false};
+  showOnly("#fixForm");
+  const left=toP(pay.amount)-toP(pay.refunded||0);
+  $("#fixTitle").textContent=kindName==="correction"?"Correct a payment":"Refund a payment";
+  $("#fixFor").textContent=kindName==="correction"
+    ?`Reverses all of ${pay.receipt_no} (${money(toP(pay.amount))} by ${METHOD[pay.method]}). Use it when the payment was recorded wrongly; then record the right payment.`
+    :`From ${pay.receipt_no} (${money(toP(pay.amount))} by ${METHOD[pay.method]}). Up to ${money(left)} can be refunded.`;
+  show("#fixMoney",kindName==="refund");
+  $("#fAmt").value=FIX.amt;$("#fRef").value=FIX.ref;$("#fWhy").value=FIX.why;
+  document.querySelectorAll('input[name="fm"]').forEach(r=>r.checked=r.value===FIX.method);
+  refLabel("#fRefLabel",FIX.method);$("#fErr").textContent="";
+  $("#fMsg").textContent=kept?`This ${OP_WORD[kindName]} was not recorded. Check it, then tap Continue and Record it.`:"";
+  show("#fixFields",true);show("#fConfirm",false);window.scrollTo(0,0);
+}
+function fixProblems(){const out=[];let p=0;
+  if(FIX.kind==="refund"){const left=toP(FIX.pay.amount)-toP(FIX.pay.refunded||0),v=typedNum(FIX.amt);p=isNaN(v)?NaN:toP(v);
+    if(!String(FIX.amt).trim())out.push("Enter the amount refunded.");else if(isNaN(p))out.push("Enter a number.");
+    else if(p<=0)out.push("The amount must be more than GH₵0.00.");else if(p>left)out.push(`At most ${money(left)} can be refunded from ${FIX.pay.receipt_no}.`);
+    if(!FIX.method)out.push("Choose how it was given back.");else if(FIX.method!=="cash"&&!FIX.ref.trim())out.push(`Enter the ${REF_HINT[FIX.method]}.`);}
+  else p=toP(FIX.pay.amount);
+  if(!FIX.why.trim())out.push("Give a reason: it is kept with the record.");
+  return{out,p};}
+["#fAmt","#fRef","#fWhy"].forEach(sel=>$(sel).addEventListener("input",()=>{if(!FIX)return;
+  FIX.amt=$("#fAmt").value;FIX.ref=$("#fRef").value;FIX.why=$("#fWhy").value;$("#fErr").textContent="";}));
+document.querySelectorAll('input[name="fm"]').forEach(r=>r.addEventListener("change",()=>{if(!FIX)return;FIX.method=r.value;refLabel("#fRefLabel",r.value);}));
+$("#fAll").addEventListener("click",()=>{if(!FIX)return;FIX.amt=((toP(FIX.pay.amount)-toP(FIX.pay.refunded||0))/100).toFixed(2);$("#fAmt").value=FIX.amt;});
+$("#fCancel").addEventListener("click",()=>cancelOp(FIX,"#fMsg",()=>{FIX=null;if(DOC)showView(DOC);}));
+$("#fNext").addEventListener("click",()=>{const{out,p}=fixProblems();$("#fErr").textContent=out.join(" ");if(out.length)return;
+  const after=toP(DOC.balance)+p;
+  $("#fSummary").textContent=FIX.kind==="correction"
+    ?`Reverse ${FIX.pay.receipt_no} (${money(p)}) because: ${FIX.why.trim()}. Balance after: ${money(after)}.`
+    :`Refund ${money(p)} by ${METHOD[FIX.method]} from ${FIX.pay.receipt_no} because: ${FIX.why.trim()}. Balance after: ${money(after)}.`;
+  show("#fixFields",false);show("#fConfirm",true);$("#fMsg").textContent="";});
+$("#fChange").addEventListener("click",()=>{show("#fConfirm",false);show("#fixFields",true);});
+$("#fYes").addEventListener("click",async()=>{
+  const btn=$("#fYes");if(btn.disabled||!FIX)return;const{p}=fixProblems(),st=FIX;
+  busy(btn,true,"Recording…");$("#fMsg").textContent="";
+  const corr=st.kind==="correction",why=st.why.trim();
+  const op={type:st.kind,invoiceId:DOC.id,payId:st.pay.id,req:st.req,amount:p/100,method:corr?st.pay.method:st.method,
+    ref:corr?null:st.ref.trim(),reason:why};
+  try{await opDone(await sendOp(op,st,()=>corr
+      ?api.correctPayment({p_payment_id:st.pay.id,p_reason:why,p_request_id:st.req})
+      :api.refundPayment({p_payment_id:st.pay.id,p_amount:p/100,p_method:st.method,p_reason:why,
+          p_reference:st.ref.trim()||null,p_request_id:st.req})));}
+  catch(err){await opFailed(err,st,"#fMsg");}
+  finally{busy(btn,false);}
+});
+
+// -- One receipt (design section 4): read from receipt_document, which is
+//    frozen at the moment it was recorded.
+const RTITLE={payment:"Receipt",correction:"Correction",refund:"Refund"};
+async function showReceipt(id){
+  showOnly("#rcptSec");$("#rcpt").innerHTML="";$("#rMsg").textContent="";show("#rCopyBox",false);
+  const note=RNOTE;RNOTE="";
+  let rd;try{rd=await api.receipt(id);}catch(err){return readFailed(err,"#rMsg");}
+  $("#rMsg").textContent=note;
+  RDOC={...rd,id};const inv=rd.invoice||{},amt=toP(rd.amount),bal=toP(rd.balance_after),full=rd.kind==="payment"&&bal===0;
+  $("#rTitle").textContent=`${RTITLE[rd.kind]||"Receipt"} ${rd.receipt_no}`;
+  const row=(k,v)=>v?`<div><span>${k}</span><b>${esc(v)}</b></div>`:"";
+  $("#rcpt").innerHTML=`${full?`<span class="dk-paidfull">PAID IN FULL</span>`:""}<div class="dk-sum">
+    ${row("Invoice",inv.invoice_no)}
+    ${row(rd.kind==="payment"?"Received from":"Customer",[inv.billed_to_name,inv.billed_to_phone].filter(Boolean).join(" · "))}
+    ${row("Date",rd.paid_on?dateText(rd.paid_on):"")}
+    ${row(rd.kind==="payment"?"Amount received":rd.kind==="refund"?"Amount refunded":"Amount reversed",smoney(amt))}
+    ${row("Method",METHOD[rd.method]||rd.method)}
+    ${row("Reference",rd.reference||"")}
+    ${row("Reverses",rd.reverses_receipt_no||"")}
+    ${row("Reason",rd.reason||"")}
+    ${row("Invoice total",money(toP(inv.total)))}
+    ${row("Paid before this receipt",money(toP(rd.paid_before)))}
+    ${row("Recorded by",rd.recorded_by||"")}
+    <div class="dk-total"><span>Balance after</span><b>${money(bal)}</b></div></div>`;
+  // A correction is internal: a PDF, but no Share (decision 5).
+  const internal=rd.kind==="correction";
+  show("#rShare",!internal);show("#rInternal",internal);
+  $("#rInv").href="#/invoice/"+inv.id;
+}
+function waReceiptText(rd){const inv=rd.invoice||{},first=String(inv.billed_to_name||"").trim().split(/\s+/)[0]||"",bal=toP(rd.balance_after);
+  const what=rd.kind==="refund"?"refund receipt":"receipt";
+  return`Hello${first?" "+first:""}, here is your ${what} ${rd.receipt_no} for ${money(Math.abs(toP(rd.amount)))} on invoice ${inv.invoice_no}. `
+    +(rd.kind==="payment"&&bal===0?`Invoice ${inv.invoice_no} is now paid in full. Thank you.`:`Balance: ${money(bal)}.`);}
+const receiptFileName=rd=>`TCP Receipt ${rd.receipt_no}.pdf`;
+// Re-read before every PDF, as for invoices (and a removed staff member
+// gets nothing).
+async function freshReceipt(){const rd=await api.receipt(RDOC.id);RDOC={...rd,id:RDOC.id};return RDOC;}
+async function receiptFile(rd){const pdf=await makeReceiptPdf(rd);return new File([pdf.output("blob")],receiptFileName(rd),{type:"application/pdf"});}
+$("#rCopyBtn").addEventListener("click",async()=>{const ta=$("#rCopyText");ta.select();
+  let ok=await copyText(ta.value);if(!ok){try{ok=document.execCommand("copy");}catch(e){}}
+  $("#rMsg").textContent=ok?"Message copied. Paste it in WhatsApp.":"Select the message above and copy it.";});
+$("#rShare").addEventListener("click",async()=>{
+  const btn=$("#rShare"),m=$("#rMsg");show("#rCopyBox",false);m.textContent="";
+  if(!RDOC||RDOC.kind==="correction")return;
+  const copied=copyText(waReceiptText(RDOC));
+  busy(btn,true,"Preparing PDF…");
+  try{const rd=await freshReceipt(),file=await receiptFile(rd),text=waReceiptText(rd);
+    let note;
+    if(await copied)note="Message copied. In WhatsApp, paste it as the caption before sending.";
+    else{$("#rCopyText").value=text;show("#rCopyBox",true);note="Copy the message below, then paste it in WhatsApp as the caption.";}
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      m.textContent=note;
+      // The PDF only, as for invoices (E-01): the message is pasted once.
+      try{await navigator.share({files:[file],title:file.name});}catch(e){if(e.name!=="AbortError")throw e;}
+    }else{download(file);const to=waNumber((rd.invoice||{}).billed_to_phone);
+      if(to)window.open("https://wa.me/"+to+"?text="+encodeURIComponent(text),"_blank","noopener");
+      m.textContent="This browser cannot share files: the PDF was downloaded. Attach it in the WhatsApp chat. "+note;}
+  }catch(e){kind(e)==="refused"?(m.textContent="Could not prepare the receipt: "+(e.message||e)):failed(e,"#rMsg");}
+  finally{busy(btn,false);}});
+$("#rPdf").addEventListener("click",async()=>{const btn=$("#rPdf"),m=$("#rMsg");busy(btn,true,"Preparing PDF…");
+  try{download(await receiptFile(await freshReceipt()));m.textContent="Receipt PDF downloaded.";}
+  catch(e){kind(e)==="refused"?(m.textContent="Could not prepare the receipt: "+(e.message||e)):failed(e,"#rMsg");}
+  finally{busy(btn,false);}});
+
+// The receipt PDF (A4), in the invoice's look. Every figure is the
+// database's, as recorded at that moment: "paid before" and the balance
+// after do not change when later payments come in.
+async function makeReceiptPdf(rd){
+  const{jsPDF,logo}=await pdfKit(),F=window.TCP_PDF_FONTS,inv=rd.invoice||{};
+  const pdf=new jsPDF({unit:"mm",format:"a4",compress:true});
+  [["r","normal"],["s","semibold"],["x","bold"]].forEach(([k,st])=>{pdf.addFileToVFS(`M-${k}.ttf`,F[k]);pdf.addFont(`M-${k}.ttf`,"Montserrat",st);});
+  const title=(RTITLE[rd.kind]||"Receipt").toUpperCase();
+  pdf.setProperties({title:`${B.name} ${title} ${rd.receipt_no}`,author:B.name,creator:"TCP Back Office"});
+  const INK="#131514",MUTE="#5a5a5a",LINE="#dcdcdc",OCHRE="#ff9802",BAND="#f4f4f4",GREEN="#1e6b34";
+  const L=14,R=196,W=R-L,TOP=16,pt=n=>n*0.3528;
+  const font=(st,size,col)=>{pdf.setFont("Montserrat",st);pdf.setFontSize(size);pdf.setTextColor(col||INK);};
+  const txt=(str,x,y,o={})=>{const sp=o.sp||0,w=pdf.getTextWidth(str)+sp*Math.max(0,str.length-1);
+    pdf.text(str,o.right?x-w:x,y,{baseline:"top",charSpace:sp});return w;};
+  const wrap=(str,w)=>pdf.splitTextToSize(str,w);
+  const amt=toP(rd.amount),bal=toP(rd.balance_after),full=rd.kind==="payment"&&bal===0;
+  // The PDF font has no "−" (U+2212), so the PDF uses an ordinary minus:
+  // a reversed amount must never print as if money came in.
+  const pmoney=p=>p<0?"-"+money(-p):money(p);
+  // -- Header
+  pdf.addImage(logo,"PNG",L,TOP,13*5.92329,13);
+  font("bold",17);txt(title,R,TOP,{right:1,sp:pt(17)*.08});
+  const dl=[["Receipt no.",rd.receipt_no],["Date",dateText(rd.paid_on)],["Invoice no.",inv.invoice_no||""]];
+  font("bold",9);const vw=Math.max(...dl.map(r=>pdf.getTextWidth(r[1])));
+  let y=TOP+8.5;
+  dl.forEach(([k,v])=>{font("bold",9);txt(v,R,y,{right:1});font("normal",9,MUTE);txt(k,R-vw-4,y,{right:1});y+=4.3;});
+  y=Math.max(TOP+13,y)+4.5;
+  pdf.setFillColor(INK);pdf.rect(L,y,W,.8,"F");pdf.setFillColor(OCHRE);pdf.rect(L,y,28,.8,"F");y+=.8+4.5;
+  // -- Grey band: who, how, from
+  const how=`${METHOD[rd.method]||rd.method}${rd.reference?`\nRef ${rd.reference}`:""}`;
+  const cols=[[rd.kind==="payment"?"Received from":"Customer",[inv.billed_to_name,inv.billed_to_phone].filter(Boolean).join("\n")],
+    [rd.kind==="payment"?"Paid by":rd.kind==="refund"?"Refunded by":"Method",how],["From",`${B.name}\n${B.phone} (call or WhatsApp)\n${B.website}\n${B.town}`]];
+  const inner=W-.8-7,gap=6,unitW=(inner-2*gap)/3.7,cw=[1.5,1,1.2].map(r=>r*unitW);
+  font("semibold",8.5);const lh=pt(8.5)*1.45;
+  const lines=cols.map((c,i)=>c[1].split("\n").flatMap(l=>wrap(l,cw[i])));
+  const bandH=3+pt(7)*1.2+.6+Math.max(...lines.map(l=>l.length))*lh+3;
+  pdf.setFillColor(BAND);pdf.rect(L,y,W,bandH,"F");pdf.setFillColor(OCHRE);pdf.rect(L,y,.8,bandH,"F");
+  let x=L+.8+3.5;
+  cols.forEach((c,i)=>{font("bold",7,MUTE);txt(c[0].toUpperCase(),x,y+3,{sp:pt(7)*.1});
+    font("semibold",8.5);lines[i].forEach((l,j)=>txt(l,x,y+3+pt(7)*1.2+.6+j*lh));x+=cw[i]+gap;});
+  y+=bandH+8;
+  // -- The amount, large
+  font("bold",8,MUTE);txt((rd.kind==="payment"?"Amount received":rd.kind==="refund"?"Amount refunded":"Amount reversed").toUpperCase(),L,y,{sp:pt(8)*.1});
+  y+=5;font("bold",24);txt(pmoney(amt),L,y);
+  if(full){pdf.setDrawColor(GREEN);pdf.setLineWidth(.8);const sw=52;pdf.rect(R-sw,y-1,sw,11);font("bold",12,GREEN);txt("PAID IN FULL",R-sw/2-pdf.getTextWidth("PAID IN FULL")/2,y+2.2);}
+  y+=16;
+  // -- Reason and what it reverses (corrections and refunds)
+  if(rd.kind!=="payment"){font("bold",7.5,MUTE);txt("REVERSES RECEIPT",L,y,{sp:pt(7.5)*.1});font("semibold",9.5);txt(rd.reverses_receipt_no||"",L+45,y);y+=6;
+    font("bold",7.5,MUTE);txt("REASON",L,y,{sp:pt(7.5)*.1});font("normal",9.5);wrap(rd.reason||"",W-45).forEach((l,j)=>txt(l,L+45,y+j*pt(9.5)*1.45));y+=6+pt(9.5)*1.45;}
+  // -- The account at that moment
+  const TW=110,sx=R-TW,rowH=1.2*2+pt(9.5)*1.45;let sy=y;
+  pdf.setFillColor(INK);pdf.rect(sx,sy,TW,.5,"F");sy+=.5;
+  const sumRow=(k,v,st)=>{font(st,9.5);txt(k,sx+2.5,sy+1.2);txt(v,R-2.5,sy+1.2,{right:1});sy+=rowH;pdf.setDrawColor(LINE);pdf.setLineWidth(.25);pdf.line(sx,sy,R,sy);};
+  sumRow(`Invoice ${inv.invoice_no||""} total`,money(toP(inv.total)),"semibold");
+  sumRow("Paid before this receipt",money(toP(rd.paid_before)),"semibold");
+  sumRow(`This ${rd.kind==="payment"?"receipt":rd.kind}`,pmoney(amt),"semibold");
+  sy+=1.5;const gh=3*2+pt(11)*1.45;
+  pdf.setFillColor(INK);pdf.rect(sx,sy,TW,gh,"F");pdf.setFillColor(OCHRE);pdf.rect(sx,sy,1.5,gh,"F");
+  font("bold",11,"#ffffff");txt("Balance after",sx+1.5+2.5,sy+3);txt(money(bal),R-2.5,sy+3,{right:1});
+  // -- Left of the account: notes
+  let ny=y;const nb=[["Recorded by",rd.recorded_by||""],["Questions",`WhatsApp or call ${B.phone} and quote ${rd.receipt_no}.`],["Terms","All amounts are in Ghana cedis (GH₵)."]];
+  nb.filter(n=>n[1]).forEach(([h,b])=>{font("bold",7.5,MUTE);txt(h.toUpperCase(),L,ny,{sp:pt(7.5)*.1});ny+=pt(7.5)*1.4+1.5;
+    font("normal",7.5,"#333333");wrap(b,W-TW-8).forEach(l=>{txt(l,L,ny);ny+=pt(7.5)*1.4;});ny+=3;});
+  font("normal",7,MUTE);txt(`${B.website}  ·  ${B.phone}`,L,289);txt("Page 1 of 1",R,289,{right:1});
+  return pdf;
+}
+
 // ---- 9. Screens and the address -----------------------------------------------
 // One page, four screens, picked by the part of the address after "#/":
 //   #/  Home · #/invoices  the list · #/invoice/<id>  one invoice · #/new
@@ -816,7 +1218,7 @@ const canEdit=()=>!!ME&&(ME.role==="owner"||ME.role==="sales");
 function view(name,tab){VIEWS.forEach(v=>show(v,v===name));
   document.querySelectorAll("#tabs a").forEach(a=>a.classList.toggle("on",a.dataset.tab===tab));window.scrollTo(0,0);}
 // Inside the invoice screen: the estimate box, the form, or the read-only view.
-function showOnly(part){["#start","#form","#issuedSec","#discardBox"].forEach(p=>show(p,p===part));}
+function showOnly(part){["#start","#form","#issuedSec","#discardBox","#payForm","#fixForm","#rcptSec"].forEach(p=>show(p,p===part));}
 function parseRoute(){
   const h=location.hash||"";
   if(!h.startsWith("#/"))return{name:"home",params:new URLSearchParams()};
@@ -824,6 +1226,7 @@ function parseRoute(){
   if(parts[0]==="invoices")return{name:"invoices",params};
   if(parts[0]==="invoice"&&/^\d+$/.test(parts[1]||""))return{name:"invoice",id:+parts[1],params};
   if(parts[0]==="new")return{name:"new",params};
+  if(parts[0]==="receipt"&&/^\d+$/.test(parts[1]||""))return{name:"receipt",id:+parts[1],params};
   return{name:"home",params};
 }
 async function go(hash){if(location.hash===hash)await route();else location.hash=hash;}
@@ -844,6 +1247,7 @@ async function route(){
   HERE=location.hash||"#/";
   if(r.name==="home")return showHome();
   if(r.name==="invoices")return showList(r.params);
+  if(r.name==="receipt"){view("#invV","invoices");return showReceipt(r.id);}
   view("#invV",r.name==="new"?"new":"invoices");
   if(r.name==="new"){
     if(S.items.length||S.name||S.phone||S.dirty)return showForm();
@@ -998,5 +1402,5 @@ else{
 }
 
 // For the tests (and nothing else): the desk's own functions.
-window.TCPDesk={parseEstimate,num,totals,problems,waNumber,waText,makePdf,linesForDb,searchTerms,state:()=>S,doc:()=>DOC};
+window.TCPDesk={parseEstimate,num,totals,problems,waNumber,waText,makePdf,makeReceiptPdf,waReceiptText,linesForDb,searchTerms,state:()=>S,doc:()=>DOC,receipt:()=>RDOC,pay:()=>PAY,fix:()=>FIX,op:()=>pendingOp()};
 })();
