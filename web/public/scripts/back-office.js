@@ -540,7 +540,9 @@ $("#issueBtn").addEventListener("click",async()=>{
   // issued in the same tap: what is issued is always what was on screen
   // (review of PR #38). Tapping Issue again issues the combined invoice.
   const merged=combineIdentical();
-  if(merged.length){LINE_NOTE=null;render();
+  // Combining changes the invoice: it is now unsaved work, so the screen
+  // says so and leaving it asks first (review of PR #38).
+  if(merged.length){S.dirty=true;LINE_NOTE=null;render();
     NOTE=merged.join(" ")+" Check the combined lines, then tap Issue invoice again.";refresh();
     $("#sMsg").scrollIntoView({block:"center"});return;}
   if(!confirm("Issue this invoice? It gets its number and can no longer be changed (it can only be cancelled)."))return;

@@ -65,6 +65,8 @@ Plan", approved by ChatGPT and Daniel):
   F09  Issue never combines lines unseen: it combines, says so and stops;
        the next tap issues exactly what is shown
   F10  the PDF names a free item ("— Free item"), at GH₵0.00
+  F11  a saved draft reopened with identical lines: Issue combines them and
+       marks them unsaved; leaving asks Save / Discard / Go back
   B04  phone search: four formats and a partial number find the same
        invoice; "233" is only removed when it is the country code
   B05  several matches are all listed; nothing is opened or chosen
@@ -170,7 +172,7 @@ STANDIN = r"""
     let c = db.customers.find(x => x.phone === o.phone && x.name === o.name);
     if (!c) { c = {id: db.customers.length + 1, code: "TCP-C-" + pad(++db.counters.customer), phone: o.phone || null, name: o.name || null}; db.customers.push(c); }
     const inv = {id: db.invoices.length + 1, state: o.state || "draft", invoice_no: null, customer_id: c.id, due_date: o.due || null,
-      paid: o.paid || 0, created_at: o.created_at || stamp(), notes: null, deliver_to_location: null};
+      paid: o.paid || 0, created_at: o.created_at || stamp(), notes: o.notes || null, deliver_to_location: null};
     db.invoices.push(inv);
     (o.lines || [{qty: o.qty || 10}]).forEach((l, k) => db.lines.push({invoice_id: inv.id, position: k + 1, kind: "product",
       product_id: 1, description: "Supacem 32.5R", unit: "50 kg bag", quantity: l.qty, unit_price: l.price == null ? 75 : l.price}));
@@ -1214,4 +1216,32 @@ def test_f10_pdf_names_free_items(browser):
     assert "Free item" in text
     assert text.count("Free item") == 1, "only the free line"
     assert "GH₵0.00" in text
+    assert not errors
+
+
+
+def test_f11_combining_on_issue_is_unsaved_work(browser):
+    # A draft saved before phase 1.1, with the same product twice at the
+    # same price, and delivery already agreed (so nothing else is changed).
+    seed = [{"name": "Johnny Two", "phone": "+233200000010", "state": "draft", "notes": "Free delivery",
+             "lines": [{"qty": 1}, {"qty": 2}]}]
+    page, errors = _bo(browser, seed=seed, route="#/invoice/1")
+    page.wait_for_selector("#form:not([hidden])")
+    assert page.evaluate("TCPDesk.state().dirty") is False
+    assert page.text_content("#state") == "Draft saved"
+    page.click("#issueBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent.includes('tap Issue invoice again')")
+    assert page.locator("#items .dk-line").count() == 1 and page.evaluate("TCPDesk.state().items[0].qty") == 3
+    assert page.evaluate("TCPDesk.state().dirty") is True
+    assert page.text_content("#state") == "Draft: changes not saved yet"
+    assert page.evaluate("__db.calls.filter(c => c === 'issue' || c === 'saveDraft').length") == 0
+    # Leaving now asks first; Go back keeps the combined line.
+    page.click('#tabs a[data-tab="invoices"]')
+    page.wait_for_function("location.hash === '#/invoices'")
+    page.wait_for_selector("#rows .dk-inv")
+    page.click('#tabs a[data-tab="new"]')   # a new invoice would replace the combined draft
+    page.wait_for_selector("#guard:not([hidden])")
+    page.click("#guardBack")
+    page.wait_for_selector("#guard", state="hidden")
+    assert page.evaluate("TCPDesk.state().items.length") == 1 and page.evaluate("TCPDesk.state().items[0].qty") == 3
     assert not errors
