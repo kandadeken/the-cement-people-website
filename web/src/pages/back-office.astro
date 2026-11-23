@@ -1,0 +1,313 @@
+---
+/* ===========================================================================
+   back-office.astro - TCP Back Office (thecementpeople.com/back-office/)
+   ---------------------------------------------------------------------------
+   TCP's private staff app, connected to Supabase. Follows "TCP Back Office:
+   Design Specification v1.1" (approved by ChatGPT and Daniel, 22 Nov 2026),
+   built on "TCP Invoice Desk on Supabase: Design (v2.1)". It replaces the
+   Invoice Desk; /invoice-desk/ now forwards here (invoice-desk.astro).
+
+   SCREENS (one page; the part of the address after "#" picks the screen)
+     #/                Home: what is owed, unpaid, part paid, overdue, open
+                       drafts, and the latest invoices
+     #/invoices        Every draft and invoice: status filters and search
+     #/invoice/<id>    One invoice: a draft opens in the form (owner, sales)
+                       or read-only (finance); an issued or cancelled invoice
+                       is always read-only, with Share and PDF
+     #/new             A new invoice (the phase 1 desk, unchanged)
+
+   WHERE THE RULES LIVE
+   Every rule (who may do what, numbering, totals, what can change) is in
+   the database: supabase/migrations/. This page only asks. It holds the
+   project address and the public "anon" key, which are safe in a browser;
+   the secret service-role key is never here.
+
+   CONNECTION
+   The project address and anon key come from the build settings
+   PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_ANON_KEY (GitHub repository
+   variables, see .github/workflows/astro-publish.yml). Without them the
+   page says it is not connected and does nothing else.
+
+   Not a tax invoice: TCP is not VAT-registered (see DOC_TITLE in
+   public/scripts/back-office.js).
+
+   Kept out of search engines: "noindex, nofollow" below, not in the
+   sitemap, and no link to it anywhere on the site.
+   =========================================================================== */
+import "../styles/tokens.css";
+import "../styles/desk.css";
+
+import { business } from "../config/business";
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { join } from "node:path";
+
+// Fingerprint of the Back Office script, so a phone never runs an old copy
+// against a new page (the same reason as for quote-engine.js).
+const deskVersion = createHash("sha256")
+  .update(readFileSync(join(process.cwd(), "public/scripts/back-office.js")))
+  .digest("hex")
+  .slice(0, 10);
+
+// What the desk script reads from the page: the business details printed on
+// the invoice, and where the database is. Prices come from the database.
+const deskData = {
+  currency: business.currencySymbol,
+  business: {
+    name: business.name,
+    phone: business.phone,
+    website: business.website,
+    email: business.publicEmail,
+    town: business.town,
+    pickup: `${business.address.area}, ${business.address.locality}`,
+  },
+  supabaseUrl: import.meta.env.PUBLIC_SUPABASE_URL || "",
+  supabaseKey: import.meta.env.PUBLIC_SUPABASE_ANON_KEY || "",
+  // "true" once TCP sends its own email and the template carries the
+  // 6-digit code (repo variable TCP_EMAIL_CODE). Until then: link only.
+  emailCode: import.meta.env.PUBLIC_TCP_EMAIL_CODE === "true",
+};
+const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
+---
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ffffff">
+<title>TCP Back Office</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body class="desk">
+
+<main id="desk" class="dk">
+  <header class="dk-head">
+    <img src="/brand/tcp-logo-horizontal-on-light.svg" alt="The Cement People" width="592" height="100">
+    <h1>Back Office</h1>
+  </header>
+
+  <!-- Shown when this build has no database settings -->
+  <section id="setup" class="dk-card" hidden>
+    <h2>Not connected</h2>
+    <p>This copy of the Back Office is not connected to a database yet.</p>
+  </section>
+
+  <!-- Signing in: email, then the link in the email (or a 6-digit code) -->
+  <section id="signin" class="dk-card" hidden>
+    <h2>Sign in</h2>
+    <p class="dk-help">Enter your email. We send you a sign-in link: open it on this phone and it brings you back here, signed in. Staff are invited by the owner.</p>
+    <form id="emailForm" class="dk-signin" autocomplete="on">
+      <label for="email">Email</label>
+      <input id="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" required>
+      <button type="submit" class="dk-btn primary">Send sign-in email</button>
+    </form>
+    <form id="codeForm" class="dk-signin" autocomplete="off" hidden>
+      <label for="code">6-digit code from the email</label>
+      <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" pattern="[0-9 ]*" required>
+      <button type="submit" class="dk-btn primary">Sign in</button>
+    </form>
+    <p id="signMsg" class="dk-msg" role="alert"></p>
+  </section>
+
+  <!-- Signed in, but not active TCP staff -->
+  <section id="noaccess" class="dk-card" hidden>
+    <h2>No access</h2>
+    <p>You are signed in as <b id="noEmail"></b>, but this account cannot use the Back Office.</p>
+    <p id="noWhy" class="dk-help">Ask the owner to give you access.</p>
+    <button type="button" id="noSignOut" class="dk-btn">Sign out</button>
+  </section>
+
+  <div id="tool" hidden>
+    <div class="dk-who"><span id="who"></span><button type="button" id="signOut" class="dk-link">Sign out</button></div>
+
+    <!-- Asked before unsaved work would be replaced (spec section 5) -->
+    <section id="guard" class="dk-card dk-alert" role="alertdialog" aria-labelledby="guardTitle" hidden>
+      <h2 id="guardTitle">This invoice has changes that are not saved</h2>
+      <p class="dk-help">Save them first, or discard them and carry on.</p>
+      <div class="dk-row">
+        <button type="button" id="guardSave" class="dk-btn primary">Save it</button>
+        <button type="button" id="guardDiscard" class="dk-btn">Discard changes</button>
+        <button type="button" id="guardBack" class="dk-btn ghost">Go back</button>
+      </div>
+      <p id="guardMsg" class="dk-msg" role="alert"></p>
+    </section>
+
+    <!-- Home: figures from the database (back_office_home), latest invoices -->
+    <section id="homeV" hidden>
+      <div id="unsavedNote"></div>
+      <div class="dk-card">
+        <h2>Owed to TCP</h2>
+        <a id="hOwedLink" class="dk-owed" href="#/invoices?status=owed"><b id="hOwed">—</b><small>on issued invoices not yet paid</small></a>
+        <div class="dk-figs">
+          <a class="dk-fig" href="#/invoices?status=unpaid"><b id="hUnpaid">—</b><span>Unpaid</span></a>
+          <a class="dk-fig" href="#/invoices?status=part_paid"><b id="hPart">—</b><span>Part paid</span></a>
+          <a class="dk-fig warn" href="#/invoices?status=overdue"><b id="hOverdue">—</b><span>Overdue</span></a>
+          <a class="dk-fig" href="#/invoices?status=draft"><b id="hDrafts">—</b><span>Open drafts</span></a>
+        </div>
+        <a id="hNew" class="dk-btn primary dk-wide" href="#/new">New invoice</a>
+        <p id="homeMsg" class="dk-msg" role="alert"></p>
+      </div>
+      <div class="dk-card">
+        <h2>Latest invoices</h2>
+        <div id="recent" class="dk-list"></div>
+        <a class="dk-btn dk-wide" href="#/invoices">See all invoices</a>
+      </div>
+    </section>
+
+    <!-- Invoices: every draft and invoice, filters and search -->
+    <section id="listV" class="dk-card" hidden>
+      <h2>Invoices</h2>
+      <form id="searchForm" role="search" class="dk-search">
+        <label for="q" class="sr">Search by number, customer name or phone</label>
+        <input id="q" type="search" autocomplete="off" placeholder="Number, name or phone">
+      </form>
+      <div id="filters" class="dk-chips" role="group" aria-label="Show">
+        <button type="button" data-status="all">All</button>
+        <button type="button" data-status="draft">Drafts</button>
+        <button type="button" data-status="unpaid">Unpaid</button>
+        <button type="button" data-status="part_paid">Part paid</button>
+        <button type="button" data-status="overdue">Overdue</button>
+        <button type="button" data-status="paid">Paid</button>
+        <button type="button" data-status="cancelled">Cancelled</button>
+      </div>
+      <p id="listInfo" class="dk-help" role="status"></p>
+      <div id="rows" class="dk-list"></div>
+      <button type="button" id="moreBtn" class="dk-btn dk-wide" hidden>Show more</button>
+      <p id="listMsg" class="dk-msg" role="alert"></p>
+    </section>
+
+    <!-- One invoice: the form (new invoice or a draft) or the read-only view -->
+    <div id="invV" hidden>
+    <!-- Start: paste the estimate -->
+    <section id="start" class="dk-card">
+      <h2><span class="dk-no">1</span>Customer's estimate</h2>
+      <p class="dk-help">Copy the estimate message the customer sent on WhatsApp and paste it here. Or start an invoice without one.</p>
+      <label for="paste" class="sr">WhatsApp estimate</label>
+      <textarea id="paste" rows="6" placeholder="Hello The Cement People, … *Estimate TCP-…* …"></textarea>
+      <div class="dk-row">
+        <button type="button" id="readBtn" class="dk-btn primary">Read estimate</button>
+        <button type="button" id="blankBtn" class="dk-btn">Start without an estimate</button>
+      </div>
+      <p id="readMsg" class="dk-msg" role="status"></p>
+    </section>
+    <div id="form" hidden>
+      <!-- Customer -->
+      <section class="dk-card">
+        <h2><span class="dk-no">2</span>Customer</h2>
+        <div class="dk-grid">
+          <div><label for="cPhone">Phone</label><input id="cPhone" type="tel" inputmode="tel" autocomplete="off" placeholder="024 123 4567"></div>
+          <div><label for="cName">Name</label><input id="cName" autocomplete="off"></div>
+        </div>
+        <div id="matches"></div>
+        <p id="custPicked" class="dk-msg" role="status"></p>
+      </section>
+
+      <!-- Items -->
+      <section class="dk-card">
+        <h2><span class="dk-no">3</span>Items</h2>
+        <p class="dk-help">Change a price if you agreed a different one with the customer. The price list does not change.</p>
+        <div id="items"></div>
+        <div class="dk-row">
+          <label for="addSel" class="sr">Add a product</label>
+          <select id="addSel"></select>
+          <button type="button" id="addBtn" class="dk-btn">Add item</button>
+        </div>
+      </section>
+
+      <!-- Delivery -->
+      <section class="dk-card">
+        <h2><span class="dk-no">4</span>Delivery</h2>
+        <div class="dk-opts" role="radiogroup" aria-label="Delivery">
+          <label><input type="radio" name="dl" value="pending" checked> Not agreed yet</label>
+          <label><input type="radio" name="dl" value="free"> Free delivery</label>
+          <label><input type="radio" name="dl" value="fee"> Delivery fee</label>
+          <label><input type="radio" name="dl" value="pickup"> Customer pickup</label>
+        </div>
+        <div id="feeBox" class="dk-fee" hidden>
+          <label for="fee">Delivery fee agreed (GH₵)</label>
+          <input id="fee" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
+        </div>
+        <div class="dk-grid dk-site">
+          <div class="wide"><label for="cSite">Site or drop-off location</label><input id="cSite" autocomplete="off"></div>
+          <div><label for="cContact">Site contact (optional)</label><input id="cContact" autocomplete="off"></div>
+          <div><label for="cContactPhone">Site contact phone (optional)</label><input id="cContactPhone" type="tel" inputmode="tel" autocomplete="off"></div>
+        </div>
+      </section>
+
+      <!-- Details -->
+      <section class="dk-card">
+        <h2><span class="dk-no">5</span>Invoice details</h2>
+        <div class="dk-grid">
+          <div><label for="iDue">Pay by (optional)</label><input id="iDue" type="date"></div>
+          <div class="wide"><label for="iNote">Note to the customer (optional, printed on the invoice)</label><textarea id="iNote" rows="2" placeholder="e.g. MTN MoMo number and name, or bank details"></textarea></div>
+        </div>
+      </section>
+
+      <!-- Summary and actions -->
+      <section class="dk-card dk-sum" aria-live="polite">
+        <div><span>Materials</span><b id="sMat"></b></div>
+        <div><span>Delivery</span><b id="sDel"></b></div>
+        <div class="dk-total"><span>Total</span><b id="sTot"></b></div>
+        <p id="state" class="dk-state" role="status"></p>
+        <p id="sMsg" class="dk-msg" role="alert"></p>
+        <div class="dk-row">
+          <button type="button" id="issueBtn" class="dk-btn primary">Issue invoice</button>
+          <button type="button" id="saveBtn" class="dk-btn">Save draft</button>
+        </div>
+        <p class="dk-help">"Save draft" keeps it in TCP's records so you can finish later. "Issue invoice" gives it its number and locks it; then you can share the PDF.</p>
+        <button type="button" id="newBtn" class="dk-btn ghost">New invoice</button>
+        <button type="button" id="discardBtn" class="dk-btn ghost dk-danger" hidden>Discard draft</button>
+      </section>
+
+      <!-- Discard draft (owner only): cancelled with a reason, never deleted -->
+      <section id="discardBox" class="dk-card dk-alert" hidden>
+        <h2>Discard this draft?</h2>
+        <p class="dk-help">It is cancelled for good: it can no longer be edited or issued. It stays in TCP's records, under "Cancelled", with your reason.</p>
+        <label for="discardWhy">Reason</label>
+        <input id="discardWhy" autocomplete="off" placeholder="e.g. Customer bought elsewhere">
+        <div class="dk-row">
+          <button type="button" id="discardYes" class="dk-btn primary">Discard draft</button>
+          <button type="button" id="discardNo" class="dk-btn">Keep it</button>
+        </div>
+        <p id="discardMsg" class="dk-msg" role="alert"></p>
+      </section>
+    </div>
+
+    <!-- An invoice from the database, read-only: issued, cancelled, or a
+         draft seen by finance -->
+    <section id="issuedSec" class="dk-card" hidden>
+      <h2 id="viewTitle">Invoice</h2>
+      <div id="issued"></div>
+      <div id="viewLines" class="dk-vlines"></div>
+      <p id="iMsg" class="dk-msg" role="status"></p>
+      <div id="copyBox" class="dk-copy" hidden>
+        <label for="copyText">Message for the customer</label>
+        <textarea id="copyText" rows="2" readonly></textarea>
+        <button type="button" id="copyBtn" class="dk-btn">Copy</button>
+      </div>
+      <div id="shareRow" class="dk-row">
+        <button type="button" id="shareBtn" class="dk-btn primary">Share invoice</button>
+        <button type="button" id="pdfBtn" class="dk-btn">Download PDF</button>
+      </div>
+      <p id="shareHelp" class="dk-help">"Share invoice" copies a short message and opens your phone's share menu with the PDF: choose WhatsApp, then the customer, and paste the message as the caption. The PDF is always made from TCP's records, so it can be shared again at any time.</p>
+      <button type="button" id="newBtn2" class="dk-btn ghost">New invoice</button>
+    </section>
+    </div>
+
+    <!-- Tab bar (phone: along the bottom) -->
+    <nav id="tabs" class="dk-tabs" aria-label="Back Office">
+      <a href="#/" data-tab="home">Home</a>
+      <a href="#/invoices" data-tab="invoices">Invoices</a>
+      <a href="#/new" data-tab="new" id="tabNew">New invoice</a>
+    </nav>
+  </div>
+</main>
+
+<script is:inline type="application/json" id="desk-data" set:html={deskJson}></script>
+<script is:inline src="/scripts/vendor/supabase.js"></script>
+<script is:inline src={`/scripts/back-office.js?v=${deskVersion}`}></script>
+</body>
+</html>

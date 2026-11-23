@@ -1,18 +1,15 @@
 /* ===========================================================================
-   invoice-desk.js - TCP Invoice Desk on Supabase, phase 1 (21 Nov 2026)
+   back-office.js - TCP Back Office, version 1 (22 Nov 2026)
    ---------------------------------------------------------------------------
-   Runs the private page /invoice-desk/. Follows "TCP Invoice Desk on
-   Supabase: Design (v2.1)", approved by ChatGPT and Daniel on 21 Nov 2026.
+   Runs the private page /back-office/. Follows "TCP Back Office: Design
+   Specification v1.1" (approved by ChatGPT and Daniel, 22 Nov 2026), built
+   on "TCP Invoice Desk on Supabase: Design (v2.1)". It grew out of the
+   Invoice Desk (phase 1); the invoice form is that desk, unchanged.
 
    The one rule: Supabase is the only ledger. This page asks; the database
-   decides. Customers, drafts, invoice numbers and totals come from the
-   database functions (supabase/migrations/). The phone keeps only work that
-   has not been sent yet, and never an issued invoice as a record.
-
-   Phase 1 covers: signing in with the email's sign-in link, finding or adding
-   the customer, preparing the invoice (from a pasted WhatsApp estimate or
-   from scratch), saving it as a draft, issuing it, and sharing the PDF.
-   Payments and receipts (phase 2) and lists and search (phase 3) come later.
+   decides. Customers, drafts, invoice numbers, totals, statuses and the Home
+   figures come from the database (supabase/migrations/). The phone keeps
+   only work that has not been saved yet, and never a saved record.
 
    Sections:
      1. Settings and helpers   (money in pesewas, reading numbers)
@@ -20,10 +17,11 @@
      3. Signing in             (email link or code, staff check, signing out)
      4. Reading the estimate   (unchanged from PR #31)
      5. The invoice being prepared (kept on this phone until saved)
-     6. Saving and issuing     (the database functions)
+     6. Saving and issuing     (the database functions); discarding a draft
      7. The PDF                (drawn from the issued record only)
-     8. Sharing
-     9. Start
+     8. Sharing                (PDF + the message copied for the caption)
+     9. Screens and the address (Home, Invoices, one invoice, New invoice)
+    10. Start
    =========================================================================== */
 (()=>{
 // ---- 1. Settings and helpers ------------------------------------------------
@@ -96,6 +94,21 @@ function supabaseApi(){
     saveDraft:a=>sb.rpc("save_draft_invoice",a).then(out),
     issue:id=>sb.rpc("issue_invoice",{p_invoice_id:id}).then(out),
     document:id=>sb.rpc("invoice_document",{p_invoice_id:id}).then(out),
+    // Discarding a draft = the owner-only cancel_invoice (kept, with a reason).
+    cancel:(id,reason)=>sb.rpc("cancel_invoice",{p_invoice_id:id,p_reason:reason}).then(out),
+    // The Home figures, worked out by the database (back_office_home).
+    home:()=>sb.from("back_office_home").select("owed,unpaid,part_paid,overdue,drafts").single().then(out),
+    // A page of the Invoices list (invoice_list). Order: newest first, then
+    // the id, so two invoices started at the same moment always keep the same
+    // order and paging never skips or repeats one. terms: see searchTerms().
+    list:({status,terms,offset,limit})=>{
+      let q=sb.from("invoice_list").select("id,invoice_no,state,status,issued_at,created_at,due_date,total,balance,billed_to_name,billed_to_phone",{count:"exact"})
+        .order("created_at",{ascending:false}).order("id",{ascending:false}).range(offset,offset+limit-1);
+      if(status==="owed")q=q.in("status",["unpaid","part_paid","overdue"]);
+      else if(status&&status!=="all")q=q.eq("status",status);
+      if(terms&&terms.length)q=q.or(terms.map(t=>`${t.col}.ilike.${t.pattern}`).join(","));
+      return q.then(r=>{if(r.error)throw r.error;return{rows:r.data||[],count:r.count||0};});
+    },
   };
 }
 // What kind of failure an error is:
@@ -163,10 +176,12 @@ async function enter(){
   }
   ME={id:u.id,name:st.full_name,role:st.role};
   $("#who").textContent=`${ME.name} · ${ME.role}`;
-  if(ME.role==="finance"){screen("noaccess");$("#noWhy").textContent="Invoices are prepared by the owner or sales. Payments come in the next phase.";return;}
+  // Finance sees Home and the invoices, read-only (spec section 7): no New
+  // invoice tab. The database refuses them saving or issuing anyway.
+  ["#tabNew","#hNew","#newBtn2"].forEach(s=>show(s,canEdit()));
   try{PRODUCTS=await api.products()||[];if(!PRODUCTS.length)await stillStaff();}
-  catch(err){screen("tool");return failed(err,"#readMsg");}
-  fillAdd();screen("tool");restore();
+  catch(err){const k=kind(err);if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");if(k==="expired")return expire();}
+  fillAdd();screen("tool");restore();await route();
 }
 // Plain reads (the price list, a phone lookup) come back EMPTY rather than
 // refused once someone's access is removed. So an empty answer is checked:
@@ -190,8 +205,10 @@ async function expire(){
 // Clears the screen and memory, then signs out. ME is cleared first, so the
 // "signed out" notice that follows does not run a second time.
 async function leave(why){
-  S=blank();DOC=null;ME=null;PRODUCTS=[];NOTE="";LOOKED="";
-  ["#items","#issued","#matches","#custPicked"].forEach(s=>{const el=$(s);if(el)el.innerHTML="";});
+  S=blank();DOC=null;ME=null;PRODUCTS=[];NOTE="";LOOKED="";HERE="#/";
+  ["#items","#issued","#matches","#custPicked","#rows","#recent","#viewLines","#unsavedNote"].forEach(s=>{const el=$(s);if(el)el.innerHTML="";});
+  ["#hOwed","#hUnpaid","#hPart","#hOverdue","#hDrafts"].forEach(s=>{$(s).textContent="—";});
+  ["#guard","#discardBox","#copyBox"].forEach(s=>show(s,false));
   ["#paste","#cName","#cPhone"].forEach(s=>{const el=$(s);if(el)el.value="";});
   screen("signin");$("#signMsg").textContent=why;
   try{await api.signOut();}catch(e){}
@@ -244,15 +261,16 @@ function blank(){return{invoiceId:null,draftRequest:newId(),customerRequest:newI
 const draftKey=()=>"tcp-desk-work-"+(ME?ME.id:"none");
 function keep(){if(!ME)return;try{localStorage.setItem(draftKey(),JSON.stringify(S))}catch(e){}}
 function forget(){try{localStorage.removeItem(draftKey())}catch(e){}}
+// Brings back unsaved work from this phone (for this staff member only).
+// Which screen shows is decided by the address (section 9). A saved draft
+// or an issued invoice is never shown from the phone's copy: it is read
+// again from the database.
 function restore(){
   let d=null;try{d=JSON.parse(localStorage.getItem(draftKey())||"null")}catch(e){}
-  if(!d)return;
-  S={...blank(),...d};
-  // An invoice already issued is never shown from the phone's copy: it is
-  // read again from the database.
-  if(S.invoiceId&&!S.dirty)return openInvoice(S.invoiceId);
-  showForm();
+  S=d?{...blank(),...d}:blank();
 }
+// Unsaved work that would be lost if this invoice were replaced.
+const unsaved=()=>S.dirty&&!!(S.items.length||S.name.trim()||S.phone.trim());
 function fillAdd(){const g={};PRODUCTS.forEach(p=>(g[p.category]=g[p.category]||[]).push(p));
   $("#addSel").innerHTML=Object.entries(g).map(([c,l])=>`<optgroup label="${esc(c)}">${l.map(p=>`<option value="${p.id}">${esc(p.name)} (${esc(p.unit)}) · ${money(toP(p.current_price))}</option>`).join("")}</optgroup>`).join("");}
 const lineTotal=l=>Math.round(l.price*l.qty);
@@ -272,15 +290,7 @@ function problems(s,forIssue){
   if(s.dl==="fee"&&!(num(s.fee)>0))out.push("Enter the delivery fee.");
   return out;
 }
-function showForm(){
-  show("#start",false);show("#form",true);show("#issuedSec",false);
-  $("#cName").value=S.name;$("#cPhone").value=S.phone;$("#cSite").value=S.site;
-  $("#cContact").value=S.contact;$("#cContactPhone").value=S.contactPhone;
-  document.querySelectorAll('input[name="dl"]').forEach(r=>r.checked=r.value===S.dl);
-  $("#fee").value=S.fee;$("#iDue").value=S.due;$("#iNote").value=S.note;
-  $("#custPicked").textContent=S.customerCode?`Existing customer ${S.customerCode}`:"";
-  render();
-}
+// showForm(): see section 9.
 function itemsHTML(){
   if(!S.items.length)return`<p class="dk-help">No items yet. Add them below.</p>`;
   return S.items.map((l,i)=>{
@@ -299,6 +309,7 @@ function render(){$("#items").innerHTML=itemsHTML();show("#feeBox",S.dl==="fee")
 function changed(){S.dirty=true;NOTE="";refresh();}
 // Totals and the state line (everything except the item boxes).
 function refresh(){const t=totals(S),bad=problems(S,true);
+  show("#discardBtn",!!(ME&&ME.role==="owner"&&S.invoiceId));
   $("#sMat").textContent=isNaN(t.mat)?"—":money(t.mat);
   $("#sDel").textContent=S.dl==="fee"?money(t.fee):S.dl==="pending"?"Not agreed yet":DL_TEXT[S.dl];
   $("#sTot").textContent=isNaN(t.total)?"—":money(t.total);
@@ -360,10 +371,12 @@ $("#readBtn").addEventListener("click",()=>{
   showForm();$("#cPhone").focus();
 });
 $("#blankBtn").addEventListener("click",()=>{S={...blank(),dirty:true};$("#readMsg").textContent="";showForm();$("#cPhone").focus();});
-function newInvoice(){
-  if(S.dirty&&S.items.length&&!confirm("Start a new invoice? Changes not saved on this one are lost."))return;
-  S=blank();DOC=null;NOTE="";LOOKED="";forget();$("#paste").value="";$("#readMsg").textContent="";$("#matches").innerHTML="";
-  show("#form",false);show("#issuedSec",false);show("#start",true);window.scrollTo(0,0);}
+// "New invoice" buttons: a fresh start. Unsaved changes are asked about
+// first (Save it / Discard changes / Go back).
+async function newInvoice(){
+  if(unsaved()&&(await askGuard())==="back")return;
+  S=blank();DOC=null;NOTE="";LOOKED="";forget();
+  go("#/new");}
 $("#newBtn").addEventListener("click",newInvoice);$("#newBtn2").addEventListener("click",newInvoice);
 
 // ---- 6. Saving and issuing --------------------------------------------------
@@ -409,7 +422,11 @@ async function save(){
     p_deliver_to_phone:S.contactPhone.trim()||null,p_due_date:S.due||null,
     p_notes:[S.dl==="pickup"?"Customer pickup":S.dl==="free"?"Free delivery":"",S.ref?"Estimate "+S.ref:"",S.note.trim()].filter(Boolean).join("\n")||null,
     p_lines:linesForDb(),p_request_id:S.invoiceId?null:S.draftRequest});
+  const first=!S.invoiceId;
   S.invoiceId=id;S.dirty=false;refresh();
+  // A new draft now has an address of its own, so a reload (or the list)
+  // reopens it from the database.
+  if(first){history.replaceState(null,"","#/invoice/"+id);HERE=location.hash;}
   return id;
 }
 $("#saveBtn").addEventListener("click",async()=>{
@@ -428,27 +445,46 @@ $("#issueBtn").addEventListener("click",async()=>{
       const doc=await api.document(id).catch(()=>null);
       if(!doc||doc.state!=="issued")throw err;
     }
-    await openInvoice(id);
+    await go("#/invoice/"+id);
   }catch(err){failed(err);}finally{busy(btn,false);}
 });
 
-// An invoice from the database: an issued one is shown read-only with its
-// PDF and share buttons; a draft goes back into the form.
+// An invoice from the database. A draft goes into the form for the owner
+// and sales; everything else (issued, cancelled, or a draft seen by
+// finance) is shown read-only, with Share and PDF for an issued one.
 async function openInvoice(id){
   let doc;
-  try{doc=await api.document(id);}catch(err){return failed(err,"#readMsg");}
-  if(doc.state==="draft"){S=fromDraft(doc);showForm();return;}
-  DOC=doc;S={...blank(),invoiceId:doc.id};keep();
-  show("#start",false);show("#form",false);show("#issuedSec",true);
-  const st={issued:"Issued",cancelled:"Cancelled"}[doc.state]||doc.state;
+  try{doc=await api.document(id);}catch(err){view("#invV");showOnly("#issuedSec");$("#viewTitle").textContent="Invoice";$("#issued").innerHTML="";$("#viewLines").innerHTML="";show("#shareRow",false);show("#shareHelp",false);return readFailed(err,"#iMsg");}
+  if(doc.state==="draft"&&canEdit()){S=fromDraft(doc);showForm();return;}
+  showView(doc);
+}
+const STATUS={draft:"Draft",unpaid:"Unpaid",part_paid:"Part paid",overdue:"Overdue",paid:"Paid",cancelled:"Cancelled"};
+function showView(doc){
+  DOC=doc;
+  // An invoice just issued (or discarded) is no longer work in progress.
+  if(S.invoiceId===doc.id){S=blank();forget();}
+  showOnly("#issuedSec");
+  const issued=doc.state==="issued",draft=doc.state==="draft";
+  $("#viewTitle").textContent=draft?"Draft (read-only)":doc.state==="cancelled"?"Cancelled invoice":"Invoice "+(doc.invoice_no||"");
+  const notes=String(doc.notes||"").split("\n");
+  // As agreed: pickup, free, a fee line, or not agreed yet (a draft).
+  const to=doc.deliver_to_location?" to "+doc.deliver_to_location:"",fee=(doc.lines||[]).some(l=>l.kind==="delivery");
+  const dlv=notes.includes("Customer pickup")?"Customer pickup":notes.includes("Free delivery")?"Free delivery"+to:fee?"Delivery fee"+to:"Not agreed yet"+to;
+  const row=(k,v,cls)=>v?`<div${cls?` class="${cls}"`:""}><span>${k}</span><b>${esc(v)}</b></div>`:"";
   $("#issued").innerHTML=`<div class="dk-sum">
-    <div class="dk-no-line"><span>Invoice number</span><b>${esc(doc.invoice_no||"")}</b></div>
-    <div><span>Status</span><b>${esc(st)}</b></div>
-    <div><span>Billed to</span><b>${esc([doc.billed_to_name,doc.billed_to_phone].filter(Boolean).join(" · "))}</b></div>
-    <div><span>Issued by</span><b>${esc(doc.issued_by||"")}</b></div>
+    ${row("Invoice number",doc.invoice_no||"No number yet (draft)","dk-no-line")}
+    ${row("Status",STATUS[doc.status]||doc.status)}
+    ${row("Billed to",[doc.billed_to_name,doc.billed_to_phone].filter(Boolean).join(" · "))}
+    ${row("Issued",doc.issued_at?dateText(doc.issued_at):"")}
+    ${row("Issued by",doc.issued_by||"")}
+    ${row("Pay by",doc.due_date?dateText(doc.due_date):"")}
+    ${row("Delivery",dlv)}
+    ${row("Cancelled because",doc.state==="cancelled"?doc.cancel_reason||"":"")}
     <div class="dk-total"><span>Total</span><b>${money(toP(doc.total))}</b></div></div>`;
-  $("#iMsg").textContent="";
-  const ok=doc.state==="issued";$("#shareBtn").disabled=!ok;$("#pdfBtn").disabled=!ok;
+  $("#viewLines").innerHTML=(doc.lines||[]).map((l,i)=>`<div class="dk-vline"><span>${i+1}. ${esc(l.description)}<small>${fmtQ(l.quantity)} ${esc(UNIT_WORD(l.unit,l.quantity)||l.unit||"")} × ${money(toP(l.unit_price))}</small></span><b>${money(toP(l.line_total))}</b></div>`).join("");
+  $("#iMsg").textContent="";show("#copyBox",false);
+  show("#shareRow",issued);show("#shareHelp",issued);
+  $("#shareBtn").disabled=!issued;$("#pdfBtn").disabled=!issued;
 }
 function fromDraft(doc){
   const items=doc.lines.filter(l=>l.kind==="product").map(l=>{const p=PRODUCTS.find(x=>x.id===l.product_id);
@@ -491,7 +527,7 @@ async function makePdf(doc){
   const{jsPDF,logo}=await pdfKit(),F=window.TCP_PDF_FONTS;
   const pdf=new jsPDF({unit:"mm",format:"a4",compress:true});
   [["r","normal"],["s","semibold"],["x","bold"]].forEach(([k,st])=>{pdf.addFileToVFS(`M-${k}.ttf`,F[k]);pdf.addFont(`M-${k}.ttf`,"Montserrat",st);});
-  pdf.setProperties({title:`${B.name} ${DOC_TITLE} ${doc.invoice_no}`,author:B.name,creator:"TCP Invoice Desk"});
+  pdf.setProperties({title:`${B.name} ${DOC_TITLE} ${doc.invoice_no}`,author:B.name,creator:"TCP Back Office"});
   const INK="#131514",MUTE="#5a5a5a",LINE="#dcdcdc",OCHRE="#ff9802",BAND="#f4f4f4";
   const L=14,R=196,W=R-L,TOP=16,BOTTOM=282,pt=n=>n*0.3528;
   const font=(st,size,col)=>{pdf.setFont("Montserrat",st);pdf.setFontSize(size);pdf.setTextColor(col||INK);};
@@ -594,14 +630,31 @@ function download(file){const a=document.createElement("a");a.href=URL.createObj
 // Always read the record again just before making the PDF, so the file
 // matches the database (and a removed staff member gets nothing).
 async function freshDoc(){const d=await api.document(DOC.id);DOC=d;return d;}
+// WhatsApp on Android drops any text shared together with a file, so the
+// message is copied to the clipboard first (while the tap still counts as
+// the user's own action) and the user pastes it as the caption. Where the
+// browser blocks the clipboard, the message is shown with a Copy button.
+function copyText(t){
+  try{if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(t).then(()=>true,()=>false);}catch(e){}
+  return Promise.resolve(false);}
+function showCopyBox(t){$("#copyText").value=t;show("#copyBox",true);}
+$("#copyBtn").addEventListener("click",async()=>{const ta=$("#copyText");ta.select();
+  let ok=await copyText(ta.value);if(!ok){try{ok=document.execCommand("copy");}catch(e){}}
+  $("#iMsg").textContent=ok?"Message copied. Paste it in WhatsApp.":"Select the message above and copy it.";});
 $("#shareBtn").addEventListener("click",async()=>{
-  const btn=$("#shareBtn"),m=$("#iMsg");busy(btn,true,"Preparing PDF…");
+  const btn=$("#shareBtn"),m=$("#iMsg");show("#copyBox",false);m.textContent="";
+  const copied=copyText(waText(DOC));
+  busy(btn,true,"Preparing PDF…");
   try{const doc=await freshDoc(),file=await pdfFile(doc),text=waText(doc);
+    let note;
+    if(await copied)note="Message copied. In WhatsApp, paste it as the caption before sending.";
+    else{showCopyBox(text);note="Copy the message below, then paste it in WhatsApp as the caption.";}
     if(navigator.canShare&&navigator.canShare({files:[file]})){
+      m.textContent=note;
       try{await navigator.share({files:[file],text,title:file.name});}catch(e){if(e.name!=="AbortError")throw e;}
     }else{download(file);const to=waNumber(doc.billed_to_phone);
       if(to)window.open("https://wa.me/"+to+"?text="+encodeURIComponent(text),"_blank","noopener");
-      m.textContent="This browser cannot share files: the PDF was downloaded. Attach it in the WhatsApp chat.";}
+      m.textContent="This browser cannot share files: the PDF was downloaded. Attach it in the WhatsApp chat. "+note;}
   }catch(e){kind(e)==="refused"?m.textContent="The PDF could not be made: "+e.message:failed(e,"#iMsg");}
   finally{busy(btn,false);}
 });
@@ -611,7 +664,202 @@ $("#pdfBtn").addEventListener("click",async()=>{
   finally{busy(btn,false);}
 });
 
-// ---- 9. Start ------------------------------------------------------------------
+// Discard draft (owner only, spec section 5): the existing cancel_invoice,
+// with a reason. The draft is cancelled, never deleted, and stays in the
+// records under "Cancelled". The button is locked while it works, so a
+// double tap sends one request; if the answer is lost on the way back, the
+// draft is read again before anything is reported.
+$("#discardBtn").addEventListener("click",()=>{show("#discardBox",true);$("#discardMsg").textContent="";$("#discardWhy").value="";
+  $("#discardBox").scrollIntoView({block:"center"});$("#discardWhy").focus();});
+$("#discardNo").addEventListener("click",()=>show("#discardBox",false));
+$("#discardYes").addEventListener("click",async()=>{
+  const btn=$("#discardYes"),m=$("#discardMsg"),why=$("#discardWhy").value.trim(),id=S.invoiceId;
+  if(btn.disabled||!id)return;
+  if(!why){m.textContent="Give a reason: it is kept with the record.";return;}
+  busy(btn,true,"Discarding…");
+  try{
+    try{await api.cancel(id,why);}
+    catch(err){const doc=await api.document(id).catch(()=>null);if(!doc||doc.state!=="cancelled")throw err;}
+    show("#discardBox",false);S=blank();DOC=null;NOTE="";forget();
+    await go("#/invoice/"+id);
+  }catch(err){const k=kind(err);
+    if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+    if(k==="expired")return expire();
+    m.textContent=k==="offline"?"Not discarded: no connection. Try again when you have signal.":"Not discarded: "+String(err&&err.message||err);}
+  finally{busy(btn,false);}
+});
+
+// ---- 9. Screens and the address -----------------------------------------------
+// One page, four screens, picked by the part of the address after "#/":
+//   #/  Home · #/invoices  the list · #/invoice/<id>  one invoice · #/new
+// Anything else after "#" (a sign-in link's details) is not a screen.
+const VIEWS=["#homeV","#listV","#invV"];
+let HERE="#/",SKIP=false;   // HERE: the screen shown now (for "Go back")
+const canEdit=()=>!!ME&&(ME.role==="owner"||ME.role==="sales");
+function view(name,tab){VIEWS.forEach(v=>show(v,v===name));
+  document.querySelectorAll("#tabs a").forEach(a=>a.classList.toggle("on",a.dataset.tab===tab));window.scrollTo(0,0);}
+// Inside the invoice screen: the estimate box, the form, or the read-only view.
+function showOnly(part){["#start","#form","#issuedSec","#discardBox"].forEach(p=>show(p,p===part));}
+function parseRoute(){
+  const h=location.hash||"";
+  if(!h.startsWith("#/"))return{name:"home",params:new URLSearchParams()};
+  const[path,qs]=h.slice(2).split("?"),parts=path.split("/").filter(Boolean),params=new URLSearchParams(qs||"");
+  if(parts[0]==="invoices")return{name:"invoices",params};
+  if(parts[0]==="invoice"&&/^\d+$/.test(parts[1]||""))return{name:"invoice",id:+parts[1],params};
+  if(parts[0]==="new")return{name:"new",params};
+  return{name:"home",params};
+}
+async function go(hash){if(location.hash===hash)await route();else location.hash=hash;}
+window.addEventListener("hashchange",()=>{if(SKIP){SKIP=false;return;}route();});
+async function route(){
+  if(!ME)return;
+  const r=parseRoute();
+  if(r.name==="new"&&!canEdit())return go("#/");
+  if(r.name==="invoice"||r.name==="new"){
+    // Does this screen show the invoice being prepared? If not, and it has
+    // unsaved changes, ask before replacing it (spec section 5).
+    const same=r.name==="new"?!S.invoiceId:S.invoiceId===r.id;
+    if(!same){
+      if(unsaved()&&(await askGuard())==="back"){SKIP=location.hash!==HERE;location.hash=HERE;return;}
+      S=blank();DOC=null;NOTE="";LOOKED="";forget();
+    }
+  }
+  HERE=location.hash||"#/";
+  if(r.name==="home")return showHome();
+  if(r.name==="invoices")return showList(r.params);
+  view("#invV",r.name==="new"?"new":"invoices");
+  if(r.name==="new"){
+    if(S.items.length||S.name||S.phone||S.dirty)return showForm();
+    $("#paste").value="";$("#readMsg").textContent="";$("#matches").innerHTML="";return showOnly("#start");
+  }
+  // This invoice's own unsaved changes are on the phone: carry on with them.
+  if(S.invoiceId===r.id&&S.dirty)return showForm();
+  return openInvoice(r.id);
+}
+
+// "This invoice has changes that are not saved": Save it, Discard changes,
+// or Go back. Answers "save" (only once saved), "discard" or "back".
+function askGuard(){return new Promise(done=>{
+  const box=$("#guard"),m=$("#guardMsg");m.textContent="";show("#guard",true);box.scrollIntoView({block:"start"});
+  const end=a=>{show("#guard",false);["#guardSave","#guardDiscard","#guardBack"].forEach(b=>$(b).onclick=null);done(a);};
+  $("#guardBack").onclick=()=>end("back");
+  $("#guardDiscard").onclick=()=>{S.dirty=false;forget();end("discard");};
+  $("#guardSave").onclick=async()=>{
+    const bad=problems(S,false);if(bad.length){m.textContent="Can't save yet: "+bad.join(" ");return;}
+    const b=$("#guardSave");busy(b,true,"Saving…");
+    try{await save();end("save");}
+    catch(err){const k=kind(err);if(k==="revoked"||k==="expired"){end("back");return failed(err);}
+      m.textContent=k==="offline"?"Not saved: no connection. Try again, or go back.":"Not saved: "+String(err&&err.message||err);}
+    finally{busy(b,false);}
+  };
+});}
+function showForm(){view("#invV",S.invoiceId?"invoices":"new");showOnly("#form");
+  $("#cName").value=S.name;$("#cPhone").value=S.phone;$("#cSite").value=S.site;
+  $("#cContact").value=S.contact;$("#cContactPhone").value=S.contactPhone;
+  document.querySelectorAll('input[name="dl"]').forEach(r=>r.checked=r.value===S.dl);
+  $("#fee").value=S.fee;$("#iDue").value=S.due;$("#iNote").value=S.note;
+  $("#custPicked").textContent=S.customerCode?`Existing customer ${S.customerCode}`:"";
+  render();
+}
+
+// Errors while reading a screen: removed access signs out, an expired
+// sign-in keeps the work, anything else is said on the screen.
+function readFailed(err,where){const k=kind(err);
+  if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+  if(k==="expired")return expire();
+  $(where).textContent=k==="offline"?"Can't load this: no connection. Check your signal and try again.":"Can't load this: "+String(err&&err.message||err);}
+
+// A row in the lists (Home's latest, and Invoices).
+function shortDate(iso){if(!iso)return"";const[y,m,d]=String(iso).slice(0,10).split("-").map(Number);
+  return new Date(y,m-1,d).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
+function rowHTML(r){
+  const draft=r.status==="draft",when=draft?"Started "+shortDate(r.created_at):r.status==="overdue"?"Due "+shortDate(r.due_date):r.issued_at?"Issued "+shortDate(r.issued_at):"";
+  // Every issued invoice shows its total and what is left to pay (spec
+  // section 4); a draft or a cancelled invoice owes nothing.
+  const owes=r.state==="issued";
+  return`<a class="dk-inv" href="#/invoice/${r.id}" data-id="${r.id}">
+    <span class="dk-inv-top"><b>${draft?"Draft":esc(r.invoice_no||"")}</b><i class="dk-badge s-${esc(r.status)}">${esc(STATUS[r.status]||r.status)}</i></span>
+    <span class="dk-inv-who">${esc(r.billed_to_name||"(no name)")}${r.billed_to_phone?" · "+esc(r.billed_to_phone):""}</span>
+    <span class="dk-inv-bot"><small>${esc(when)}</small><b>${money(toP(r.total))}${owes?`<small class="dk-left">${money(toP(r.balance))} left</small>`:""}</b></span>
+  </a>`;}
+
+// Home: the figures are the database's own (back_office_home); nothing is
+// added up on the phone. Each figure opens the matching list.
+async function showHome(){
+  view("#homeV","home");$("#homeMsg").textContent="";
+  $("#unsavedNote").innerHTML=unsaved()?`<div class="dk-card dk-alert"><b>An invoice is in progress and not saved.</b> <a href="${S.invoiceId?"#/invoice/"+S.invoiceId:"#/new"}">Continue it</a></div>`:"";
+  try{
+    const[h,recent]=await Promise.all([api.home(),api.list({status:"all",terms:[],offset:0,limit:5})]);
+    // Removed access reads as zeros and an empty list, not as an error.
+    if(!recent.rows.length)await stillStaff();
+    $("#hOwed").textContent=money(toP(h.owed));
+    $("#hUnpaid").textContent=h.unpaid;$("#hPart").textContent=h.part_paid;
+    $("#hOverdue").textContent=h.overdue;$("#hDrafts").textContent=h.drafts;
+    $("#recent").innerHTML=recent.rows.length?recent.rows.map(rowHTML).join(""):`<p class="dk-help">No invoices yet.</p>`;
+  }catch(err){readFailed(err,"#homeMsg");}
+}
+
+// Search: by number, part of a name, or a phone number in any Ghana format.
+// Phone numbers are stored as +233XXXXXXXXX (the database writes them so).
+// The digits typed are matched inside that, after removing the country code
+// (only when it really is one: a leading "+233", "00233", or 12 digits
+// starting with 233) or a leading 0. Every match is listed; nothing is ever
+// picked for the user. Characters that mean something to the database's
+// filter syntax are dropped; spaces become wildcards.
+function searchTerms(q){
+  const raw=String(q||"").trim(),out=[];
+  const clean=raw.replace(/[^\p{L}\p{N} .\-'&\/]/gu," ").trim().replace(/\s+/g,"*");
+  if(clean){out.push({col:"invoice_no",pattern:`*${clean}*`});out.push({col:"billed_to_name",pattern:`*${clean}*`});}
+  let d=raw.replace(/\D/g,"");
+  if(/^\s*\+\s*233/.test(raw))d=d.slice(3);
+  else if(d.startsWith("00233"))d=d.slice(5);
+  else if(d.length===12&&d.startsWith("233"))d=d.slice(3);
+  else if(d.startsWith("0"))d=d.slice(1);
+  if(d.length>=3)out.push({col:"billed_to_phone",pattern:`*${d}*`});
+  return out;
+}
+const PAGE=30;
+let LIST={status:"all",q:"",rows:[],count:0,seq:0};
+async function showList(params){
+  view("#listV","invoices");
+  const status=params.get("status")||"all",q=params.get("q")||"";
+  $("#q").value=q;
+  document.querySelectorAll("#filters button").forEach(b=>b.classList.toggle("on",b.dataset.status===status));
+  LIST={status,q,rows:[],count:0,seq:LIST.seq+1};
+  $("#rows").innerHTML="";$("#listMsg").textContent="";
+  await loadMore();
+}
+async function loadMore(){
+  const my=LIST.seq,btn=$("#moreBtn");busy(btn,true,"Loading…");$("#listMsg").textContent="";
+  try{
+    const res=await api.list({status:LIST.status,terms:searchTerms(LIST.q),offset:LIST.rows.length,limit:PAGE});
+    if(my!==LIST.seq)return;   // a newer search or filter has replaced this one
+    if(!res.rows.length&&!LIST.rows.length)await stillStaff();
+    LIST.rows=LIST.rows.concat(res.rows);LIST.count=res.count;
+    $("#rows").innerHTML=LIST.rows.length?LIST.rows.map(rowHTML).join(""):`<p class="dk-help">${LIST.q||LIST.status!=="all"?"No invoices match.":"No invoices yet."}</p>`;
+    // The order is by the date an invoice was started (then its id), not
+    // the date it was issued: predictable, and paging never skips or repeats
+    // one (accepted for v1 by ChatGPT and Daniel, 23 Nov 2026).
+    const n=`${LIST.count} ${LIST.count===1?"invoice":"invoices"}`;
+    $("#listInfo").textContent=LIST.count?(LIST.status==="owed"?"Owed to TCP: ":"")+n+" · newest first, by date started":"";
+    show("#moreBtn",LIST.rows.length<LIST.count);
+  }catch(err){if(my===LIST.seq)readFailed(err,"#listMsg");}
+  finally{busy(btn,false);}
+}
+$("#moreBtn").addEventListener("click",loadMore);
+const listHash=(status,q)=>"#/invoices"+((status&&status!=="all")||q?"?"+new URLSearchParams(Object.assign(status&&status!=="all"?{status}:{},q?{q}:{})).toString():"");
+$("#filters").addEventListener("click",e=>{const b=e.target.closest("[data-status]");if(b)go(listHash(b.dataset.status,LIST.q));});
+// Searching as you type: after a short pause, without filling the Back
+// button's history with every letter.
+let typing=null;
+$("#q").addEventListener("input",()=>{clearTimeout(typing);typing=setTimeout(()=>{
+  const h=listHash(LIST.status,$("#q").value.trim());history.replaceState(null,"",h);HERE=h;
+  LIST={...LIST,q:$("#q").value.trim(),rows:[],count:0,seq:LIST.seq+1};$("#rows").innerHTML="";loadMore();},350);});
+$("#searchForm").addEventListener("submit",e=>{e.preventDefault();clearTimeout(typing);
+  const h=listHash(LIST.status,$("#q").value.trim());history.replaceState(null,"",h);HERE=h;
+  LIST={...LIST,q:$("#q").value.trim(),rows:[],count:0,seq:LIST.seq+1};$("#rows").innerHTML="";loadMore();});
+
+// ---- 10. Start -----------------------------------------------------------------
 // Not connected to a database (no project address in this build): say so.
 if(!api){screen("setup");}
 else{
@@ -633,5 +881,5 @@ else{
 }
 
 // For the tests (and nothing else): the desk's own functions.
-window.TCPDesk={parseEstimate,num,totals,problems,waNumber,waText,makePdf,linesForDb,state:()=>S,doc:()=>DOC};
+window.TCPDesk={parseEstimate,num,totals,problems,waNumber,waText,makePdf,linesForDb,searchTerms,state:()=>S,doc:()=>DOC};
 })();

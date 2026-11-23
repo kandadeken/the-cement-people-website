@@ -1,6 +1,7 @@
 """
-Invoice Desk on Supabase, phase 1 (21 Nov 2026). "TCP Invoice Desk on
-Supabase: Design (v2.1)", approved by ChatGPT and Daniel.
+TCP Back Office, version 1 (22 Nov 2026), and the Invoice Desk (phase 1)
+inside it. "TCP Back Office: Design Specification v1.1" and "TCP Invoice
+Desk on Supabase: Design (v2.1)", both approved by ChatGPT and Daniel.
 
 These tests drive the desk's screens in a real (headless) Chrome. The
 database is replaced by a STAND-IN (STANDIN below): a small in-memory copy of
@@ -38,6 +39,30 @@ API server could not be installed in the build environment.
   S14  the sign-out notice from Supabase: no calls made inside its lock
   S15  an expired or used sign-in link says so, and the address is tidied
   S16  with the free-plan email (link only), no code box is shown
+
+TCP Back Office v1.1 (spec section 10):
+  B01  Home figures match the database; each figure opens its list
+  B02  Home agrees with the list: every count, and "owed" = the balances
+  B03  list order (newest started, then id), filters, paging without skips
+       or repeats
+  B17  every issued invoice shows its total and what is left; drafts and
+       cancelled show none
+  B04  phone search: four formats and a partial number find the same
+       invoice; "233" is only removed when it is the country code
+  B05  several matches are all listed; nothing is opened or chosen
+  B06  number and name search
+  B07  a draft from the list opens in the form, every field as saved
+  B08  the "Johnny" case: save, sign out, sign in, the draft is in the list
+  B09  unsaved changes: opening another draft asks first; Go back keeps them
+  B10  an issued invoice opens read-only
+  B11  finance: Home and the list; a draft opens read-only; no New invoice
+  B12  discard draft: owner only, needs a reason, cancelled not deleted, one
+       request for a double tap
+  B13  removed access: an empty Home is checked and signs out
+  B14  WhatsApp: the message is copied; a blocked clipboard shows Copy
+  B15  /invoice-desk/ forwards with the query and the whole fragment kept;
+       an old sign-in link and an expired link still work
+  B16  every Back Office screen fits a 360 px and a 390 px phone
 """
 import base64
 import io
@@ -51,7 +76,11 @@ from pypdf import PdfReader
 from conftest import PRODUCTS, SITE_URL, settle, tidy_pdf_text, whatsapp_message
 
 ASTRO = SITE_URL.startswith("http")
-DESK = urllib.parse.urljoin(SITE_URL, "invoice-desk/")
+# The phase 1 tests (S01-S16) start on the New invoice screen; the Back
+# Office tests (B01 onwards) start on Home.
+BO = urllib.parse.urljoin(SITE_URL, "back-office/")
+DESK = BO + "#/new"
+OLD = urllib.parse.urljoin(SITE_URL, "invoice-desk/")
 pytestmark = pytest.mark.skipif(not ASTRO, reason="the Invoice Desk is part of the Astro build only")
 
 # The price list as the database holds it: numeric ids, the website's id as
@@ -63,7 +92,7 @@ BY_SITE = {p["site_id"]: p for p in DB_PRODUCTS}
 OWNER = {"id": "u-owner", "email": "owner@test.invalid"}
 
 # The stand-in for Supabase. window.TCPDeskApi replaces the real connection
-# (see section 2 of public/scripts/invoice-desk.js). window.__db lets a test
+# (see section 2 of public/scripts/back-office.js). window.__db lets a test
 # look inside, switch the connection off, or remove someone's access.
 STANDIN = r"""
 (() => {
@@ -105,6 +134,31 @@ STANDIN = r"""
     if (d.length === 10 && d[0] === "0") return "+233" + d.slice(1); if (d.length === 12 && d.startsWith("233")) return "+" + d; if (d.length === 9) return "+233" + d;
     throw new Error("Not a Ghana phone number: " + p); };
   const total = id => db.lines.filter(l => l.invoice_id === id).reduce((a, l) => a + Math.round(l.quantity * l.unit_price * 100), 0) / 100;
+  // Status as invoice_summary works it out (payments: inv.paid).
+  const today = new Date().toISOString().slice(0, 10);
+  const status = inv => inv.state === "draft" ? "draft" : inv.state === "cancelled" ? "cancelled"
+    : (inv.paid || 0) >= total(inv.id) ? "paid" : inv.due_date && inv.due_date < today ? "overdue" : (inv.paid || 0) > 0 ? "part_paid" : "unpaid";
+  let clock = 0;
+  const stamp = () => new Date(Date.UTC(2026, 10, 22, 8, 0, 0) + 1000 * (clock++)).toISOString();
+  // invoice_list, as the view builds it.
+  const listRow = inv => { const c = db.customers.find(x => x.id === inv.customer_id), t = total(inv.id);
+    return {id: inv.id, invoice_no: inv.invoice_no, state: inv.state, status: status(inv), issued_at: inv.issued_at || null,
+      created_at: inv.created_at, due_date: inv.due_date || null, total: t, balance: Math.round((t - (inv.paid || 0)) * 100) / 100,
+      billed_to_name: inv.invoice_no ? inv.billed_to_name : c.name, billed_to_phone: inv.invoice_no ? inv.billed_to_phone : c.phone}; };
+  // PostgREST "ilike" with * as the wildcard.
+  const ilike = (v, pat) => v != null && new RegExp("^" + pat.split("*").map(p => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$", "i").test(String(v));
+  // Test data straight into the "database" (as other staff would have made).
+  db.seed = list => list.forEach(o => {
+    let c = db.customers.find(x => x.phone === o.phone && x.name === o.name);
+    if (!c) { c = {id: db.customers.length + 1, code: "TCP-C-" + pad(++db.counters.customer), phone: o.phone || null, name: o.name || null}; db.customers.push(c); }
+    const inv = {id: db.invoices.length + 1, state: o.state || "draft", invoice_no: null, customer_id: c.id, due_date: o.due || null,
+      paid: o.paid || 0, created_at: o.created_at || stamp(), notes: null, deliver_to_location: null};
+    db.invoices.push(inv);
+    db.lines.push({invoice_id: inv.id, position: 1, kind: "product", product_id: 1, description: "Supacem 32.5R", unit: "50 kg bag", quantity: o.qty || 10, unit_price: 75});
+    if (inv.state !== "draft" && !o.never_issued) Object.assign(inv, {invoice_no: "TCP-INV-" + pad(++db.counters.invoice),
+      issued_at: inv.created_at, issued_by: "Test Owner", billed_to_name: c.name, billed_to_phone: c.phone});
+    if (o.state === "cancelled") inv.cancel_reason = "seeded";
+    persist(); });
   window.TCPDeskApi = {
     emailCode: cfg.emailCode,
     sendCode: email => net("sendCode", () => { db.codeFor = email; }),
@@ -128,7 +182,7 @@ STANDIN = r"""
       db.customers.push(c); return c; }),
     saveDraft: a => net("saveDraft", () => { staffOnly("owner", "sales");
       let inv = a.p_invoice_id ? db.invoices.find(i => i.id === a.p_invoice_id) : (a.p_request_id && db.invoices.find(i => i.request_id === a.p_request_id));
-      if (!inv) { inv = {id: db.invoices.length + 1, state: "draft", invoice_no: null, request_id: a.p_request_id}; db.invoices.push(inv); }
+      if (!inv) { inv = {id: db.invoices.length + 1, state: "draft", invoice_no: null, request_id: a.p_request_id, created_at: stamp()}; db.invoices.push(inv); }
       if (inv.state !== "draft") throw new Error("Only a draft invoice can be changed");
       Object.assign(inv, {customer_id: a.p_customer_id, deliver_to_location: a.p_deliver_to_location, deliver_to_contact: a.p_deliver_to_contact,
         deliver_to_phone: phone(a.p_deliver_to_phone), due_date: a.p_due_date, notes: a.p_notes});
@@ -147,13 +201,31 @@ STANDIN = r"""
     document: id => net("document", () => { staffOnly(); const inv = db.invoices.find(i => i.id === id);
       if (!inv) throw new Error("No such invoice"); const c = db.customers.find(x => x.id === inv.customer_id);
       const issued = !!inv.invoice_no, t = total(id);
-      return {id: inv.id, invoice_no: inv.invoice_no, state: inv.state, status: inv.state === "draft" ? "draft" : "unpaid",
+      return {id: inv.id, invoice_no: inv.invoice_no, state: inv.state, status: status(inv), cancel_reason: inv.cancel_reason || null, created_at: inv.created_at,
         issued_at: inv.issued_at || null, issued_by: inv.issued_by || null, due_date: inv.due_date, notes: inv.notes,
         customer_id: inv.customer_id, customer_code: c.code,
         billed_to_name: issued ? inv.billed_to_name : c.name, billed_to_phone: issued ? inv.billed_to_phone : c.phone,
         deliver_to_location: inv.deliver_to_location, deliver_to_contact: inv.deliver_to_contact, deliver_to_phone: inv.deliver_to_phone,
         lines: db.lines.filter(l => l.invoice_id === id).map(l => ({...l, line_total: Math.round(l.quantity * l.unit_price * 100) / 100})),
-        total: t, paid: 0, balance: t, payments: []}; }),
+        total: t, paid: inv.paid || 0, balance: t - (inv.paid || 0), payments: []}; }),
+    cancel: (id, reason) => net("cancel", () => { staffOnly("owner");
+      if (!reason || !reason.trim()) throw new Error("A reason is needed to cancel an invoice");
+      const inv = db.invoices.find(i => i.id === id);
+      if (!inv || inv.state === "cancelled") throw new Error("Only a draft or issued invoice can be cancelled");
+      Object.assign(inv, {state: "cancelled", cancel_reason: reason.trim()}); }),
+    // back_office_home (runs with the caller's rights: zeros for non-staff).
+    home: () => net("home", () => { const rows = me() ? db.invoices.map(listRow) : [], n = s => rows.filter(r => r.status === s).length;
+      return {owed: rows.filter(r => ["unpaid", "part_paid", "overdue"].includes(r.status)).reduce((a, r) => a + r.balance, 0),
+        unpaid: n("unpaid"), part_paid: n("part_paid"), overdue: n("overdue"), drafts: n("draft")}; }),
+    // invoice_list with the desk's filters, newest first then id, paged.
+    list: ({status: st, terms, offset, limit}) => net("list", () => {
+      let rows = rlsRead(db.invoices.map(listRow));
+      if (st === "owed") rows = rows.filter(r => ["unpaid", "part_paid", "overdue"].includes(r.status));
+      else if (st && st !== "all") rows = rows.filter(r => r.status === st);
+      if (terms && terms.length) rows = rows.filter(r => terms.some(t => ilike(r[t.col], t.pattern)));
+      rows.sort((a, b) => (a.created_at < b.created_at) - (a.created_at > b.created_at) || b.id - a.id);
+      db.lastTerms = terms;
+      return {rows: rows.slice(offset, offset + limit), count: rows.length}; }),
   };
 })();
 """
@@ -225,9 +297,9 @@ def test_s01_kept_out_of_search_engines(browser):
     robots = page.locator('meta[name="robots"]').get_attribute("content")
     assert "noindex" in robots and "nofollow" in robots
     page.goto(urllib.parse.urljoin(SITE_URL, "sitemap.xml"))
-    assert "invoice-desk" not in page.content()
+    assert "invoice-desk" not in page.content() and "back-office" not in page.content()
     page.goto(SITE_URL, wait_until="load")
-    assert page.locator('a[href*="invoice-desk"]').count() == 0
+    assert page.locator('a[href*="invoice-desk"], a[href*="back-office"]').count() == 0
     assert not errors
 
 
@@ -263,7 +335,7 @@ def test_s03_sign_in_with_email_code(browser):
     assert not errors
 
 
-def test_s03_not_staff_and_finance_see_no_access(browser):
+def test_s03_not_staff_sees_no_access(browser):
     stranger = {"id": "u-x", "email": "x@test.invalid"}
     page, _ = _desk(browser, signed_in=False, users=[stranger], staff=[])
     page.fill("#email", stranger["email"]); page.click("#emailForm button")
@@ -274,14 +346,6 @@ def test_s03_not_staff_and_finance_see_no_access(browser):
     assert not page.locator("#tool").is_visible()
     assert "products" not in page.evaluate("__db.calls")
 
-    fin = {"id": "u-f", "email": "f@test.invalid"}
-    page, _ = _desk(browser, signed_in=False, users=[fin],
-                    staff=[{"user_id": "u-f", "full_name": "Fin", "role": "finance", "active": True}])
-    page.fill("#email", fin["email"]); page.click("#emailForm button")
-    page.wait_for_selector("#codeForm:not([hidden])")
-    page.fill("#code", "123456"); page.click("#codeForm button")
-    page.wait_for_selector("#noaccess:not([hidden])")
-    assert "owner or sales" in page.text_content("#noWhy")
 
 
 # ---- S04 ----------------------------------------------------------------------
@@ -423,8 +487,8 @@ def test_s09_issued_invoice_reopens_from_the_database(browser):
     page.click("#issueBtn")
     page.wait_for_selector("#issuedSec:not([hidden])")
     # Tamper with the phone's copy: it must not be used for an issued invoice.
-    page.evaluate("""() => { const k = 'tcp-desk-work-u-owner', s = JSON.parse(localStorage.getItem(k));
-                             s.name = 'From the phone'; localStorage.setItem(k, JSON.stringify(s)); }""")
+    page.evaluate("""() => localStorage.setItem('tcp-desk-work-u-owner',
+                             JSON.stringify({invoiceId: 1, dirty: false, name: 'From the phone', items: []}))""")
     page.reload(wait_until="load")
     page.wait_for_selector("#issuedSec:not([hidden])")
     assert "TCP-INV-0001" in page.text_content("#issued")
@@ -488,6 +552,7 @@ def test_s12_empty_lookup_after_removal_signs_out(browser):
     _ready_invoice(page, browser, phone="0200000000")
     page.evaluate("__db.staff[0].active = false")
     page.click("#newBtn")
+    page.click("#guardDiscard")   # the unsaved invoice: discard it
     page.click("#blankBtn")
     page.fill("#cPhone", "0241234567")
     page.dispatch_event("#cPhone", "change")
@@ -575,4 +640,357 @@ def test_s16_link_only_email_shows_no_code_box(browser):
     assert "code" not in page.text_content("#signMsg").lower()
     assert not page.locator("#codeForm").is_visible()
     assert "sendCode" in page.evaluate("__db.calls")
+    assert not errors
+
+
+
+# ---- TCP Back Office v1.1 --------------------------------------------------------
+
+def _bo(browser, width=390, route="#/", staff=None, users=None, seed=None, signed_in=True, perms=None, who=None):
+    ctx = browser.new_context(viewport={"width": width, "height": 844}, device_scale_factor=2,
+                              is_mobile=True, has_touch=True, locale="en-US", permissions=perms or [])
+    page = ctx.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("dialog", lambda d: d.accept())
+    if signed_in:
+        page.add_init_script("sessionStorage.setItem('standin-session', JSON.stringify(%s))" % json.dumps(who or OWNER))
+    page.add_init_script(_standin(staff=staff, users=users))
+    if seed:
+        # Seeded once, before the first load (the stand-in keeps it per tab).
+        page.add_init_script("if (!sessionStorage.getItem('seeded')) { window.__seed = %s; }" % json.dumps(seed))
+        page.add_init_script("if (window.__seed) { __db.seed(window.__seed); sessionStorage.setItem('seeded', '1'); }")
+    page.goto(BO + route, wait_until="load")
+    page.wait_for_selector("#tool:not([hidden])")
+    return page, errors
+
+
+FIN = {"id": "u-f", "email": "fin@test.invalid"}
+SALES = {"id": "u-s", "email": "sales@test.invalid"}
+TEAM = [{"user_id": OWNER["id"], "full_name": "Test Owner", "role": "owner", "active": True},
+        {"user_id": FIN["id"], "full_name": "Fin", "role": "finance", "active": True},
+        {"user_id": SALES["id"], "full_name": "Sal", "role": "sales", "active": True}]
+PAST, FUTURE = "2026-01-10", "2099-12-31"
+# Each invoice: 10 bags x GH₵75 = GH₵750.
+MIX = [
+    {"name": "Kofi Draft", "phone": "+233201110001", "state": "draft"},
+    {"name": "Ama Unpaid", "phone": "+233241234567", "state": "issued", "due": FUTURE},
+    {"name": "Yaw Part", "phone": "+233552331234", "state": "issued", "due": FUTURE, "paid": 300},
+    {"name": "Efua Paid", "phone": "+233271112223", "state": "issued", "due": FUTURE, "paid": 750},
+    {"name": "Kwame Late", "phone": "+233501234000", "state": "issued", "due": PAST},
+    {"name": "Esi Cancelled", "phone": "+233261110000", "state": "cancelled"},
+]
+
+
+def _list_count(page, status):
+    page.evaluate("s => location.hash = '#/invoices' + (s === 'all' ? '' : '?status=' + s)", status)
+    page.wait_for_function("document.querySelector('#listV') && !document.querySelector('#listV').hidden && !document.querySelector('#moreBtn').disabled")
+    page.wait_for_timeout(100)
+    return page.locator("#rows .dk-inv").count()
+
+
+def test_b01_home_figures(browser):
+    page, errors = _bo(browser, seed=MIX)
+    page.wait_for_function("document.querySelector('#hOwed').textContent !== '—'")
+    assert page.text_content("#hOwed") == "GH₵1,950.00"   # 750 + 450 left + 750
+    assert [page.text_content(s) for s in ["#hUnpaid", "#hPart", "#hOverdue", "#hDrafts"]] == ["1", "1", "1", "1"]
+    assert page.locator("#recent .dk-inv").count() == 5
+    page.click('a.dk-fig[href="#/invoices?status=overdue"]')
+    page.wait_for_function("location.hash === '#/invoices?status=overdue'")
+    page.wait_for_selector("#rows .dk-inv")
+    assert page.locator("#rows .dk-inv").count() == 1 and "Kwame Late" in page.text_content("#rows")
+    assert not errors
+
+
+def test_b02_home_agrees_with_the_list(browser):
+    page, errors = _bo(browser, seed=MIX)
+    page.wait_for_function("document.querySelector('#hOwed').textContent !== '—'")
+    home = {k: int(page.text_content(s)) for k, s in [("unpaid", "#hUnpaid"), ("part_paid", "#hPart"), ("overdue", "#hOverdue"), ("draft", "#hDrafts")]}
+    owed = page.text_content("#hOwed")
+    for status, n in home.items():
+        assert _list_count(page, status) == n, status
+    # "Owed" = the balances ("… left") on the rows the list shows under Owed.
+    _list_count(page, "owed")
+    total = sum(float(t.replace("left", "").replace("GH₵", "").replace(",", "").strip())
+                for t in page.locator("#rows .dk-left").all_text_contents())
+    assert f"GH₵{total:,.2f}" == owed
+    assert not errors
+
+
+def test_b03_order_filters_and_paging(browser):
+    # 35 drafts; ten of them started at the very same moment (a tie).
+    seed = [{"name": f"Cust {i:02d}", "phone": f"+2332000000{i:02d}", "state": "draft",
+             "created_at": "2026-11-22T09:00:00.000Z" if i < 10 else None} for i in range(35)]
+    page, errors = _bo(browser, seed=seed, route="#/invoices")
+    page.wait_for_selector("#rows .dk-inv")
+    assert page.locator("#rows .dk-inv").count() == 30
+    assert "35 invoices" in page.text_content("#listInfo")
+    page.click("#moreBtn")
+    page.wait_for_function("document.querySelectorAll('#rows .dk-inv').length === 35")
+    ids = [int(x) for x in page.eval_on_selector_all("#rows .dk-inv", "els => els.map(e => e.dataset.id)")]
+    assert len(set(ids)) == 35, "no invoice repeated or skipped across pages"
+    rows = page.evaluate("() => __db.invoices.map(i => ({id: i.id, c: i.created_at}))")
+    expected = [r["id"] for r in sorted(rows, key=lambda r: (r["c"], r["id"]), reverse=True)]
+    assert ids == expected, "newest first, then the id: the tie always in the same order"
+    assert not page.locator("#moreBtn").is_visible()
+    # filters
+    assert _list_count(page, "cancelled") == 0
+    assert "No invoices match" in page.text_content("#rows")
+    assert not errors
+
+
+def _search(page, q):
+    page.fill("#q", q)
+    page.press("#q", "Enter")
+    page.wait_for_function("q => location.hash.includes(encodeURIComponent(q).replace(/%20/g, '+')) || location.hash.includes('q=')", arg=q)
+    page.wait_for_function("!document.querySelector('#moreBtn').disabled")
+    page.wait_for_timeout(100)
+    return page.eval_on_selector_all("#rows .dk-inv .dk-inv-who", "els => els.map(e => e.textContent)")
+
+
+def test_b04_phone_search(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoices")
+    page.wait_for_selector("#rows .dk-inv")
+    for q in ["024 123 4567", "0241234567", "233241234567", "+233241234567", "+233 24 123 4567", "1234567"]:
+        found = _search(page, q)
+        assert any("Ama Unpaid" in f for f in found), q
+    assert page.evaluate("TCPDesk.searchTerms('0241234567').find(t => t.col === 'billed_to_phone').pattern") == "*241234567*"
+    assert page.evaluate("TCPDesk.searchTerms('+233241234567').find(t => t.col === 'billed_to_phone').pattern") == "*241234567*"
+    # "233" is NOT removed unless it is the country code: here it is part of
+    # the number (+233 55 233 1234), and it still finds it.
+    assert page.evaluate("TCPDesk.searchTerms('233').find(t => t.col === 'billed_to_phone').pattern") == "*233*"
+    assert page.evaluate("TCPDesk.searchTerms('2331234').find(t => t.col === 'billed_to_phone').pattern") == "*2331234*"
+    found = _search(page, "2331234")
+    assert any("Yaw Part" in f for f in found)
+    # Characters that mean something to the database's filter syntax are dropped.
+    assert all("," not in t["pattern"] and "(" not in t["pattern"] for t in page.evaluate("TCPDesk.searchTerms('a,b(c)')"))
+    assert not errors
+
+
+def test_b05_several_matches_all_listed(browser):
+    seed = [{"name": "Kwame Mensah", "phone": "+233241234567", "state": "issued", "due": FUTURE},
+            {"name": "Kwame Brother", "phone": "+233241234567", "state": "draft"},
+            {"name": "Someone Else", "phone": "+233200000000", "state": "draft"}]
+    page, errors = _bo(browser, seed=seed, route="#/invoices")
+    page.wait_for_selector("#rows .dk-inv")
+    found = _search(page, "0241234567")
+    assert len(found) == 2 and any("Kwame Mensah" in f for f in found) and any("Kwame Brother" in f for f in found)
+    assert page.locator("#listV").is_visible() and "#/invoices" in page.url, "nothing opened or chosen"
+    found = _search(page, "kwame")
+    assert len(found) == 2
+    assert not errors
+
+
+def test_b06_number_and_name_search(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoices")
+    page.wait_for_selector("#rows .dk-inv")
+    for q in ["0001", "INV-0001", "TCP-INV-0001"]:
+        found = _search(page, q)
+        assert any("Ama Unpaid" in f for f in found), q
+    found = _search(page, "LATE")
+    assert found == [f for f in found if "Kwame Late" in f] and len(found) == 1
+    assert not errors
+
+
+def test_b07_draft_opens_in_the_form(browser):
+    page, errors = _bo(browser, route="#/new")
+    _ready_invoice(page, browser)
+    page.fill("#iNote", "Gate code 4411")
+    page.click("#saveBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent === 'Draft saved.'")
+    assert "#/invoice/1" in page.url
+    page.click('#tabs a[data-tab="invoices"]')
+    page.wait_for_selector('#rows .dk-inv[data-id="1"]')
+    assert "Draft" in page.text_content('#rows .dk-inv[data-id="1"]')
+    page.evaluate("localStorage.clear()")   # the phone forgets: the database must be enough
+    page.click('#rows .dk-inv[data-id="1"]')
+    page.wait_for_selector("#form:not([hidden])")
+    assert page.input_value("#cName") == "Ama Owusu"
+    assert page.input_value("#cSite") == "Buduburam"
+    assert page.input_value("#iNote") == "Gate code 4411"
+    assert page.input_value("#fee") == "350"
+    assert len(page.evaluate("TCPDesk.state().items")) == 4
+    assert not errors
+
+
+def test_b08_draft_still_there_after_signing_out_and_in(browser):
+    page, errors = _bo(browser, route="#/new")
+    _ready_invoice(page, browser, name="Johnny")
+    page.click("#saveBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent === 'Draft saved.'")
+    page.click("#signOut")
+    page.wait_for_selector("#signin:not([hidden])")
+    assert page.evaluate("localStorage.getItem('tcp-desk-work-u-owner')") is None
+    _sign_in(page)
+    page.wait_for_selector("#tool:not([hidden])")
+    page.click('#tabs a[data-tab="invoices"]')
+    page.wait_for_selector("#rows .dk-inv")
+    assert "Johnny" in page.text_content("#rows")
+    assert page.text_content("#hDrafts") in ("—", "1")
+    page.click("#rows .dk-inv")
+    page.wait_for_selector("#form:not([hidden])")
+    assert page.input_value("#cName") == "Johnny" and len(page.evaluate("TCPDesk.state().items")) == 4
+    assert not errors
+
+
+def test_b09_unsaved_changes_are_asked_about(browser):
+    seed = [{"name": "Other Draft", "phone": "+233200000001", "state": "draft"}]
+    page, errors = _bo(browser, seed=seed, route="#/new")
+    _ready_invoice(page, browser)          # unsaved, new
+    page.click('#tabs a[data-tab="invoices"]')
+    page.wait_for_selector('#rows .dk-inv[data-id="1"]')
+    page.click('#rows .dk-inv[data-id="1"]')
+    page.wait_for_selector("#guard:not([hidden])")
+    page.click("#guardBack")
+    page.wait_for_selector("#guard", state="hidden")
+    assert "#/invoices" in page.url and len(page.evaluate("TCPDesk.state().items")) == 4, "Go back changes nothing"
+    page.click('#rows .dk-inv[data-id="1"]')
+    page.wait_for_selector("#guard:not([hidden])")
+    page.click("#guardSave")
+    page.wait_for_selector("#form:not([hidden])")
+    page.wait_for_function("document.querySelector('#cName').value === 'Other Draft'")
+    assert page.evaluate("__db.invoices.length") == 2, "Save it saved the work in progress first"
+    assert page.evaluate("__db.invoices[1].customer_id") != page.evaluate("__db.invoices[0].customer_id")
+    assert not errors
+
+
+def test_b10_issued_opens_read_only(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoices")
+    page.wait_for_selector('#rows .dk-inv[data-id="2"]')
+    page.click('#rows .dk-inv[data-id="2"]')
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert not page.locator("#form").is_visible() and not page.locator("#saveBtn").is_visible()
+    assert "TCP-INV-0001" in page.text_content("#viewTitle")
+    assert "Supacem 32.5R" in page.text_content("#viewLines")
+    assert page.locator("#shareBtn").is_visible() and page.locator("#pdfBtn").is_visible()
+    assert not errors
+
+
+def test_b11_finance_reads_only(browser):
+    page, errors = _bo(browser, seed=MIX, staff=TEAM, users=[OWNER, FIN, SALES], who=FIN)
+    page.wait_for_function("document.querySelector('#hOwed').textContent !== '—'")
+    assert page.text_content("#hOwed") == "GH₵1,950.00"
+    assert not page.locator("#tabNew").is_visible() and not page.locator("#hNew").is_visible()
+    page.goto(BO + "#/invoice/1")       # the draft
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert "Draft (read-only)" in page.text_content("#viewTitle")
+    assert not page.locator("#form").is_visible()
+    assert not page.locator("#shareRow").is_visible() and not page.locator("#discardBtn").is_visible()
+    page.goto(BO + "#/new")
+    page.wait_for_function("location.hash === '#/'")
+    assert not page.locator("#form").is_visible()
+    assert not errors
+
+
+def test_b12_discard_draft(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/1")
+    page.wait_for_selector("#form:not([hidden])")
+    page.click("#discardBtn")
+    page.wait_for_selector("#discardBox:not([hidden])")
+    page.click("#discardYes")
+    assert "reason" in page.text_content("#discardMsg")
+    assert page.evaluate("__db.invoices[0].state") == "draft"
+    page.fill("#discardWhy", "Customer bought elsewhere")
+    page.evaluate("() => { const b = document.querySelector('#discardYes'); b.click(); b.click(); }")   # double tap
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert page.evaluate("__db.calls.filter(c => c === 'cancel').length") == 1, "one request for a double tap"
+    assert page.evaluate("__db.invoices[0].state") == "cancelled"
+    assert page.evaluate("__db.invoices.length") == 6, "nothing deleted"
+    assert "Customer bought elsewhere" in page.text_content("#issued")
+    assert _list_count(page, "cancelled") == 2 and _list_count(page, "draft") == 0
+    # Sales sees no Discard button.
+    page2, _ = _bo(browser, seed=MIX, staff=TEAM, users=[OWNER, FIN, SALES], who=SALES, route="#/invoice/1")
+    page2.wait_for_selector("#form:not([hidden])")
+    assert not page2.locator("#discardBtn").is_visible()
+    assert not errors
+
+
+def test_b13_removed_access_on_home(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoices")
+    page.wait_for_selector("#rows .dk-inv")
+    page.evaluate("__db.staff[0].active = false")
+    page.click('#tabs a[data-tab="home"]')
+    page.wait_for_selector("#signin:not([hidden])")
+    assert "access has ended" in page.text_content("#signMsg")
+    assert page.locator("#recent .dk-inv").count() == 0
+    assert not errors
+
+
+def test_b14_whatsapp_message_copied(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/2", perms=["clipboard-read", "clipboard-write"])
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    page.click("#shareBtn")
+    page.wait_for_function("document.querySelector('#iMsg').textContent.includes('Message copied')")
+    assert "paste it as the caption" in page.text_content("#iMsg")
+    assert page.evaluate("navigator.clipboard.readText()") == "Hello Ama, here is your invoice TCP-INV-0001 from The Cement People."
+    # The clipboard blocked: the message is shown with a Copy button.
+    page.evaluate("() => { navigator.clipboard.writeText = () => Promise.reject(new Error('blocked')); }")
+    page.click("#shareBtn")
+    page.wait_for_selector("#copyBox:not([hidden])")
+    assert page.input_value("#copyText") == "Hello Ama, here is your invoice TCP-INV-0001 from The Cement People."
+    assert not errors
+
+
+def _arrivals(browser, url, signed_in=False):
+    ctx = browser.new_context(viewport={"width": 390, "height": 844})
+    page = ctx.new_page()
+    # Record every address the browser arrives at, before any script tidies it.
+    page.add_init_script("if (location.pathname.includes('back-office')) sessionStorage.setItem('arrived', location.href)")
+    if signed_in:
+        page.add_init_script("sessionStorage.setItem('standin-session', JSON.stringify(%s))" % json.dumps(OWNER))
+    page.add_init_script(_standin())
+    page.goto(url, wait_until="load")
+    page.wait_for_function("location.pathname.endsWith('/back-office/')")
+    page.wait_for_load_state("load")
+    return page, page.evaluate("sessionStorage.getItem('arrived')")
+
+
+def test_b15_old_address_forwards_everything(browser):
+    frag = "#access_token=abc.def-ghi&expires_in=3600&refresh_token=xyz&token_type=bearer&type=magiclink"
+    page, arrived = _arrivals(browser, OLD + frag, signed_in=True)
+    assert arrived == BO + frag, "the whole fragment, character for character"
+    page.wait_for_selector("#tool:not([hidden])")
+    page.wait_for_function("!location.hash.includes('access_token')")   # then tidied away
+    page, arrived = _arrivals(browser, OLD + "?a=1&b=two#x")
+    assert arrived == BO + "?a=1&b=two#x"
+    page, arrived = _arrivals(browser, OLD + "#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired")
+    assert arrived.endswith("error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired")
+    page.wait_for_function("document.querySelector('#signMsg').textContent.includes('expired or was already used')")
+    # A new link straight to the Back Office.
+    page, arrived = _arrivals(browser, BO + frag, signed_in=True)
+    page.wait_for_selector("#tool:not([hidden])")
+    # The old page itself is noindex and has a no-script link.
+    ctx = browser.new_context(java_script_enabled=False)
+    p2 = ctx.new_page(); p2.goto(OLD)
+    assert "noindex" in p2.locator('meta[name="robots"]').get_attribute("content")
+    assert p2.locator('noscript').count() == 1
+
+
+@pytest.mark.parametrize("width", [360, 390])
+@pytest.mark.parametrize("route", ["#/", "#/invoices", "#/invoice/2", "#/invoice/1"])
+def test_b16_fits_a_phone(browser, route, width):
+    page, errors = _bo(browser, width=width, seed=MIX, route=route)
+    page.wait_for_timeout(400)
+    assert page.evaluate("document.documentElement.scrollWidth") <= width
+    for a in page.locator("#tabs a").all():
+        if a.is_visible():
+            assert a.bounding_box()["height"] >= 44
+    assert not errors
+
+
+
+def test_b17_issued_invoices_show_what_is_left(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoices")
+    page.wait_for_selector("#rows .dk-inv")
+    def shown(i):
+        row = page.locator(f'#rows .dk-inv[data-id="{i}"]')
+        left = row.locator(".dk-left")
+        return (row.locator(".dk-inv-bot b").evaluate("b => b.firstChild.textContent"),
+                left.text_content() if left.count() else None)
+    assert shown(2) == ("GH₵750.00", "GH₵750.00 left"), "unpaid: total and balance"
+    assert shown(3) == ("GH₵750.00", "GH₵450.00 left"), "part paid"
+    assert shown(4) == ("GH₵750.00", "GH₵0.00 left"), "paid"
+    assert shown(5) == ("GH₵750.00", "GH₵750.00 left"), "overdue"
+    assert shown(1) == ("GH₵750.00", None) and shown(6) == ("GH₵750.00", None), "draft and cancelled owe nothing"
+    assert "newest first, by date started" in page.text_content("#listInfo")
     assert not errors

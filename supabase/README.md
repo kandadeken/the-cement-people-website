@@ -16,7 +16,8 @@ review of v3.
 supabase/
 ├─ migrations/
 │  ├─ 20261121120000_phase1_commercial_records.sql   the whole database, commented
-│  └─ 20261121180000_desk_phase1.sql                 additions for the Invoice Desk
+│  ├─ 20261121180000_desk_phase1.sql                 additions for the Invoice Desk
+│  └─ 20261122210000_back_office_home.sql            the Back Office Home figures (one view)
 ├─ seed.sql            the 17 products on the website today (starting price list)
 ├─ run-tests.sh        runs every test on a throwaway database
 ├─ tests/
@@ -108,6 +109,7 @@ folder (`.github/workflows/database-tests.yml`).
 | `14_desk_phase1_additions` | Issued invoices keep the "billed to" name and phone as they were at issue, even after the customer is renamed; who issued is recorded; a draft saves in one step and a repeated save with the same request id makes no second draft; a repeated payment, refund or correction with the same request id is recorded once, and a different request reusing an id is refused; each receipt keeps the balance after it; the invoice and receipt documents and the invoice list; only staff can read them |
 | `15_request_id_races` | Two identical payment, refund, new-draft or new-customer requests arriving at the same moment are recorded once, and both get the answer (the second waits for the first instead of failing) |
 | `16_customer_requests_and_access` | A retried new customer (even one with no phone) is added once, and a reused id for a different customer is refused, with codes still gapless; `my_staff()` answers for active staff and refuses anyone else; once access is removed, plain reads come back empty while every action and document refuses (why the desk checks `my_staff()` when a read is empty) |
+| `17_back_office_home` | The Home figures (owed, unpaid, part paid, overdue, open drafts) for invoices in every status, read as signed-in sales, owner and finance; every count equals what the Invoices list shows under that filter and "owed" equals the list's balances; zeros for someone who is not staff or was removed; the public cannot read it |
 | `10_concurrency` | 20 invoices issued at the same moment get 0001 to 0020 with no gaps or repeats; two payments, two refunds or two corrections racing each other can never overpay or double up |
 
 The race tests were themselves checked: with the payment lock removed,
@@ -124,10 +126,11 @@ removed from an invoice mid-issue). So a pass means the locks work.
 - **The website doesn't read from here yet.** The `public_catalogue` view and
   the publish queue are ready; connecting the website (and the small Supabase
   Edge Function that calls Cloudflare) is the next piece of work.
-- **The Invoice Desk (phase 1)** is built on these functions: staff sign in
-  by email code, find or add a customer, save drafts, issue, and share the
-  PDF on WhatsApp. Payments, receipts and the invoice list on screen are
-  phases 2 and 3. Setup steps are in `DEPLOYMENT.md`.
-- **The desk's screen tests use a stand-in for Supabase's API**
-  (`tests/test_desk_supabase.py`); the database rules themselves are tested
+- **The TCP Back Office** (`/back-office/`, 22 Nov 2026) is built on these
+  functions: Home figures, every draft and invoice with search and filters,
+  the invoice form (the phase 1 Invoice Desk) and the read-only invoice view
+  with its PDF. Payments and receipts on screen are phase 2. Setup steps are
+  in `DEPLOYMENT.md`.
+- **The Back Office's screen tests use a stand-in for Supabase's API**
+  (`tests/test_back_office.py`); the database rules themselves are tested
   here on real Postgres, and end to end on `tcp-test` from a phone.
