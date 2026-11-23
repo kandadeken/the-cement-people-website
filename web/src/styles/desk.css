@@ -135,3 +135,11 @@ a.dk-btn{text-decoration:none}
 .dk-vline b{font-variant-numeric:tabular-nums;white-space:nowrap}
 .dk-copy{margin-top:10px}
 .dk-copy textarea{width:100%;box-sizing:border-box}
+/* Phase 1.1 (23 Nov 2026): a line with a wrong value is marked at once
+   (C-02); notes about combined or separate lines (C-01). */
+.dk-lerr{grid-column:1/-1;margin:0;color:#b3261e;font-size:13px;font-weight:700}
+.dk-lerr:empty{display:none}
+.dk-line.bad input[aria-invalid="true"],.dk-fee.bad input{border-color:#b3261e;box-shadow:inset 0 0 0 1px #b3261e}
+.dk-lnote{grid-column:1/-1;margin:0;padding:6px 8px;background:var(--y-tint);border-radius:3px;font-size:13px}
+.dk-lnote .dk-link{margin-left:4px}
+.dk-amt small{display:block}

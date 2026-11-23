@@ -47,6 +47,26 @@ TCP Back Office v1.1 (spec section 10):
        or repeats
   B17  every issued invoice shows its total and what is left; drafts and
        cancelled show none
+
+Phase 1.1 (23 Nov 2026, "Phase 1 Acceptance: Technical Assessment and Fix
+Plan", approved by ChatGPT and Daniel):
+  F01  E-01 Share sends the PDF with no text; the message is copied once
+  F02  C-02 wrong quantities and prices are flagged on their line as typed,
+       Save and Issue name the line; fixing a value clears it
+  F03  C-02 a GH₵0.00 price is a "Free item"; an all-free invoice cannot be
+       issued; the delivery fee is checked the same way
+  F04  C-01 adding a product already on the invoice adds to its quantity
+  F05  C-01 the same product at an agreed price stays a separate line
+  F06  C-01 lines made identical are flagged and can be combined; Save
+       combines any left and says so; different prices are never combined
+  F07  an issued invoice with repeated lines is shown as it was issued
+  F08  badly formed numbers (1.2.3, 1,2,3, 1-2, 5-, --5) are "not a number";
+       genuine formats (2,5 / 1,392.00 / 50,000 / 1.392,00 / GH₵98) read right
+  F09  Issue never combines lines unseen: it combines, says so and stops;
+       the next tap issues exactly what is shown
+  F10  the PDF names a free item ("— Free item"), at GH₵0.00
+  F11  a saved draft reopened with identical lines: Issue combines them and
+       marks them unsaved; leaving asks Save / Discard / Go back
   B04  phone search: four formats and a partial number find the same
        invoice; "233" is only removed when it is the country code
   B05  several matches are all listed; nothing is opened or chosen
@@ -152,9 +172,10 @@ STANDIN = r"""
     let c = db.customers.find(x => x.phone === o.phone && x.name === o.name);
     if (!c) { c = {id: db.customers.length + 1, code: "TCP-C-" + pad(++db.counters.customer), phone: o.phone || null, name: o.name || null}; db.customers.push(c); }
     const inv = {id: db.invoices.length + 1, state: o.state || "draft", invoice_no: null, customer_id: c.id, due_date: o.due || null,
-      paid: o.paid || 0, created_at: o.created_at || stamp(), notes: null, deliver_to_location: null};
+      paid: o.paid || 0, created_at: o.created_at || stamp(), notes: o.notes || null, deliver_to_location: null};
     db.invoices.push(inv);
-    db.lines.push({invoice_id: inv.id, position: 1, kind: "product", product_id: 1, description: "Supacem 32.5R", unit: "50 kg bag", quantity: o.qty || 10, unit_price: 75});
+    (o.lines || [{qty: o.qty || 10}]).forEach((l, k) => db.lines.push({invoice_id: inv.id, position: k + 1, kind: "product",
+      product_id: 1, description: "Supacem 32.5R", unit: "50 kg bag", quantity: l.qty, unit_price: l.price == null ? 75 : l.price}));
     if (inv.state !== "draft" && !o.never_issued) Object.assign(inv, {invoice_no: "TCP-INV-" + pad(++db.counters.invoice),
       issued_at: inv.created_at, issued_by: "Test Owner", billed_to_name: c.name, billed_to_phone: c.phone});
     if (o.state === "cancelled") inv.cancel_reason = "seeded";
@@ -993,4 +1014,234 @@ def test_b17_issued_invoices_show_what_is_left(browser):
     assert shown(5) == ("GH₵750.00", "GH₵750.00 left"), "overdue"
     assert shown(1) == ("GH₵750.00", None) and shown(6) == ("GH₵750.00", None), "draft and cancelled owe nothing"
     assert "newest first, by date started" in page.text_content("#listInfo")
+    assert not errors
+
+
+
+# ---- Phase 1.1 ---------------------------------------------------------------------
+
+def _blank_with(page, *site_ids):
+    page.click("#blankBtn")
+    page.wait_for_selector("#form:not([hidden])")
+    page.fill("#cName", "Test Customer")
+    page.dispatch_event("#cName", "input")
+    for sid in site_ids:
+        page.select_option("#addSel", str(BY_SITE[sid]["id"]))
+        page.click("#addBtn")
+
+
+def _type(page, line, field, value):
+    box = page.locator(f'#items .dk-line[data-i="{line}"] [data-f="{field}"]')
+    box.fill(value)
+    box.dispatch_event("input")
+
+
+def test_f01_share_sends_the_pdf_only(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/2", perms=["clipboard-read", "clipboard-write"])
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    # Pretend this phone can share files, and record what is handed over.
+    page.evaluate("""() => { window.__shared = [];
+        navigator.canShare = () => true;
+        navigator.share = d => { window.__shared.push({keys: Object.keys(d), files: (d.files || []).length, text: d.text}); return Promise.resolve(); }; }""")
+    page.click("#shareBtn")
+    page.wait_for_function("window.__shared.length === 1")
+    shared = page.evaluate("window.__shared[0]")
+    assert shared["files"] == 1 and "text" not in shared["keys"], shared
+    assert page.evaluate("navigator.clipboard.readText()") == "Hello Ama, here is your invoice TCP-INV-0001 from The Cement People."
+    assert "paste it as the caption" in page.text_content("#iMsg")
+    assert not errors
+
+
+def test_f02_wrong_values_flagged_on_their_line(browser):
+    page, errors = _bo(browser, route="#/new")
+    _blank_with(page, "c1", "c2")
+    line = lambda i: page.locator(f'#items .dk-line[data-i="{i}"]')
+    for typed, message in [("0", "Quantity must be more than 0"), ("-5", "Quantity must be more than 0"),
+                           ("abc", "Enter a number"), ("5abc", "Enter a number"), ("", "Enter a quantity")]:
+        _type(page, 1, "qty", typed)
+        assert line(1).locator(".dk-lerr").text_content() == message, typed
+        assert "bad" in line(1).get_attribute("class")
+        assert line(1).locator('[data-f="qty"]').get_attribute("aria-invalid") == "true"
+        assert page.locator("#saveBtn").is_disabled() and page.locator("#issueBtn").is_disabled()
+        assert f"Line 2: {message[0].lower() + message[1:]}." in page.text_content("#sMsg")
+        assert page.text_content("#sTot") == "—"
+    assert line(0).locator(".dk-lerr").text_content() == "", "the other line is not blamed"
+    _type(page, 1, "qty", "3")
+    assert line(1).locator(".dk-lerr").text_content() == "" and "bad" not in line(1).get_attribute("class")
+    _type(page, 1, "price", "-10")
+    assert line(1).locator(".dk-lerr").text_content() == "Price can't be below GH₵0"
+    assert page.locator("#saveBtn").is_disabled()
+    _type(page, 1, "price", "98")
+    assert not page.locator("#saveBtn").is_disabled()
+    assert page.evaluate("__db.calls.filter(c => c === 'saveDraft').length") == 0, "nothing was sent while wrong"
+    assert not errors
+
+
+def test_f03_free_items_and_the_delivery_fee(browser):
+    page, errors = _bo(browser, route="#/new")
+    _blank_with(page, "c1")
+    page.check('input[name="dl"][value="free"]')
+    _type(page, 0, "price", "0")
+    assert "Free item" in page.text_content('#items .dk-line[data-i="0"] .dk-amt')
+    assert page.locator('#items .dk-line[data-i="0"] .dk-lerr').text_content() == ""
+    assert not page.locator("#saveBtn").is_disabled(), "a draft with a free item can be saved"
+    assert page.locator("#issueBtn").is_disabled(), "but an invoice worth nothing cannot be issued"
+    assert "total must be more than GH₵0.00" in page.text_content("#sMsg")
+    page.select_option("#addSel", str(BY_SITE["c2"]["id"]))
+    page.click("#addBtn")
+    assert not page.locator("#issueBtn").is_disabled()
+    # The delivery fee, checked as it is typed.
+    page.check('input[name="dl"][value="fee"]')
+    for typed, message in [("", "Enter the delivery fee"), ("0", "Delivery fee must be more than 0"),
+                           ("-50", "Delivery fee must be more than 0"), ("abc", "Delivery fee: enter a number")]:
+        page.fill("#fee", typed); page.dispatch_event("#fee", "input")
+        assert page.text_content("#feeErr") == message, typed
+        assert page.locator("#issueBtn").is_disabled()
+    page.fill("#fee", "350"); page.dispatch_event("#fee", "input")
+    assert page.text_content("#feeErr") == "" and not page.locator("#issueBtn").is_disabled()
+    page.click("#saveBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent.startsWith('Draft saved.')")
+    assert page.evaluate("__db.lines.find(l => l.position === 1).unit_price") == 0
+    assert not errors
+
+
+def test_f04_adding_a_product_again_adds_to_its_line(browser):
+    page, errors = _bo(browser, route="#/new")
+    _blank_with(page, "j3", "c1", "j3")
+    assert page.locator("#items .dk-line").count() == 2
+    assert page.evaluate("TCPDesk.state().items[0].qty") == 2
+    assert "Already on the invoice: quantity now 2" in page.text_content('#items .dk-line[data-i="0"]')
+    assert not errors
+
+
+def test_f05_agreed_price_stays_a_separate_line(browser):
+    page, errors = _bo(browser, route="#/new")
+    _blank_with(page, "j3")
+    _type(page, 0, "price", "6500")
+    page.dispatch_event('#items .dk-line[data-i="0"] [data-f="price"]', "change")
+    page.select_option("#addSel", str(BY_SITE["j3"]["id"]))
+    page.click("#addBtn")
+    assert page.locator("#items .dk-line").count() == 2
+    assert "Line 1 has an agreed price of GH₵6,500.00; this line is at today's price." in page.text_content('#items .dk-line[data-i="1"]')
+    page.click("#saveBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent.startsWith('Draft saved.')")
+    assert page.evaluate("__db.lines.length") == 2, "different prices are never combined"
+    assert not errors
+
+
+def test_f06_identical_lines_flagged_combined_and_saved_once(browser):
+    page, errors = _bo(browser, route="#/new")
+    _blank_with(page, "j3")
+    _type(page, 0, "price", "6500"); page.dispatch_event('#items .dk-line[data-i="0"] [data-f="price"]', "change")
+    page.select_option("#addSel", str(BY_SITE["j3"]["id"])); page.click("#addBtn")
+    page.select_option("#addSel", str(BY_SITE["c1"]["id"])); page.click("#addBtn")
+    # Line 2 edited to the same price as line 1: flagged, then combined.
+    _type(page, 1, "qty", "1.5"); _type(page, 1, "price", "6500")
+    page.dispatch_event('#items .dk-line[data-i="1"] [data-f="price"]', "change")
+    assert "Same product and price as line 1" in page.text_content('#items .dk-line[data-i="1"]')
+    page.click('#items [data-combine="1"]')
+    assert page.locator("#items .dk-line").count() == 2
+    assert page.evaluate("TCPDesk.state().items[0].qty") == 2.5
+    assert "Combined with line 2: 2.5 tons now." in page.text_content('#items .dk-line[data-i="0"]')
+    # Made identical again and saved without pressing Combine: Save combines and says so.
+    page.select_option("#addSel", str(BY_SITE["j3"]["id"])); page.click("#addBtn")
+    _type(page, 2, "price", "6500"); page.dispatch_event('#items .dk-line[data-i="2"] [data-f="price"]', "change")
+    page.click("#saveBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent.startsWith('Draft saved.')")
+    assert "Lines 1 and 3 combined: Iron rod 12 mm, 3.5 tons." in page.text_content("#sMsg")
+    assert page.evaluate("__db.lines.length") == 2
+    assert page.evaluate("__db.lines.find(l => l.unit_price === 6500).quantity") == 3.5
+    assert not errors
+
+
+def test_f07_issued_invoice_keeps_its_repeated_lines(browser):
+    seed = [{"name": "Yaro", "phone": "+233200000009", "state": "issued", "due": FUTURE,
+             "lines": [{"qty": 1}, {"qty": 1}, {"qty": 2, "price": 0}]}]
+    page, errors = _bo(browser, seed=seed, route="#/invoice/1")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert page.locator("#viewLines .dk-vline").count() == 3, "shown exactly as issued"
+    assert "Free item" in page.text_content("#viewLines")
+    assert not errors
+
+
+
+def test_f08_badly_formed_numbers_are_not_numbers(browser):
+    page, errors = _bo(browser, route="#/new")
+    _blank_with(page, "c1")
+    for typed in ["1.2.3", "1,2,3", "1-2", "5-", "--5", "1..5", "1,,5", "1 2", "12.", ",", "-", "1.234.5,6", "e5"]:
+        _type(page, 0, "qty", typed)
+        assert page.locator('#items .dk-line[data-i="0"] .dk-lerr').text_content() == "Enter a number", typed
+        assert page.evaluate("Number.isNaN(TCPDesk.state().items[0].qty)"), typed
+        assert page.locator("#saveBtn").is_disabled(), typed
+        _type(page, 0, "price", typed)
+        assert "Enter a number" in page.locator('#items .dk-line[data-i="0"] .dk-lerr').text_content(), typed
+        _type(page, 0, "price", "75")
+    for typed, value in [("2,5", 2.5), ("1,392.00", 1392), ("50,000", 50000), ("1.392,00", 1392), (".5", 0.5), ("12", 12), (" 3 ", 3)]:
+        _type(page, 0, "qty", typed)
+        assert page.evaluate("TCPDesk.state().items[0].qty") == value, typed
+        assert page.locator('#items .dk-line[data-i="0"] .dk-lerr').text_content() == "", typed
+    _type(page, 0, "price", "GH₵98.50")
+    assert page.evaluate("TCPDesk.state().items[0].price") == 9850
+    _type(page, 0, "qty", "-5")
+    assert page.locator('#items .dk-line[data-i="0"] .dk-lerr').text_content() == "Quantity must be more than 0"
+    assert not errors
+
+
+def test_f09_issue_never_combines_unseen(browser):
+    page, errors = _bo(browser, route="#/new")
+    _blank_with(page, "j3")
+    _type(page, 0, "price", "6500"); page.dispatch_event('#items .dk-line[data-i="0"] [data-f="price"]', "change")
+    page.select_option("#addSel", str(BY_SITE["j3"]["id"])); page.click("#addBtn")
+    _type(page, 1, "price", "6500"); page.dispatch_event('#items .dk-line[data-i="1"] [data-f="price"]', "change")
+    page.check('input[name="dl"][value="free"]')
+    page.click("#issueBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent.includes('tap Issue invoice again')")
+    assert "Lines 1 and 2 combined: Iron rod 12 mm, 2 tons." in page.text_content("#sMsg")
+    assert page.locator("#items .dk-line").count() == 1
+    assert page.evaluate("__db.calls.filter(c => c === 'issue' || c === 'saveDraft').length") == 0, "nothing saved or issued yet"
+    assert page.locator("#form").is_visible()
+    page.click("#issueBtn")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert page.evaluate("__db.lines.length") == 1 and page.evaluate("__db.lines[0].quantity") == 2
+    assert not errors
+
+
+def test_f10_pdf_names_free_items(browser):
+    seed = [{"name": "Yaro", "phone": "+233200000009", "state": "issued", "due": FUTURE,
+             "lines": [{"qty": 3}, {"qty": 2, "price": 0}]}]
+    page, errors = _bo(browser, seed=seed, route="#/invoice/1")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    texts, _ = _pdf(page)
+    text = " ".join(texts)
+    assert "Free item" in text
+    assert text.count("Free item") == 1, "only the free line"
+    assert "GH₵0.00" in text
+    assert not errors
+
+
+
+def test_f11_combining_on_issue_is_unsaved_work(browser):
+    # A draft saved before phase 1.1, with the same product twice at the
+    # same price, and delivery already agreed (so nothing else is changed).
+    seed = [{"name": "Johnny Two", "phone": "+233200000010", "state": "draft", "notes": "Free delivery",
+             "lines": [{"qty": 1}, {"qty": 2}]}]
+    page, errors = _bo(browser, seed=seed, route="#/invoice/1")
+    page.wait_for_selector("#form:not([hidden])")
+    assert page.evaluate("TCPDesk.state().dirty") is False
+    assert page.text_content("#state") == "Draft saved"
+    page.click("#issueBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent.includes('tap Issue invoice again')")
+    assert page.locator("#items .dk-line").count() == 1 and page.evaluate("TCPDesk.state().items[0].qty") == 3
+    assert page.evaluate("TCPDesk.state().dirty") is True
+    assert page.text_content("#state") == "Draft: changes not saved yet"
+    assert page.evaluate("__db.calls.filter(c => c === 'issue' || c === 'saveDraft').length") == 0
+    # Leaving now asks first; Go back keeps the combined line.
+    page.click('#tabs a[data-tab="invoices"]')
+    page.wait_for_function("location.hash === '#/invoices'")
+    page.wait_for_selector("#rows .dk-inv")
+    page.click('#tabs a[data-tab="new"]')   # a new invoice would replace the combined draft
+    page.wait_for_selector("#guard:not([hidden])")
+    page.click("#guardBack")
+    page.wait_for_selector("#guard", state="hidden")
+    assert page.evaluate("TCPDesk.state().items.length") == 1 and page.evaluate("TCPDesk.state().items[0].qty") == 3
     assert not errors
