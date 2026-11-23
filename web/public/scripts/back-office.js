@@ -103,6 +103,8 @@ function supabaseApi(){
     correctPayment:a=>sb.rpc("correct_payment",a).then(out),
     refundPayment:a=>sb.rpc("refund_payment",a).then(out),
     receipt:id=>sb.rpc("receipt_document",{p_payment_id:id}).then(out),
+    // Was this request recorded? The receipt it made, or null.
+    byRequest:req=>sb.from("payments").select("id,receipt_no,kind").eq("request_id",req).maybeSingle().then(out),
     // Discarding a draft = the owner-only cancel_invoice (kept, with a reason).
     cancel:(id,reason)=>sb.rpc("cancel_invoice",{p_invoice_id:id,p_reason:reason}).then(out),
     // The Home figures, worked out by the database (back_office_home).
@@ -180,7 +182,7 @@ async function enter(){
   }
   if(!st){
     // Not (or no longer) staff: nothing of TCP's stays on this phone.
-    try{localStorage.removeItem("tcp-desk-work-"+u.id)}catch(e){}
+    try{localStorage.removeItem("tcp-desk-work-"+u.id);localStorage.removeItem("tcp-desk-op-"+u.id)}catch(e){}
     ME=null;screen("noaccess");$("#noEmail").textContent=u.email||"";return;
   }
   ME={id:u.id,name:st.full_name,role:st.role};
@@ -190,7 +192,12 @@ async function enter(){
   ["#tabNew","#hNew","#newBtn2"].forEach(s=>show(s,canEdit()));
   try{PRODUCTS=await api.products()||[];if(!PRODUCTS.length)await stillStaff();}
   catch(err){const k=kind(err);if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");if(k==="expired")return expire();}
-  fillAdd();screen("tool");restore();await route();
+  fillAdd();screen("tool");restore();
+  // An operation left unconfirmed (e.g. the sign-in ran out while it was
+  // being recorded): go straight to its invoice, where it is checked.
+  const op=pendingOp();
+  if(op)history.replaceState(null,"",location.pathname+location.search+"#/invoice/"+op.invoiceId);
+  await route();
 }
 // Plain reads (the price list, a phone lookup) come back EMPTY rather than
 // refused once someone's access is removed. So an empty answer is checked:
@@ -201,7 +208,7 @@ async function stillStaff(){await api.myStaff();}
 // (Design v2.1, point C).
 async function revoke(why){
   const key=draftKey();
-  try{localStorage.removeItem(key);localStorage.removeItem(payKey())}catch(e){}
+  try{localStorage.removeItem(key);dropOp()}catch(e){}
   await leave(why||"You have been signed out.");
 }
 // The sign-in ran out (not the same as access removed): the unsaved work
@@ -218,12 +225,20 @@ async function leave(why){
   ["#items","#issued","#matches","#custPicked","#rows","#recent","#viewLines","#unsavedNote"].forEach(s=>{const el=$(s);if(el)el.innerHTML="";});
   ["#hOwed","#hUnpaid","#hPart","#hOverdue","#hDrafts"].forEach(s=>{$(s).textContent="—";});
   ["#guard","#discardBox","#copyBox","#rCopyBox"].forEach(s=>show(s,false));
-  PAY=null;FIX=null;RDOC=null;["#payList","#rcpt"].forEach(s=>{$(s).innerHTML="";});
+  PAY=null;FIX=null;RDOC=null;show("#soBox",false);["#payList","#rcpt"].forEach(s=>{$(s).innerHTML="";});
   ["#paste","#cName","#cPhone"].forEach(s=>{const el=$(s);if(el)el.value="";});
   screen("signin");$("#signMsg").textContent=why;
   try{await api.signOut();}catch(e){}
 }
-$("#signOut").addEventListener("click",()=>revoke("Signed out."));
+// Signing out removes an unconfirmed payment, correction or refund from this
+// phone, so it warns first.
+$("#signOut").addEventListener("click",()=>{const op=pendingOp();
+  // (A second tap on Sign out, with the warning showing, signs out.)
+  if(op&&$("#soBox").hidden){$("#soMsg").textContent=`A ${OP_WORD[op.type]} of ${money(toP(op.amount))} has not been confirmed as recorded. Signing out abandons it: open its invoice first to check it.`;
+    $("#soOpen").href="#/invoice/"+op.invoiceId;show("#soBox",true);return;}
+  revoke("Signed out.");});
+$("#soGo").addEventListener("click",()=>{show("#soBox",false);revoke("Signed out.");});
+$("#soOpen").addEventListener("click",()=>show("#soBox",false));
 $("#noSignOut").addEventListener("click",()=>revoke("Signed out."));
 
 // ---- 4. Reading the estimate (unchanged from PR #31) -------------------------
@@ -833,47 +848,126 @@ const canPay=()=>!!ME&&["owner","sales","finance"].includes(ME.role);
 // Signed money: refunds and corrections are stored below zero.
 const smoney=p=>p<0?"−"+money(-p):money(p);
 let PAY=null,FIX=null,RDOC=null;
-const payKey=()=>"tcp-desk-pay-"+(ME?ME.id:"");
+// -- The unfinished operation kept on this phone (Phase 2 design, amended
+//    23 Nov 2026, "Option B", approved by Daniel and ChatGPT).
+// When "Record it" is tapped, a payment, correction or refund is noted on
+// this phone BEFORE it is sent, and removed once the database has answered.
+// If the answer never comes (no connection, the reply lost, the sign-in ran
+// out), the note keeps its request id, so the app can ask the database later
+// whether it was recorded: if so it shows the original receipt, if not it
+// offers the same operation again under the SAME request id. A new request
+// id is never made while the outcome is unknown, so nothing is recorded
+// twice. The note is temporary recovery data, never a financial record (the
+// database is the only ledger). It holds only: invoice id, request id, kind,
+// the payment it reverses, amount, method, reference, date and the reason
+// (needed for the database to recognise the same request). No customer name
+// or phone. It belongs to one staff member, and is removed on success,
+// Cancel, sign-out, removed access, or after 24 hours.
+const OP_TTL=24*60*60*1000;
+const opKey=()=>"tcp-desk-op-"+(ME?ME.id:"");
+const OP_WORD={payment:"payment",correction:"correction",refund:"refund"};
+let RNOTE="";   // shown on the next receipt (e.g. "already recorded")
+function pendingOp(){if(!ME)return null;let o=null;
+  try{o=JSON.parse(localStorage.getItem(opKey())||"null")}catch(e){}
+  if(o&&(o.user!==ME.id||!(Date.now()-o.at<OP_TTL))){dropOp();return null;}
+  return o;}
+function keepOp(o){if(!ME)return;const was=pendingOp();
+  try{localStorage.setItem(opKey(),JSON.stringify({user:ME.id,at:was&&was.req===o.req?was.at:Date.now(),
+    type:o.type,invoiceId:o.invoiceId,payId:o.payId||null,req:o.req,amount:o.amount,method:o.method,
+    ref:o.ref||null,date:o.date||null,reason:o.reason||null}))}catch(e){}}
+function dropOp(){try{localStorage.removeItem(opKey())}catch(e){}}
+// A database refusal carries a Postgres error code: then nothing was saved.
+// Any other failure leaves the outcome unknown.
+const definite=e=>kind(e)==="refused"&&/^[0-9A-Z]{5}$/.test(String(e&&e.code||""));
 
 // The invoice's receipts, oldest first, with Correct and Refund where they
 // still apply (the database works out "corrected" and "refunded").
 function showPayments(doc){
-  const pays=doc.payments||[],issued=doc.state==="issued";
+  const pays=doc.payments||[],issued=doc.state==="issued",op=pendingOp();
   show("#payBox",issued||pays.length>0);
   $("#payList").innerHTML=pays.length?pays.map(p=>{
     const amt=toP(p.amount),what=p.kind==="payment"?"Payment":p.kind==="correction"?`Correction of ${esc(p.reverses_receipt_no||"")}`:`Refund of ${esc(p.reverses_receipt_no||"")}`;
     const refunded=toP(p.refunded||0),left=amt-refunded;
     const flag=p.kind!=="payment"?"":p.corrected?"corrected":refunded>0?`${money(refunded)} refunded`:"";
-    const acts=p.kind==="payment"&&canFix()&&!p.corrected?
+    const acts=p.kind==="payment"&&canFix()&&!p.corrected&&!op?
       `<span class="dk-pay-acts">${refunded===0?`<button type="button" class="dk-link" data-fix="correction" data-pid="${p.id}">Correct</button>`:""}${left>0?`<button type="button" class="dk-link" data-fix="refund" data-pid="${p.id}">Refund</button>`:""}</span>`:"";
     return`<div class="dk-pay"><a href="#/receipt/${p.id}" data-rid="${p.id}">
       <span class="dk-pay-top"><b>${esc(p.receipt_no)}</b><b class="${amt<0?"neg":""}">${smoney(amt)}</b></span>
       <span class="dk-pay-bot"><small>${what} · ${shortDate(p.paid_on)} · ${esc(METHOD[p.method]||p.method)}${p.reference?" · ref "+esc(p.reference):""}</small><small>left ${money(toP(p.balance_after))}</small></span>
       ${flag?`<span class="dk-pay-flag">${flag}</span>`:""}</a>${acts}</div>`;}).join(""):`<p class="dk-help">No payments yet.</p>`;
   $("#paySum").innerHTML=issued||pays.length?`<span>Paid ${money(toP(doc.paid))}</span><span>Left ${money(toP(doc.balance))}</span>`:"";
-  show("#payBtn",issued&&toP(doc.balance)>0&&canPay());
-  // A payment that was being recorded when the sign-in expired comes back,
-  // with its request id, so it can never be recorded twice.
-  const kept=pendingPay();
-  if(kept&&kept.invoiceId===doc.id&&issued&&canPay())openPay(kept);
+  // While an operation's outcome is unknown, nothing new can be started.
+  show("#payBtn",issued&&toP(doc.balance)>0&&canPay()&&!op);
+  show("#opBox",!!op);show("#opCheck",false);show("#opOpen",false);
+  if(op&&op.invoiceId!==doc.id){show("#payBox",true);
+    $("#opMsg").textContent=`A ${OP_WORD[op.type]} of ${money(toP(op.amount))} on another invoice has not been confirmed yet. Open that invoice to check it before recording anything new.`;
+    $("#opOpen").href="#/invoice/"+op.invoiceId;show("#opOpen",true);}
+  else if(op)checkOp(op);
 }
+// Ask the database whether a kept operation was recorded.
+async function checkOp(op){
+  const w=OP_WORD[op.type],amt=money(toP(op.amount));
+  $("#opMsg").textContent=`Checking whether the ${w} of ${amt} was recorded…`;show("#opCheck",false);
+  let r;
+  try{r=await api.byRequest(op.req);}
+  catch(err){const k=kind(err);
+    if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+    if(k==="expired")return expire();
+    $("#opMsg").textContent=`Could not check whether the ${w} of ${amt} was recorded${k==="offline"?": no connection":""}. Nothing new can be recorded on this invoice until it is checked.`;
+    show("#opCheck",true);return;}
+  if(r){dropOp();RNOTE=`This ${w} was already recorded. Here is its receipt.`;return go("#/receipt/"+r.id);}
+  // Not recorded: offer it again under the same request id.
+  if(op.type==="payment"){if(DOC&&DOC.state==="issued"&&canPay())return openPay(op);}
+  else{const pay=DOC&&(DOC.payments||[]).find(x=>x.id===op.payId);if(pay&&canFix())return openFix(op.type,pay,op);}
+  dropOp();if(DOC)showView(DOC);
+}
+$("#opCheck").addEventListener("click",()=>{const op=pendingOp();if(op)checkOp(op);else if(DOC)showView(DOC);});
+// Send a money operation. A retry of one whose outcome is unknown first
+// asks the database, and gives back the original receipt if it was saved.
+async function sendOp(op,state,call){
+  if(state.sent){const r=await api.byRequest(op.req);if(r)return{r,again:true};}
+  keepOp(op);state.sent=true;
+  return{r:await call(),again:false};}
+function opDone({r,again}){dropOp();PAY=null;FIX=null;
+  if(again)RNOTE=`This ${OP_WORD[r.kind]||"payment"} was already recorded. Here is its receipt.`;
+  return go("#/receipt/"+r.id);}
+// Errors while recording money: removed access signs out (and clears the
+// note); an expired sign-in keeps the note for after signing in; a database
+// refusal means nothing was saved; anything else leaves the outcome
+// unknown, and the retry asks the database first.
+async function opFailed(err,state,where){const k=kind(err);
+  if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+  if(k==="expired")return expire();
+  if(definite(err)&&/request id was already used/.test(err.message||"")){
+    try{const r=await api.byRequest(state.req);if(r)return opDone({r,again:true});}catch(e){}}
+  if(definite(err)){dropOp();state.sent=false;$(where).textContent="Not recorded: "+String(err.message||err);return;}
+  $(where).textContent=k==="offline"
+    ?"No connection: it may or may not have been recorded. Tap Record it again when you have signal: it is checked first, and never recorded twice."
+    :"Could not confirm it was recorded. Tap Record it again: it is checked first, and never recorded twice.";}
+// Cancel: an operation that was sent with no answer is checked first.
+async function cancelOp(state,where,close){
+  if(state&&state.sent){let r;
+    try{r=await api.byRequest(state.req);}
+    catch(err){const k=kind(err);if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+      if(k==="expired")return expire();
+      $(where).textContent="Can't cancel yet: it could not be checked whether this was recorded. Try again when you have signal.";return;}
+    if(r)return opDone({r,again:true});}
+  dropOp();close();}
 
 // -- Recording a payment (design section 3)
-function pendingPay(){try{return JSON.parse(localStorage.getItem(payKey())||"null")}catch(e){return null}}
-function keepPay(){if(!PAY||!ME)return;try{localStorage.setItem(payKey(),JSON.stringify(PAY))}catch(e){}}
-function dropPay(){PAY=null;try{localStorage.removeItem(payKey())}catch(e){}}
 function openPay(kept){
   const doc=DOC;if(!doc)return;
   // One request id per payment, made when the form opens, kept for every
   // retry (double tap, no connection, lost reply) until it is recorded.
-  PAY=kept||{invoiceId:doc.id,req:newId(),amt:"",method:"",ref:"",date:today()};
+  PAY=kept?{invoiceId:kept.invoiceId,req:kept.req,amt:(+kept.amount).toFixed(2),method:kept.method,ref:kept.ref||"",date:kept.date||today(),sent:false}
+    :{invoiceId:doc.id,req:newId(),amt:"",method:"",ref:"",date:today(),sent:false};
   showOnly("#payForm");
   $("#payFor").textContent=`${doc.invoice_no} · ${doc.billed_to_name||""} · left to pay ${money(toP(doc.balance))}`;
   $("#pAmt").value=PAY.amt;$("#pRef").value=PAY.ref;$("#pDate").value=PAY.date;$("#pDate").max=today();
   document.querySelectorAll('input[name="pm"]').forEach(r=>r.checked=r.value===PAY.method);
   ["#pAmtErr","#pErr"].forEach(e=>{$(e).textContent="";});
-  $("#pMsg").textContent=kept?"This payment was not finished. Check it, then tap Continue and Record it.":"";
-  show("#payFields",true);show("#pConfirm",false);refLabel("#pRefLabel",PAY.method);keepPay();
+  $("#pMsg").textContent=kept?"This payment was not recorded. Check it, then tap Continue and Record it.":"";
+  show("#payFields",true);show("#pConfirm",false);refLabel("#pRefLabel",PAY.method);
   window.scrollTo(0,0);
 }
 function refLabel(sel,m){$(sel).textContent="Reference"+(m?` (${REF_HINT[m]})`:"");}
@@ -890,12 +984,12 @@ function payProblems(){
   return{out,p};}
 ["#pAmt","#pRef","#pDate"].forEach(sel=>$(sel).addEventListener("input",()=>{if(!PAY)return;
   PAY.amt=$("#pAmt").value;PAY.ref=$("#pRef").value;PAY.date=$("#pDate").value;
-  $("#pAmtErr").textContent="";$("#pErr").textContent="";keepPay();}));
+  $("#pAmtErr").textContent="";$("#pErr").textContent="";}));
 document.querySelectorAll('input[name="pm"]').forEach(r=>r.addEventListener("change",()=>{if(!PAY)return;
-  PAY.method=r.value;refLabel("#pRefLabel",PAY.method);$("#pErr").textContent="";keepPay();}));
-$("#pFull").addEventListener("click",()=>{if(!PAY||!DOC)return;PAY.amt=(toP(DOC.balance)/100).toFixed(2);$("#pAmt").value=PAY.amt;$("#pAmtErr").textContent="";keepPay();});
+  PAY.method=r.value;refLabel("#pRefLabel",PAY.method);$("#pErr").textContent="";}));
+$("#pFull").addEventListener("click",()=>{if(!PAY||!DOC)return;PAY.amt=(toP(DOC.balance)/100).toFixed(2);$("#pAmt").value=PAY.amt;$("#pAmtErr").textContent="";});
 $("#payBtn").addEventListener("click",()=>openPay(null));
-$("#pCancel").addEventListener("click",()=>{dropPay();if(DOC)showView(DOC);});
+$("#pCancel").addEventListener("click",()=>cancelOp(PAY,"#pMsg",()=>{PAY=null;if(DOC)showView(DOC);}));
 $("#pNext").addEventListener("click",()=>{
   const{out,p}=payProblems();$("#pAmtErr").textContent=out.amt||"";$("#pErr").textContent=out.rest||"";
   if(out.amt||out.rest)return;
@@ -905,28 +999,20 @@ $("#pNext").addEventListener("click",()=>{
 $("#pChange").addEventListener("click",()=>{show("#pConfirm",false);show("#payFields",true);});
 $("#pYes").addEventListener("click",async()=>{
   const btn=$("#pYes");if(btn.disabled||!PAY)return;
-  const{p}=payProblems();busy(btn,true,"Recording…");$("#pMsg").textContent="";
-  try{
-    const r=await api.recordPayment({p_invoice_id:PAY.invoiceId,p_amount:p/100,p_method:PAY.method,
-      p_reference:PAY.ref.trim()||null,p_paid_on:PAY.date,p_request_id:PAY.req});
-    dropPay();await go("#/receipt/"+r.id);
-  }catch(err){moneyFailed(err,"#pMsg",keepPay);}
+  const{p}=payProblems(),st=PAY;busy(btn,true,"Recording…");$("#pMsg").textContent="";
+  const op={type:"payment",invoiceId:st.invoiceId,req:st.req,amount:p/100,method:st.method,ref:st.ref.trim(),date:st.date};
+  try{await opDone(await sendOp(op,st,()=>api.recordPayment({p_invoice_id:st.invoiceId,p_amount:p/100,p_method:st.method,
+      p_reference:st.ref.trim()||null,p_paid_on:st.date,p_request_id:st.req})));}
+  catch(err){await opFailed(err,st,"#pMsg");}
   finally{busy(btn,false);}
 });
-// Errors while recording money: removed access signs out; an expired
-// sign-in keeps the form (and its request id) for after signing in; no
-// connection keeps it open to try again (never recorded twice); anything
-// else is the database's own reason.
-function moneyFailed(err,where,keepFn){const k=kind(err);
-  if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
-  if(k==="expired"){keepFn&&keepFn();return expire();}
-  $(where).textContent=k==="offline"?"Not recorded: no connection. Tap Record it again when you have signal: it will not be recorded twice.":"Not recorded: "+String(err&&err.message||err);}
 
 // -- Correcting or refunding a payment (design section 6, owner and finance)
 document.addEventListener("click",e=>{const b=e.target.closest("[data-fix]");if(!b||!DOC)return;
-  const pay=(DOC.payments||[]).find(x=>x.id===+b.dataset.pid);if(pay)openFix(b.dataset.fix,pay);});
-function openFix(kindName,pay){
-  FIX={kind:kindName,pay,req:newId(),amt:"",method:"",ref:"",why:""};
+  const pay=(DOC.payments||[]).find(x=>x.id===+b.dataset.pid);if(pay)openFix(b.dataset.fix,pay,null);});
+function openFix(kindName,pay,kept){
+  FIX={kind:kindName,pay,req:kept?kept.req:newId(),amt:kept&&kindName==="refund"?(+kept.amount).toFixed(2):"",
+    method:kept&&kindName==="refund"?kept.method:"",ref:kept&&kept.ref||"",why:kept&&kept.reason||"",sent:false};
   showOnly("#fixForm");
   const left=toP(pay.amount)-toP(pay.refunded||0);
   $("#fixTitle").textContent=kindName==="correction"?"Correct a payment":"Refund a payment";
@@ -934,9 +1020,10 @@ function openFix(kindName,pay){
     ?`Reverses all of ${pay.receipt_no} (${money(toP(pay.amount))} by ${METHOD[pay.method]}). Use it when the payment was recorded wrongly; then record the right payment.`
     :`From ${pay.receipt_no} (${money(toP(pay.amount))} by ${METHOD[pay.method]}). Up to ${money(left)} can be refunded.`;
   show("#fixMoney",kindName==="refund");
-  ["#fAmt","#fRef","#fWhy"].forEach(e=>{$(e).value="";});
-  document.querySelectorAll('input[name="fm"]').forEach(r=>r.checked=false);
-  refLabel("#fRefLabel","");$("#fErr").textContent="";$("#fMsg").textContent="";
+  $("#fAmt").value=FIX.amt;$("#fRef").value=FIX.ref;$("#fWhy").value=FIX.why;
+  document.querySelectorAll('input[name="fm"]').forEach(r=>r.checked=r.value===FIX.method);
+  refLabel("#fRefLabel",FIX.method);$("#fErr").textContent="";
+  $("#fMsg").textContent=kept?`This ${OP_WORD[kindName]} was not recorded. Check it, then tap Continue and Record it.`:"";
   show("#fixFields",true);show("#fConfirm",false);window.scrollTo(0,0);
 }
 function fixProblems(){const out=[];let p=0;
@@ -951,7 +1038,7 @@ function fixProblems(){const out=[];let p=0;
   FIX.amt=$("#fAmt").value;FIX.ref=$("#fRef").value;FIX.why=$("#fWhy").value;$("#fErr").textContent="";}));
 document.querySelectorAll('input[name="fm"]').forEach(r=>r.addEventListener("change",()=>{if(!FIX)return;FIX.method=r.value;refLabel("#fRefLabel",r.value);}));
 $("#fAll").addEventListener("click",()=>{if(!FIX)return;FIX.amt=((toP(FIX.pay.amount)-toP(FIX.pay.refunded||0))/100).toFixed(2);$("#fAmt").value=FIX.amt;});
-$("#fCancel").addEventListener("click",()=>{FIX=null;if(DOC)showView(DOC);});
+$("#fCancel").addEventListener("click",()=>cancelOp(FIX,"#fMsg",()=>{FIX=null;if(DOC)showView(DOC);}));
 $("#fNext").addEventListener("click",()=>{const{out,p}=fixProblems();$("#fErr").textContent=out.join(" ");if(out.length)return;
   const after=toP(DOC.balance)+p;
   $("#fSummary").textContent=FIX.kind==="correction"
@@ -960,15 +1047,16 @@ $("#fNext").addEventListener("click",()=>{const{out,p}=fixProblems();$("#fErr").
   show("#fixFields",false);show("#fConfirm",true);$("#fMsg").textContent="";});
 $("#fChange").addEventListener("click",()=>{show("#fConfirm",false);show("#fixFields",true);});
 $("#fYes").addEventListener("click",async()=>{
-  const btn=$("#fYes");if(btn.disabled||!FIX)return;const{p}=fixProblems();
+  const btn=$("#fYes");if(btn.disabled||!FIX)return;const{p}=fixProblems(),st=FIX;
   busy(btn,true,"Recording…");$("#fMsg").textContent="";
-  try{
-    const r=FIX.kind==="correction"
-      ?await api.correctPayment({p_payment_id:FIX.pay.id,p_reason:FIX.why.trim(),p_request_id:FIX.req})
-      :await api.refundPayment({p_payment_id:FIX.pay.id,p_amount:p/100,p_method:FIX.method,p_reason:FIX.why.trim(),
-          p_reference:FIX.ref.trim()||null,p_request_id:FIX.req});
-    FIX=null;await go("#/receipt/"+r.id);
-  }catch(err){moneyFailed(err,"#fMsg",null);}
+  const corr=st.kind==="correction",why=st.why.trim();
+  const op={type:st.kind,invoiceId:DOC.id,payId:st.pay.id,req:st.req,amount:p/100,method:corr?st.pay.method:st.method,
+    ref:corr?null:st.ref.trim(),reason:why};
+  try{await opDone(await sendOp(op,st,()=>corr
+      ?api.correctPayment({p_payment_id:st.pay.id,p_reason:why,p_request_id:st.req})
+      :api.refundPayment({p_payment_id:st.pay.id,p_amount:p/100,p_method:st.method,p_reason:why,
+          p_reference:st.ref.trim()||null,p_request_id:st.req})));}
+  catch(err){await opFailed(err,st,"#fMsg");}
   finally{busy(btn,false);}
 });
 
@@ -977,7 +1065,9 @@ $("#fYes").addEventListener("click",async()=>{
 const RTITLE={payment:"Receipt",correction:"Correction",refund:"Refund"};
 async function showReceipt(id){
   showOnly("#rcptSec");$("#rcpt").innerHTML="";$("#rMsg").textContent="";show("#rCopyBox",false);
+  const note=RNOTE;RNOTE="";
   let rd;try{rd=await api.receipt(id);}catch(err){return readFailed(err,"#rMsg");}
+  $("#rMsg").textContent=note;
   RDOC={...rd,id};const inv=rd.invoice||{},amt=toP(rd.amount),bal=toP(rd.balance_after),full=rd.kind==="payment"&&bal===0;
   $("#rTitle").textContent=`${RTITLE[rd.kind]||"Receipt"} ${rd.receipt_no}`;
   const row=(k,v)=>v?`<div><span>${k}</span><b>${esc(v)}</b></div>`:"";
@@ -1295,5 +1385,5 @@ else{
 }
 
 // For the tests (and nothing else): the desk's own functions.
-window.TCPDesk={parseEstimate,num,totals,problems,waNumber,waText,makePdf,makeReceiptPdf,waReceiptText,linesForDb,searchTerms,state:()=>S,doc:()=>DOC,receipt:()=>RDOC,pay:()=>PAY};
+window.TCPDesk={parseEstimate,num,totals,problems,waNumber,waText,makePdf,makeReceiptPdf,waReceiptText,linesForDb,searchTerms,state:()=>S,doc:()=>DOC,receipt:()=>RDOC,pay:()=>PAY,fix:()=>FIX,op:()=>pendingOp()};
 })();

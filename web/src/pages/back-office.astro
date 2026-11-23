@@ -122,6 +122,13 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
 
   <div id="tool" hidden>
     <div class="dk-who"><span id="who"></span><button type="button" id="signOut" class="dk-link">Sign out</button></div>
+    <div id="soBox" class="dk-confirm" role="alert" hidden>
+      <p id="soMsg"></p>
+      <div class="dk-row">
+        <a id="soOpen" class="dk-btn primary" href="#/invoices">Check it first</a>
+        <button type="button" id="soGo" class="dk-btn">Sign out anyway</button>
+      </div>
+    </div>
 
     <!-- Asked before unsaved work would be replaced (spec section 5) -->
     <section id="guard" class="dk-card dk-alert" role="alertdialog" aria-labelledby="guardTitle" hidden>
@@ -372,6 +379,12 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
       <!-- Phase 2: the invoice's receipts, and Record payment -->
       <div id="payBox" class="dk-pays" hidden>
         <h3>Payments</h3>
+        <!-- An unconfirmed payment, correction or refund kept on this phone -->
+        <div id="opBox" class="dk-confirm" role="status" hidden>
+          <p id="opMsg"></p>
+          <button type="button" id="opCheck" class="dk-btn" hidden>Check again</button>
+          <a id="opOpen" class="dk-btn" href="#/invoices" hidden>Open that invoice</a>
+        </div>
         <div id="payList"></div>
         <p id="paySum" class="dk-paysum"></p>
         <button type="button" id="payBtn" class="dk-btn primary dk-wide" hidden>Record payment</button>
