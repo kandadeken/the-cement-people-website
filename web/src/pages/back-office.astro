@@ -277,12 +277,105 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
       </section>
     </div>
 
+    <!-- Phase 2: recording a payment (design section 3) -->
+    <section id="payForm" class="dk-card" hidden>
+      <h2>Record payment</h2>
+      <p id="payFor" class="dk-help"></p>
+      <div id="payFields">
+        <label for="pAmt">Amount received (GH₵)</label>
+        <div class="dk-row dk-amtrow"><input id="pAmt" type="text" inputmode="decimal" autocomplete="off"><button type="button" id="pFull" class="dk-btn">Full balance</button></div>
+        <p id="pAmtErr" class="dk-lerr" role="alert"></p>
+        <fieldset class="dk-methods"><legend>How it was paid</legend>
+          <label><input type="radio" name="pm" value="mobile_money"> Mobile Money</label>
+          <label><input type="radio" name="pm" value="cash"> Cash</label>
+          <label><input type="radio" name="pm" value="bank_transfer"> Bank transfer</label>
+        </fieldset>
+        <label for="pRef" id="pRefLabel">Reference</label>
+        <input id="pRef" autocomplete="off">
+        <label for="pDate">Date paid</label>
+        <input id="pDate" type="date">
+        <p id="pErr" class="dk-lerr" role="alert"></p>
+        <div class="dk-row">
+          <button type="button" id="pNext" class="dk-btn primary">Continue</button>
+          <button type="button" id="pCancel" class="dk-btn ghost">Cancel</button>
+        </div>
+      </div>
+      <div id="pConfirm" class="dk-confirm" hidden>
+        <p id="pSummary"></p>
+        <div class="dk-row">
+          <button type="button" id="pYes" class="dk-btn primary">Record it</button>
+          <button type="button" id="pChange" class="dk-btn">Change</button>
+        </div>
+      </div>
+      <p id="pMsg" class="dk-msg" role="alert"></p>
+    </section>
+
+    <!-- Phase 2: correcting or refunding a payment, owner and finance only
+         (design section 6) -->
+    <section id="fixForm" class="dk-card" hidden>
+      <h2 id="fixTitle">Correct payment</h2>
+      <p id="fixFor" class="dk-help"></p>
+      <div id="fixFields">
+        <div id="fixMoney">
+          <label for="fAmt">Amount refunded (GH₵)</label>
+          <div class="dk-row dk-amtrow"><input id="fAmt" type="text" inputmode="decimal" autocomplete="off"><button type="button" id="fAll" class="dk-btn">All that is left</button></div>
+          <fieldset class="dk-methods"><legend>How it was given back</legend>
+            <label><input type="radio" name="fm" value="mobile_money"> Mobile Money</label>
+            <label><input type="radio" name="fm" value="cash"> Cash</label>
+            <label><input type="radio" name="fm" value="bank_transfer"> Bank transfer</label>
+          </fieldset>
+          <label for="fRef" id="fRefLabel">Reference</label>
+          <input id="fRef" autocomplete="off">
+        </div>
+        <label for="fWhy">Reason (kept with the record)</label>
+        <input id="fWhy" autocomplete="off">
+        <p id="fErr" class="dk-lerr" role="alert"></p>
+        <div class="dk-row">
+          <button type="button" id="fNext" class="dk-btn primary">Continue</button>
+          <button type="button" id="fCancel" class="dk-btn ghost">Cancel</button>
+        </div>
+      </div>
+      <div id="fConfirm" class="dk-confirm" hidden>
+        <p id="fSummary"></p>
+        <div class="dk-row">
+          <button type="button" id="fYes" class="dk-btn primary">Record it</button>
+          <button type="button" id="fChange" class="dk-btn">Change</button>
+        </div>
+      </div>
+      <p id="fMsg" class="dk-msg" role="alert"></p>
+    </section>
+
+    <!-- Phase 2: one receipt (payment, correction or refund), read-only -->
+    <section id="rcptSec" class="dk-card" hidden>
+      <h2 id="rTitle">Receipt</h2>
+      <div id="rcpt"></div>
+      <p id="rMsg" class="dk-msg" role="status"></p>
+      <div id="rCopyBox" class="dk-copy" hidden>
+        <label for="rCopyText">Message for the customer</label>
+        <textarea id="rCopyText" rows="2" readonly></textarea>
+        <button type="button" id="rCopyBtn" class="dk-btn">Copy</button>
+      </div>
+      <div class="dk-row">
+        <button type="button" id="rShare" class="dk-btn primary">Share receipt</button>
+        <button type="button" id="rPdf" class="dk-btn">Download PDF</button>
+      </div>
+      <p id="rInternal" class="dk-help" hidden>A correction is kept for TCP's records: it has a PDF but is not sent to the customer.</p>
+      <a id="rInv" class="dk-btn ghost dk-wide" href="#/invoices">Back to the invoice</a>
+    </section>
+
     <!-- An invoice from the database, read-only: issued, cancelled, or a
          draft seen by finance -->
     <section id="issuedSec" class="dk-card" hidden>
       <h2 id="viewTitle">Invoice</h2>
       <div id="issued"></div>
       <div id="viewLines" class="dk-vlines"></div>
+      <!-- Phase 2: the invoice's receipts, and Record payment -->
+      <div id="payBox" class="dk-pays" hidden>
+        <h3>Payments</h3>
+        <div id="payList"></div>
+        <p id="paySum" class="dk-paysum"></p>
+        <button type="button" id="payBtn" class="dk-btn primary dk-wide" hidden>Record payment</button>
+      </div>
       <p id="iMsg" class="dk-msg" role="status"></p>
       <div id="copyBox" class="dk-copy" hidden>
         <label for="copyText">Message for the customer</label>

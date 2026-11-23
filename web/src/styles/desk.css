@@ -143,3 +143,31 @@ a.dk-btn{text-decoration:none}
 .dk-lnote{grid-column:1/-1;margin:0;padding:6px 8px;background:var(--y-tint);border-radius:3px;font-size:13px}
 .dk-lnote .dk-link{margin-left:4px}
 .dk-amt small{display:block}
+/* Phase 2 (payments and receipts): the payment history, the payment and
+   correction forms, the confirm step, and the receipt. */
+.dk-pays{margin-top:14px;padding-top:10px;border-top:2px solid var(--ink)}
+.dk-pays h3{margin:0 0 6px;font-size:16px}
+.dk-pay{display:flex;flex-direction:column;gap:2px;padding:10px 0;border-bottom:1px solid var(--line)}
+.dk-pay a{color:var(--ink);text-decoration:none;display:flex;flex-direction:column;gap:2px;min-height:44px}
+.dk-pay-top,.dk-pay-bot{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.dk-pay-top b{font-size:14px}
+.dk-pay-bot small{color:var(--mute);font-size:13px}
+.dk-pay b.neg{color:#b3261e}
+.dk-pay-acts{display:flex;gap:16px}
+.dk-pay-flag{font-size:12px;font-weight:800;color:var(--mute)}
+.dk-paysum{display:flex;justify-content:space-between;font-weight:800;margin:10px 0 0}
+.dk-amtrow{flex-wrap:nowrap}
+.dk-amtrow input{flex:1 1 auto;min-width:0}
+.dk-amtrow .dk-btn{flex:none}
+.dk-methods{border:0;padding:0;margin:10px 0;display:flex;flex-wrap:wrap;gap:6px}
+.dk-methods legend{font-weight:700;font-size:13px;margin-bottom:6px;padding:0}
+.dk-methods label{display:flex;align-items:center;gap:6px;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:22px;font-weight:700;font-size:14px;margin:0}
+.dk-methods label:has(input:checked){background:var(--ink);color:var(--card);border-color:var(--ink)}
+.dk-confirm{margin-top:12px;padding:12px;background:var(--y-tint);border-left:5px solid var(--y);border-radius:3px}
+.dk-confirm p{margin:0 0 10px;font-weight:700}
+.dk-paidfull{display:inline-block;margin:4px 0 8px;padding:4px 10px;border:2px solid #1e6b34;color:#1e6b34;font-weight:800;letter-spacing:.06em;border-radius:3px}
+/* The method chips: a small radio, the label on one line (the desk's
+   general input style would otherwise stretch the radio full width). */
+.dk-methods label{white-space:nowrap}
+.dk-methods input[type=radio]{width:18px;height:18px;min-height:0;margin:0;padding:0;flex:none;accent-color:var(--y)}
+.dk-pay-bot small:last-child{white-space:nowrap;flex:none}
