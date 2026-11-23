@@ -229,6 +229,7 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
         <div id="feeBox" class="dk-fee" hidden>
           <label for="fee">Delivery fee agreed (GH₵)</label>
           <input id="fee" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
+          <p id="feeErr" class="dk-lerr" role="alert"></p>
         </div>
         <div class="dk-grid dk-site">
           <div class="wide"><label for="cSite">Site or drop-off location</label><input id="cSite" autocomplete="off"></div>

@@ -268,14 +268,48 @@ function forget(){try{localStorage.removeItem(draftKey())}catch(e){}}
 function restore(){
   let d=null;try{d=JSON.parse(localStorage.getItem(draftKey())||"null")}catch(e){}
   S=d?{...blank(),...d}:blank();
+  // A value that was not a number was kept as null on the phone.
+  S.items.forEach(l=>{if(l.qty==null)l.qty=NaN;if(l.price==null)l.price=NaN;});
 }
 // Unsaved work that would be lost if this invoice were replaced.
 const unsaved=()=>S.dirty&&!!(S.items.length||S.name.trim()||S.phone.trim());
 function fillAdd(){const g={};PRODUCTS.forEach(p=>(g[p.category]=g[p.category]||[]).push(p));
   $("#addSel").innerHTML=Object.entries(g).map(([c,l])=>`<optgroup label="${esc(c)}">${l.map(p=>`<option value="${p.id}">${esc(p.name)} (${esc(p.unit)}) · ${money(toP(p.current_price))}</option>`).join("")}</optgroup>`).join("");}
 const lineTotal=l=>Math.round(l.price*l.qty);
-function totals(s){const mat=s.items.reduce((a,l)=>a+lineTotal(l),0);
-  const fee=s.dl==="fee"?toP(num(s.fee)||0):0;return{mat,fee,total:mat+fee};}
+// Phase 1.1 (C-02): what is wrong with a line's quantity and price, in the
+// words shown under it as they are typed ("" when fine). The database
+// refuses the same values anyway (quantity > 0, price >= 0); this only says
+// so at once, on the right line. A price of GH₵0.00 is allowed: a free item.
+// Letters typed into a number box make it "not a number", never a guess.
+const typedNum=t=>/[a-z]/i.test(String(t==null?"":t))?NaN:num(t);
+function lineIssues(l){
+  const q=isNaN(l.qty)?(l.qtyText===""?"Enter a quantity":"Enter a number"):l.qty>0?"":"Quantity must be more than 0";
+  const p=isNaN(l.price)?(l.priceText===""?"Enter a price":"Enter a number"):l.price<0?"Price can't be below GH₵0":"";
+  return{qty:q,price:p};}
+const lineOk=l=>{const x=lineIssues(l);return!x.qty&&!x.price;};
+function feeIssue(s){if(s.dl!=="fee")return"";const t=String(s.fee||"").trim(),v=typedNum(t);
+  return!t?"Enter the delivery fee":isNaN(v)?"Delivery fee: enter a number":v>0?"":"Delivery fee must be more than 0";}
+
+// Phase 1.1 (C-01): lines are the same when product, unit and price all
+// match. Only those are ever combined; the same product at another
+// (agreed) price stays a separate line.
+const sameLine=(a,b)=>!!a.pid&&a.pid===b.pid&&a.unit===b.unit&&a.price===b.price&&lineOk(a)&&lineOk(b);
+const addQty=(a,b)=>Math.round((a+b)*1000)/1000;
+// The note shown under one line after something was done to it (cleared by
+// the next change): {i, text}.
+let LINE_NOTE=null;
+// Combines every pair of identical lines into the first of them. Returns
+// what was combined, in words, so the screen can say so.
+function combineIdentical(){
+  const said=[];
+  for(let i=0;i<S.items.length;i++)for(let j=S.items.length-1;j>i;j--){
+    const a=S.items.at(i),b=S.items.at(j);
+    if(sameLine(a,b)){a.qty=addQty(a.qty,b.qty);S.items.splice(j,1);
+      said.push(`Lines ${i+1} and ${j+1} combined: ${a.name}, ${fmtQ(a.qty)} ${UNIT_WORD(a.unit,a.qty)||a.unit}.`);}
+  }
+  return said;}
+function totals(s){const mat=s.items.some(l=>!lineOk(l))?NaN:s.items.reduce((a,l)=>a+lineTotal(l),0);
+  const fee=s.dl==="fee"?(feeIssue(s)?NaN:toP(typedNum(s.fee))):0;return{mat,fee,total:mat+fee};}
 const DL_TEXT={pending:"Not agreed yet",free:"Free delivery",fee:"Delivery fee",pickup:"Customer pickup"};
 // What is missing before the invoice can be saved or issued. The database
 // checks everything again; this only saves a wasted trip.
@@ -283,11 +317,16 @@ function problems(s,forIssue){
   const out=[];
   if(!s.items.length)out.push("Add at least one item.");
   if(s.items.some(l=>!l.pid))out.push("An item is not in today's price list: remove it or add the right product.");
-  if(s.items.some(l=>!(l.qty>0)))out.push("Every item needs a quantity.");
-  if(s.items.some(l=>!(l.price>=0)||isNaN(l.price)))out.push("Every item needs a price.");
+  // Each line's problem, named by its line number (C-02).
+  s.items.forEach((l,i)=>{const x=lineIssues(l);
+    if(x.qty)out.push(`Line ${i+1}: ${x.qty.charAt(0).toLowerCase()+x.qty.slice(1)}.`);
+    if(x.price)out.push(`Line ${i+1}: ${x.price.charAt(0).toLowerCase()+x.price.slice(1)}.`);});
   if(!s.name.trim()&&!s.phone.replace(/\D/g,""))out.push("Add the customer's phone number or name.");
   if(forIssue&&s.dl==="pending")out.push("Agree the delivery with the customer first.");
-  if(s.dl==="fee"&&!(num(s.fee)>0))out.push("Enter the delivery fee.");
+  const f=feeIssue(s);if(f)out.push(f+".");
+  // Free items are fine, but an invoice must be worth something (the
+  // database refuses to issue a zero total too).
+  if(forIssue&&!out.length&&!(totals(s).total>0))out.push("The invoice total must be more than GH₵0.00 to issue it.");
   return out;
 }
 // showForm(): see section 9.
@@ -295,18 +334,39 @@ function itemsHTML(){
   if(!S.items.length)return`<p class="dk-help">No items yet. Add them below.</p>`;
   return S.items.map((l,i)=>{
     const changed=l.list!=null&&l.price!==l.list,quotedDiff=l.quoted!=null&&l.list!=null&&l.quoted!==l.list;
-    return`<div class="dk-line" data-i="${i}">
+    const x=lineIssues(l),twin=S.items.findIndex((o,j)=>j<i&&sameLine(o,l));
+    return`<div class="dk-line${x.qty||x.price?" bad":""}" data-i="${i}">
       <div class="dk-ln-name"><b>${i+1}. ${esc(l.name)}</b> <small>per ${esc(l.unit)}</small>
         ${l.pid?"":`<span class="dk-flag">Not in today's price list: remove it and add the right product</span>`}
         ${quotedDiff?`<span class="dk-note">The estimate said ${money(l.quoted)}; today's price is ${money(l.list)}.</span>`:""}</div>
-      <label>Qty<input data-f="qty" type="text" inputmode="decimal" value="${fmtQ(l.qty)}" aria-label="Quantity of ${esc(l.name)}"></label>
-      <label>Price (GH₵)<input data-f="price" type="text" inputmode="decimal" value="${isNaN(l.price)?"":(l.price/100).toFixed(2)}" aria-label="Price of ${esc(l.name)}"></label>
-      <div class="dk-amt">${isNaN(lineTotal(l))?"—":money(lineTotal(l))}${changed?`<small>Agreed price (list ${money(l.list)})</small>`:""}</div>
+      <label>Qty<input data-f="qty" type="text" inputmode="decimal" value="${l.qtyText!=null?esc(l.qtyText):isNaN(l.qty)?"":fmtQ(l.qty)}" aria-label="Quantity of ${esc(l.name)}" aria-invalid="${!!x.qty}"></label>
+      <label>Price (GH₵)<input data-f="price" type="text" inputmode="decimal" value="${l.priceText!=null?esc(l.priceText):isNaN(l.price)?"":(l.price/100).toFixed(2)}" aria-label="Price of ${esc(l.name)}" aria-invalid="${!!x.price}"></label>
+      <div class="dk-amt">${amtHTML(l)}</div>
       <button type="button" class="dk-x" data-rm="${i}" aria-label="Remove ${esc(l.name)}">Remove</button>
+      <p class="dk-lerr" role="alert">${esc([x.qty,x.price].filter(Boolean).join(". "))}</p>
+      <p class="dk-lnote dk-twin"${twin>=0?"":" hidden"}>${twinHTML(i,twin)}</p>
+      ${LINE_NOTE&&LINE_NOTE.i===i?`<p class="dk-lnote">${esc(LINE_NOTE.text)}</p>`:""}
     </div>`}).join("");
 }
+// "Same product and price as line N" with a Combine button (C-01).
+const twinHTML=(i,twin)=>twin>=0?`Same product and price as line ${twin+1}. <button type="button" class="dk-link" data-combine="${i}">Combine</button>`:"";
+// Updates those notes in place, without re-drawing the boxes (so the box
+// just tapped keeps its focus and the phone keeps its keyboard open).
+function updateTwins(){document.querySelectorAll("#items .dk-line").forEach(row=>{
+  const i=+row.dataset.i,l=S.items[i];if(!l)return;
+  const twin=S.items.findIndex((o,j)=>j<i&&sameLine(o,l)),p=row.querySelector(".dk-twin");
+  // Only when it changes: tapping Combine also ends the typing in the box
+  // before it, and re-writing the note then would remove the button tapped.
+  const h=twinHTML(i,twin);if(p.innerHTML!==h)p.innerHTML=h;p.hidden=twin<0;});}
+// A line's amount: "—" while a value is wrong; "Free item" at GH₵0.00.
+function amtHTML(l){const ch=l.list!=null&&l.price!==l.list;
+  if(!lineOk(l))return"—";
+  return(l.price===0?`${money(0)}<small>Free item</small>`:money(lineTotal(l)))+(ch?`<small>Agreed price (list ${money(l.list)})</small>`:"");}
 function render(){$("#items").innerHTML=itemsHTML();show("#feeBox",S.dl==="fee");refresh();}
 function changed(){S.dirty=true;NOTE="";refresh();}
+// The delivery fee is checked as it is typed, like the item boxes.
+function feeCheck(){const f=feeIssue(S);$("#feeErr").textContent=f;$("#fee").setAttribute("aria-invalid",String(!!f));
+  $("#feeBox").classList.toggle("bad",!!f);}
 // Totals and the state line (everything except the item boxes).
 function refresh(){const t=totals(S),bad=problems(S,true);
   show("#discardBtn",!!(ME&&ME.role==="owner"&&S.invoiceId));
@@ -315,20 +375,46 @@ function refresh(){const t=totals(S),bad=problems(S,true);
   $("#sTot").textContent=isNaN(t.total)?"—":money(t.total);
   $("#issueBtn").disabled=bad.length>0;$("#saveBtn").disabled=problems(S,false).length>0;
   $("#sMsg").textContent=NOTE||bad.join(" ");
+  if(document.getElementById("feeErr"))feeCheck();
   $("#state").textContent=S.invoiceId?(S.dirty?"Draft: changes not saved yet":"Draft saved"):(S.items.length?"Not saved yet":"");
   keep();}
 $("#items").addEventListener("input",e=>{
   const row=e.target.closest(".dk-line");if(!row)return;const l=S.items[+row.dataset.i];
-  if(e.target.dataset.f==="qty")l.qty=num(e.target.value);
-  if(e.target.dataset.f==="price")l.price=toP(num(e.target.value));
-  const a=row.querySelector(".dk-amt"),ch=l.list!=null&&l.price!==l.list;
-  a.innerHTML=(isNaN(lineTotal(l))?"—":money(lineTotal(l)))+(ch?`<small>Agreed price (list ${money(l.list)})</small>`:"");
-  changed();
+  if(e.target.dataset.f==="qty"){l.qtyText=e.target.value.trim();l.qty=typedNum(l.qtyText);}
+  if(e.target.dataset.f==="price"){l.priceText=e.target.value.trim();const v=typedNum(l.priceText);l.price=isNaN(v)?NaN:toP(v);}
+  // This line's amount and message change at once; the rest of the form is
+  // not re-drawn, so the keyboard stays open.
+  const x=lineIssues(l);
+  row.querySelector(".dk-amt").innerHTML=amtHTML(l);
+  row.querySelector(".dk-lerr").textContent=[x.qty,x.price].filter(Boolean).join(". ");
+  row.classList.toggle("bad",!!(x.qty||x.price));
+  row.querySelector('[data-f="qty"]').setAttribute("aria-invalid",String(!!x.qty));
+  row.querySelector('[data-f="price"]').setAttribute("aria-invalid",String(!!x.price));
+  LINE_NOTE=null;changed();
 });
-$("#items").addEventListener("change",()=>render());
-$("#items").addEventListener("click",e=>{const b=e.target.closest("[data-rm]");if(!b)return;S.items.splice(+b.dataset.rm,1);S.dirty=true;render();});
+// Leaving a box: once valid, the typed text is no longer needed, and the
+// "Same as line …" notes are brought up to date (without re-drawing).
+$("#items").addEventListener("change",e=>{const row=e.target.closest(".dk-line");
+  if(row){const l=S.items[+row.dataset.i];if(l&&lineOk(l)){delete l.qtyText;delete l.priceText;}}
+  updateTwins();refresh();});
+$("#items").addEventListener("click",e=>{
+  const c=e.target.closest("[data-combine]");
+  if(c){const i=+c.dataset.combine,l=S.items[i],j=S.items.findIndex((o,k)=>k<i&&sameLine(o,l));
+    if(j>=0){const a=S.items[j];a.qty=addQty(a.qty,l.qty);S.items.splice(i,1);
+      LINE_NOTE={i:j,text:`Combined with line ${i+1}: ${fmtQ(a.qty)} ${UNIT_WORD(a.unit,a.qty)||a.unit} now.`};S.dirty=true;render();}
+    return;}
+  const b=e.target.closest("[data-rm]");if(!b)return;S.items.splice(+b.dataset.rm,1);LINE_NOTE=null;S.dirty=true;render();});
+// Adding a product (C-01): if it is already on the invoice at today's price,
+// the quantity goes onto that line; at an agreed (different) price, it is
+// added as its own line. Either way the line says what happened.
 $("#addBtn").addEventListener("click",()=>{const p=PRODUCTS.find(x=>String(x.id)===$("#addSel").value);if(!p)return;
-  S.items.push({kind:"product",pid:p.id,name:p.name,unit:p.unit,qty:1,price:toP(p.current_price),list:toP(p.current_price),quoted:null});S.dirty=true;render();});
+  const price=toP(p.current_price),fresh={kind:"product",pid:p.id,name:p.name,unit:p.unit,qty:1,price,list:price,quoted:null};
+  const same=S.items.findIndex(l=>sameLine(l,fresh)),other=S.items.findIndex(l=>l.pid===p.id&&l.unit===p.unit&&l.price!==price);
+  if(same>=0){const l=S.items[same];l.qty=addQty(l.qty,1);
+    LINE_NOTE={i:same,text:`Already on the invoice: quantity now ${fmtQ(l.qty)} ${UNIT_WORD(l.unit,l.qty)||l.unit}.`};}
+  else{S.items.push(fresh);
+    LINE_NOTE=other>=0?{i:S.items.length-1,text:`Line ${other+1} has an agreed price of ${isNaN(S.items[other].price)?"—":money(S.items[other].price)}; this line is at today's price.`}:null;}
+  S.dirty=true;render();});
 [["#cSite","site"],["#cContact","contact"],["#cContactPhone","contactPhone"],["#fee","fee"],["#iDue","due"],["#iNote","note"]]
   .forEach(([sel,k])=>$(sel).addEventListener("input",e=>{S[k]=e.target.value;changed();}));
 // Changing the name or phone means a different (or new) customer.
@@ -364,10 +450,12 @@ $("#readBtn").addEventListener("click",()=>{
   const r=parseEstimate($("#paste").value),m=$("#readMsg");
   if(!r.items.length){m.textContent="No items found. Paste the whole estimate message, from \"Hello The Cement People\" to the total.";return;}
   S={...blank(),ref:r.ref,site:r.loc,items:r.items,dirty:true};
+  const merged=combineIdentical();
   const odd=r.items.filter(l=>!l.pid).length,moved=r.items.filter(l=>l.quoted!=null&&l.list!=null&&l.quoted!==l.list).length;
   m.textContent=`Read ${r.items.length} ${r.items.length===1?"item":"items"}${r.ref?" from estimate "+r.ref:""}.`
     +(moved?` ${moved} ${moved===1?"price has":"prices have"} changed since the estimate: today's price is used, edit it if you agreed otherwise.`:"")
-    +(odd?` ${odd} ${odd===1?"item is":"items are"} not in today's price list: please check.`:"");
+    +(odd?` ${odd} ${odd===1?"item is":"items are"} not in today's price list: please check.`:"")
+    +(merged.length?" "+merged.join(" "):"");
   showForm();$("#cPhone").focus();
 });
 $("#blankBtn").addEventListener("click",()=>{S={...blank(),dirty:true};$("#readMsg").textContent="";showForm();$("#cPhone").focus();});
@@ -415,7 +503,11 @@ function linesForDb(){
     description:"Delivery"+(S.site.trim()?" to "+S.site.trim():""),unit:"trip"});
   return out;
 }
+let MERGED=[];   // what the last save combined, for the message after it
 async function save(){
+  // Identical lines (same product, unit and price) are combined before
+  // saving, and the screen says which (C-01). Other lines are never merged.
+  MERGED=combineIdentical();if(MERGED.length){LINE_NOTE=null;render();}
   const custId=await ensureCustomer();
   const id=await api.saveDraft({p_invoice_id:S.invoiceId,p_customer_id:custId,
     p_deliver_to_location:S.dl==="pickup"?null:(S.site.trim()||null),p_deliver_to_contact:S.contact.trim()||null,
@@ -431,7 +523,7 @@ async function save(){
 }
 $("#saveBtn").addEventListener("click",async()=>{
   if(problems(S,false).length)return;const btn=$("#saveBtn");busy(btn,true,"Saving…");NOTE="";
-  try{await save();NOTE="Draft saved.";}catch(err){failed(err);}finally{busy(btn,false);refresh();}
+  try{await save();NOTE=["Draft saved."].concat(MERGED).join(" ");}catch(err){failed(err);}finally{busy(btn,false);refresh();}
 });
 $("#issueBtn").addEventListener("click",async()=>{
   if(problems(S,true).length)return;
@@ -481,7 +573,7 @@ function showView(doc){
     ${row("Delivery",dlv)}
     ${row("Cancelled because",doc.state==="cancelled"?doc.cancel_reason||"":"")}
     <div class="dk-total"><span>Total</span><b>${money(toP(doc.total))}</b></div></div>`;
-  $("#viewLines").innerHTML=(doc.lines||[]).map((l,i)=>`<div class="dk-vline"><span>${i+1}. ${esc(l.description)}<small>${fmtQ(l.quantity)} ${esc(UNIT_WORD(l.unit,l.quantity)||l.unit||"")} × ${money(toP(l.unit_price))}</small></span><b>${money(toP(l.line_total))}</b></div>`).join("");
+  $("#viewLines").innerHTML=(doc.lines||[]).map((l,i)=>`<div class="dk-vline"><span>${i+1}. ${esc(l.description)}<small>${fmtQ(l.quantity)} ${esc(UNIT_WORD(l.unit,l.quantity)||l.unit||"")} × ${money(toP(l.unit_price))}</small></span><b>${+l.unit_price===0&&l.kind==="product"?"Free item":money(toP(l.line_total))}</b></div>`).join("");
   $("#iMsg").textContent="";show("#copyBox",false);
   show("#shareRow",issued);show("#shareHelp",issued);
   $("#shareBtn").disabled=!issued;$("#pdfBtn").disabled=!issued;
@@ -630,8 +722,9 @@ function download(file){const a=document.createElement("a");a.href=URL.createObj
 // Always read the record again just before making the PDF, so the file
 // matches the database (and a removed staff member gets nothing).
 async function freshDoc(){const d=await api.document(DOC.id);DOC=d;return d;}
-// WhatsApp on Android drops any text shared together with a file, so the
-// message is copied to the clipboard first (while the tap still counts as
+// WhatsApp may or may not keep text shared together with a file (it varies
+// by version), so the message is never shared with the file: it is copied
+// to the clipboard first (while the tap still counts as
 // the user's own action) and the user pastes it as the caption. Where the
 // browser blocks the clipboard, the message is shown with a Copy button.
 function copyText(t){
@@ -651,7 +744,11 @@ $("#shareBtn").addEventListener("click",async()=>{
     else{showCopyBox(text);note="Copy the message below, then paste it in WhatsApp as the caption.";}
     if(navigator.canShare&&navigator.canShare({files:[file]})){
       m.textContent=note;
-      try{await navigator.share({files:[file],text,title:file.name});}catch(e){if(e.name!=="AbortError")throw e;}
+      // The PDF only, no text (E-01, 23 Nov 2026): some WhatsApp versions put
+      // shared text into the caption themselves, so with the copied message
+      // pasted it appeared twice. The message now travels one way only: the
+      // clipboard, pasted once by the user.
+      try{await navigator.share({files:[file],title:file.name});}catch(e){if(e.name!=="AbortError")throw e;}
     }else{download(file);const to=waNumber(doc.billed_to_phone);
       if(to)window.open("https://wa.me/"+to+"?text="+encodeURIComponent(text),"_blank","noopener");
       m.textContent="This browser cannot share files: the PDF was downloaded. Attach it in the WhatsApp chat. "+note;}
