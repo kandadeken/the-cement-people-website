@@ -117,7 +117,10 @@ a.dk-btn{text-decoration:none}
 .dk-inv-top b{font-size:15px;letter-spacing:.02em}
 .dk-inv-who{font-size:14px;color:var(--ink)}
 .dk-inv-bot small{color:var(--mute);font-size:13px}
-.dk-inv-bot b{font-variant-numeric:tabular-nums;text-align:right}
+.dk-inv-bot{align-items:flex-end}
+.dk-inv-bot small{white-space:nowrap}
+.dk-inv-bot b{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.dk-left{display:block;font-weight:700;color:var(--mute)}
 .dk-badge{font-style:normal;font-size:12px;font-weight:800;padding:2px 8px;border-radius:10px;background:var(--bg);color:var(--mute);white-space:nowrap}
 .dk-badge.s-overdue{background:#fbe9e7;color:#b3261e}
 .dk-badge.s-paid{background:#e6f4ea;color:#1e6b34}

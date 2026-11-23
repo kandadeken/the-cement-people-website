@@ -43,7 +43,10 @@ API server could not be installed in the build environment.
 TCP Back Office v1.1 (spec section 10):
   B01  Home figures match the database; each figure opens its list
   B02  Home agrees with the list: every count, and "owed" = the balances
-  B03  list order (newest, then id), filters, paging without skips or repeats
+  B03  list order (newest started, then id), filters, paging without skips
+       or repeats
+  B17  every issued invoice shows its total and what is left; drafts and
+       cancelled show none
   B04  phone search: four formats and a partial number find the same
        invoice; "233" is only removed when it is the country code
   B05  several matches are all listed; nothing is opened or chosen
@@ -59,7 +62,7 @@ TCP Back Office v1.1 (spec section 10):
   B14  WhatsApp: the message is copied; a blocked clipboard shows Copy
   B15  /invoice-desk/ forwards with the query and the whole fragment kept;
        an old sign-in link and an expired link still work
-  B16  every Back Office screen fits a 360 px phone
+  B16  every Back Office screen fits a 360 px and a 390 px phone
 """
 import base64
 import io
@@ -706,13 +709,10 @@ def test_b02_home_agrees_with_the_list(browser):
     owed = page.text_content("#hOwed")
     for status, n in home.items():
         assert _list_count(page, status) == n, status
-    # "Owed" = the balances on the rows the list shows under Owed (a row
-    # shows its total, and "… left" when part of it is paid).
+    # "Owed" = the balances ("… left") on the rows the list shows under Owed.
     _list_count(page, "owed")
-    def left(t):
-        part = t.split("·")[-1] if "left" in t else t
-        return float(part.replace("left", "").replace("GH₵", "").replace(",", "").strip())
-    total = sum(left(t) for t in page.locator("#rows .dk-inv-bot b").all_text_contents())
+    total = sum(float(t.replace("left", "").replace("GH₵", "").replace(",", "").strip())
+                for t in page.locator("#rows .dk-left").all_text_contents())
     assert f"GH₵{total:,.2f}" == owed
     assert not errors
 
@@ -966,12 +966,31 @@ def test_b15_old_address_forwards_everything(browser):
     assert p2.locator('noscript').count() == 1
 
 
+@pytest.mark.parametrize("width", [360, 390])
 @pytest.mark.parametrize("route", ["#/", "#/invoices", "#/invoice/2", "#/invoice/1"])
-def test_b16_fits_a_phone(browser, route):
-    page, errors = _bo(browser, width=360, seed=MIX, route=route)
+def test_b16_fits_a_phone(browser, route, width):
+    page, errors = _bo(browser, width=width, seed=MIX, route=route)
     page.wait_for_timeout(400)
-    assert page.evaluate("document.documentElement.scrollWidth") <= 360
+    assert page.evaluate("document.documentElement.scrollWidth") <= width
     for a in page.locator("#tabs a").all():
         if a.is_visible():
             assert a.bounding_box()["height"] >= 44
+    assert not errors
+
+
+
+def test_b17_issued_invoices_show_what_is_left(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoices")
+    page.wait_for_selector("#rows .dk-inv")
+    def shown(i):
+        row = page.locator(f'#rows .dk-inv[data-id="{i}"]')
+        left = row.locator(".dk-left")
+        return (row.locator(".dk-inv-bot b").evaluate("b => b.firstChild.textContent"),
+                left.text_content() if left.count() else None)
+    assert shown(2) == ("GH₵750.00", "GH₵750.00 left"), "unpaid: total and balance"
+    assert shown(3) == ("GH₵750.00", "GH₵450.00 left"), "part paid"
+    assert shown(4) == ("GH₵750.00", "GH₵0.00 left"), "paid"
+    assert shown(5) == ("GH₵750.00", "GH₵750.00 left"), "overdue"
+    assert shown(1) == ("GH₵750.00", None) and shown(6) == ("GH₵750.00", None), "draft and cancelled owe nothing"
+    assert "newest first, by date started" in page.text_content("#listInfo")
     assert not errors

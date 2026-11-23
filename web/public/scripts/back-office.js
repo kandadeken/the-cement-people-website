@@ -774,11 +774,13 @@ function shortDate(iso){if(!iso)return"";const[y,m,d]=String(iso).slice(0,10).sp
   return new Date(y,m-1,d).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
 function rowHTML(r){
   const draft=r.status==="draft",when=draft?"Started "+shortDate(r.created_at):r.status==="overdue"?"Due "+shortDate(r.due_date):r.issued_at?"Issued "+shortDate(r.issued_at):"";
-  const owes=r.state==="issued"&&r.status!=="paid"&&+r.balance!==+r.total;
+  // Every issued invoice shows its total and what is left to pay (spec
+  // section 4); a draft or a cancelled invoice owes nothing.
+  const owes=r.state==="issued";
   return`<a class="dk-inv" href="#/invoice/${r.id}" data-id="${r.id}">
     <span class="dk-inv-top"><b>${draft?"Draft":esc(r.invoice_no||"")}</b><i class="dk-badge s-${esc(r.status)}">${esc(STATUS[r.status]||r.status)}</i></span>
     <span class="dk-inv-who">${esc(r.billed_to_name||"(no name)")}${r.billed_to_phone?" · "+esc(r.billed_to_phone):""}</span>
-    <span class="dk-inv-bot"><small>${esc(when)}</small><b>${money(toP(r.total))}${owes?`<small> · ${money(toP(r.balance))} left</small>`:""}</b></span>
+    <span class="dk-inv-bot"><small>${esc(when)}</small><b>${money(toP(r.total))}${owes?`<small class="dk-left">${money(toP(r.balance))} left</small>`:""}</b></span>
   </a>`;}
 
 // Home: the figures are the database's own (back_office_home); nothing is
@@ -835,7 +837,11 @@ async function loadMore(){
     if(!res.rows.length&&!LIST.rows.length)await stillStaff();
     LIST.rows=LIST.rows.concat(res.rows);LIST.count=res.count;
     $("#rows").innerHTML=LIST.rows.length?LIST.rows.map(rowHTML).join(""):`<p class="dk-help">${LIST.q||LIST.status!=="all"?"No invoices match.":"No invoices yet."}</p>`;
-    $("#listInfo").textContent=LIST.status==="owed"?`Owed to TCP: ${LIST.count} ${LIST.count===1?"invoice":"invoices"}`:LIST.count?`${LIST.count} ${LIST.count===1?"invoice":"invoices"}`:"";
+    // The order is by the date an invoice was started (then its id), not
+    // the date it was issued: predictable, and paging never skips or repeats
+    // one (accepted for v1 by ChatGPT and Daniel, 23 Nov 2026).
+    const n=`${LIST.count} ${LIST.count===1?"invoice":"invoices"}`;
+    $("#listInfo").textContent=LIST.count?(LIST.status==="owed"?"Owed to TCP: ":"")+n+" · newest first, by date started":"";
     show("#moreBtn",LIST.rows.length<LIST.count);
   }catch(err){if(my===LIST.seq)readFailed(err,"#listMsg");}
   finally{busy(btn,false);}
