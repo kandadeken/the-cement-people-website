@@ -281,7 +281,16 @@ const lineTotal=l=>Math.round(l.price*l.qty);
 // refuses the same values anyway (quantity > 0, price >= 0); this only says
 // so at once, on the right line. A price of GH₵0.00 is allowed: a free item.
 // Letters typed into a number box make it "not a number", never a guess.
-const typedNum=t=>/[a-z]/i.test(String(t==null?"":t))?NaN:num(t);
+// Strict (review of PR #38): what was typed must be one whole, well-formed
+// number before it is read, so a slip such as "1.2.3", "1,2,3" or "1-2"
+// is "not a number" rather than quietly becoming 123, 1.2 or 1. Accepted:
+//   12   12.5   2,5 (decimal comma)   .5   1,392.00 / 50,000 (thousands
+//   commas)   1.392,00 (dot thousands, comma decimals)
+// with an optional leading minus (then refused as below zero) and an
+// optional GH₵ in front. Anything else, letters included, is NaN.
+const NUM_FORM=/^-?(?:\d+(?:[.,]\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{1,3}(?:\.\d{3})+,\d+|[.,]\d+)$/;
+function typedNum(t){const v=String(t==null?"":t).trim().replace(/^(?:GH)?₵\s*/i,"");
+  return NUM_FORM.test(v)?num(v):NaN;}
 function lineIssues(l){
   const q=isNaN(l.qty)?(l.qtyText===""?"Enter a quantity":"Enter a number"):l.qty>0?"":"Quantity must be more than 0";
   const p=isNaN(l.price)?(l.priceText===""?"Enter a price":"Enter a number"):l.price<0?"Price can't be below GH₵0":"";
@@ -527,6 +536,13 @@ $("#saveBtn").addEventListener("click",async()=>{
 });
 $("#issueBtn").addEventListener("click",async()=>{
   if(problems(S,true).length)return;
+  // Identical lines are combined first and shown, and the invoice is NOT
+  // issued in the same tap: what is issued is always what was on screen
+  // (review of PR #38). Tapping Issue again issues the combined invoice.
+  const merged=combineIdentical();
+  if(merged.length){LINE_NOTE=null;render();
+    NOTE=merged.join(" ")+" Check the combined lines, then tap Issue invoice again.";refresh();
+    $("#sMsg").scrollIntoView({block:"center"});return;}
   if(!confirm("Issue this invoice? It gets its number and can no longer be changed (it can only be cancelled)."))return;
   const btn=$("#issueBtn");busy(btn,true,"Issuing…");NOTE="";
   try{const id=await save();
@@ -663,7 +679,9 @@ async function makePdf(doc){
   head();
   const rlh=pt(9.5)*1.45;
   doc.lines.forEach((l,i)=>{
-    font("semibold",9.5);const nameLines=wrap(l.description,dW);
+    // A free item says so on the customer's PDF; its prices stay GH₵0.00.
+    const free=l.kind==="product"&&+l.unit_price===0;
+    font("semibold",9.5);const nameLines=wrap(l.description+(free?" — Free item":""),dW);
     font("normal",8);const per=l.kind==="product"?`per ${l.unit}`:"",perW=pdf.getTextWidth(per);
     font("semibold",9.5);const lastW=pdf.getTextWidth(nameLines[nameLines.length-1]);
     const perOwn=per&&lastW+1.5+perW>dW,rows=nameLines.length+(perOwn?1:0),h=1.7*2+rows*rlh;

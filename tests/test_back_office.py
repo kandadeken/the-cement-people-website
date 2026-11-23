@@ -60,6 +60,11 @@ Plan", approved by ChatGPT and Daniel):
   F06  C-01 lines made identical are flagged and can be combined; Save
        combines any left and says so; different prices are never combined
   F07  an issued invoice with repeated lines is shown as it was issued
+  F08  badly formed numbers (1.2.3, 1,2,3, 1-2, 5-, --5) are "not a number";
+       genuine formats (2,5 / 1,392.00 / 50,000 / 1.392,00 / GH₵98) read right
+  F09  Issue never combines lines unseen: it combines, says so and stops;
+       the next tap issues exactly what is shown
+  F10  the PDF names a free item ("— Free item"), at GH₵0.00
   B04  phone search: four formats and a partial number find the same
        invoice; "233" is only removed when it is the country code
   B05  several matches are all listed; nothing is opened or chosen
@@ -1154,4 +1159,59 @@ def test_f07_issued_invoice_keeps_its_repeated_lines(browser):
     page.wait_for_selector("#issuedSec:not([hidden])")
     assert page.locator("#viewLines .dk-vline").count() == 3, "shown exactly as issued"
     assert "Free item" in page.text_content("#viewLines")
+    assert not errors
+
+
+
+def test_f08_badly_formed_numbers_are_not_numbers(browser):
+    page, errors = _bo(browser, route="#/new")
+    _blank_with(page, "c1")
+    for typed in ["1.2.3", "1,2,3", "1-2", "5-", "--5", "1..5", "1,,5", "1 2", "12.", ",", "-", "1.234.5,6", "e5"]:
+        _type(page, 0, "qty", typed)
+        assert page.locator('#items .dk-line[data-i="0"] .dk-lerr').text_content() == "Enter a number", typed
+        assert page.evaluate("Number.isNaN(TCPDesk.state().items[0].qty)"), typed
+        assert page.locator("#saveBtn").is_disabled(), typed
+        _type(page, 0, "price", typed)
+        assert "Enter a number" in page.locator('#items .dk-line[data-i="0"] .dk-lerr').text_content(), typed
+        _type(page, 0, "price", "75")
+    for typed, value in [("2,5", 2.5), ("1,392.00", 1392), ("50,000", 50000), ("1.392,00", 1392), (".5", 0.5), ("12", 12), (" 3 ", 3)]:
+        _type(page, 0, "qty", typed)
+        assert page.evaluate("TCPDesk.state().items[0].qty") == value, typed
+        assert page.locator('#items .dk-line[data-i="0"] .dk-lerr').text_content() == "", typed
+    _type(page, 0, "price", "GH₵98.50")
+    assert page.evaluate("TCPDesk.state().items[0].price") == 9850
+    _type(page, 0, "qty", "-5")
+    assert page.locator('#items .dk-line[data-i="0"] .dk-lerr').text_content() == "Quantity must be more than 0"
+    assert not errors
+
+
+def test_f09_issue_never_combines_unseen(browser):
+    page, errors = _bo(browser, route="#/new")
+    _blank_with(page, "j3")
+    _type(page, 0, "price", "6500"); page.dispatch_event('#items .dk-line[data-i="0"] [data-f="price"]', "change")
+    page.select_option("#addSel", str(BY_SITE["j3"]["id"])); page.click("#addBtn")
+    _type(page, 1, "price", "6500"); page.dispatch_event('#items .dk-line[data-i="1"] [data-f="price"]', "change")
+    page.check('input[name="dl"][value="free"]')
+    page.click("#issueBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent.includes('tap Issue invoice again')")
+    assert "Lines 1 and 2 combined: Iron rod 12 mm, 2 tons." in page.text_content("#sMsg")
+    assert page.locator("#items .dk-line").count() == 1
+    assert page.evaluate("__db.calls.filter(c => c === 'issue' || c === 'saveDraft').length") == 0, "nothing saved or issued yet"
+    assert page.locator("#form").is_visible()
+    page.click("#issueBtn")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert page.evaluate("__db.lines.length") == 1 and page.evaluate("__db.lines[0].quantity") == 2
+    assert not errors
+
+
+def test_f10_pdf_names_free_items(browser):
+    seed = [{"name": "Yaro", "phone": "+233200000009", "state": "issued", "due": FUTURE,
+             "lines": [{"qty": 3}, {"qty": 2, "price": 0}]}]
+    page, errors = _bo(browser, seed=seed, route="#/invoice/1")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    texts, _ = _pdf(page)
+    text = " ".join(texts)
+    assert "Free item" in text
+    assert text.count("Free item") == 1, "only the free line"
+    assert "GH₵0.00" in text
     assert not errors
