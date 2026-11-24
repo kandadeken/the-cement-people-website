@@ -171,3 +171,37 @@ a.dk-btn{text-decoration:none}
 .dk-methods label{white-space:nowrap}
 .dk-methods input[type=radio]{width:18px;height:18px;min-height:0;margin:0;padding:0;flex:none;accent-color:var(--y)}
 .dk-pay-bot small:last-child{white-space:nowrap;flex:none}
+/* Phase 2.1: Received today on Home, the Payments tab (totals, rows by
+   kind), and the Cancel invoice box. Kinds differ by word as well as look,
+   never by colour alone. */
+.dk-today{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:12px 0 4px;padding:10px 12px;border:1px solid var(--line);border-radius:3px;color:var(--ink);text-decoration:none;min-height:44px}
+.dk-today span{font-weight:700;font-size:14px}
+.dk-today b{font-size:20px}
+.dk-ledtot{margin:10px 0;padding:12px;background:var(--bg);border-left:5px solid var(--y);border-radius:3px}
+.dk-ledtot p{margin:0 0 6px}
+.dk-net{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.dk-net span{font-weight:700}
+.dk-net b{font-size:24px}
+.dk-split{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-top:8px}
+.dk-split div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.dk-split span{font-size:12px;font-weight:800;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+.dk-split b{font-size:16px}
+.dk-split small{font-size:12px;color:var(--mute);line-height:1.4}
+.dk-recnote{margin-top:8px!important;font-size:12px}
+.dk-led{display:flex;flex-direction:column;gap:2px;padding:10px 0;border-bottom:1px solid var(--line);color:var(--ink);text-decoration:none;min-height:44px}
+.dk-led-top,.dk-led-bot{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.dk-led-top b{font-size:14px}
+.dk-led-bot small{color:var(--mute);font-size:13px;min-width:0;overflow-wrap:anywhere}
+.dk-led .amt{white-space:nowrap;font-weight:800}
+.dk-led .amt.out{color:#b3261e}
+.dk-led .amt.rev{color:var(--mute);font-weight:600;font-size:13px}
+.dk-led.k-corrected .amt s{color:var(--mute)}
+.dk-kind{font-style:normal;font-size:12px;font-weight:800;padding:2px 8px;border-radius:10px;background:var(--bg);color:var(--ink);white-space:nowrap}
+.dk-kind.k-refund{background:#fbe9e7}
+.dk-kind.k-correction,.dk-kind.k-corrected{background:#ececec;color:var(--mute)}
+.dk-danger{margin-top:22px;padding:12px;border:2px solid #b3261e;border-radius:3px}
+.dk-danger h3{margin:0 0 6px;font-size:15px;color:#b3261e}
+.dk-btn.danger{background:#b3261e;border-color:#b3261e;color:#fff}
+/* Four tabs (Phase 2.1 adds Payments): a little tighter, and words never
+   broken mid-word ("New invoice" may take two lines, "Payments" never). */
+.dk-tabs a{margin:0 2px;padding:0 2px;font-size:14px;line-height:1.15;text-align:center;overflow-wrap:normal;word-break:keep-all;hyphens:none}

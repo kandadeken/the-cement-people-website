@@ -154,6 +154,8 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
           <a class="dk-fig warn" href="#/invoices?status=overdue"><b id="hOverdue">—</b><span>Overdue</span></a>
           <a class="dk-fig" href="#/invoices?status=draft"><b id="hDrafts">—</b><span>Open drafts</span></a>
         </div>
+        <!-- Phase 2.1 (decision 1): money received today, net of refunds -->
+        <a id="hTodayLink" class="dk-today" href="#/payments?period=today"><span>Received today</span><b id="hToday">—</b></a>
         <a id="hNew" class="dk-btn primary dk-wide" href="#/new">New invoice</a>
         <p id="homeMsg" class="dk-msg" role="alert"></p>
       </div>
@@ -184,6 +186,48 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
       <div id="rows" class="dk-list"></div>
       <button type="button" id="moreBtn" class="dk-btn dk-wide" hidden>Show more</button>
       <p id="listMsg" class="dk-msg" role="alert"></p>
+    </section>
+
+    <!-- Phase 2.1: Payments, every payment, refund and correction, with the
+         period's totals (design: "The Payments tab") -->
+    <section id="ledV" class="dk-card" hidden>
+      <h2>Payments</h2>
+      <div id="periods" class="dk-chips" role="group" aria-label="Period">
+        <button type="button" data-period="today">Today</button>
+        <button type="button" data-period="week">This week</button>
+        <button type="button" data-period="month">This month</button>
+        <button type="button" data-period="all">All</button>
+      </div>
+      <div id="ledTotals" class="dk-ledtot" aria-live="polite">
+        <p id="ledWhen" class="dk-help"></p>
+        <div class="dk-net"><span>Net received</span><b id="tNet">—</b></div>
+        <div class="dk-split">
+          <div><span>Received</span><b id="tRec">—</b><small id="tRecBy"></small></div>
+          <div id="tRefBox"><span>Refunded</span><b id="tRef">—</b><small id="tRefBy"></small></div>
+          <div><span>Records</span><b id="tCount">—</b></div>
+        </div>
+        <p class="dk-help dk-recnote">Recorded by TCP staff. Check against the cash drawer and the MoMo and bank statements.</p>
+      </div>
+      <form id="ledSearchForm" role="search" class="dk-search">
+        <label for="lq" class="sr">Search by receipt, invoice, customer, phone or reference</label>
+        <input id="lq" type="search" autocomplete="off" placeholder="Receipt, invoice, name, phone or ref">
+      </form>
+      <div id="kinds" class="dk-chips" role="group" aria-label="Show">
+        <button type="button" data-kind="all">All</button>
+        <button type="button" data-kind="payment">Payments</button>
+        <button type="button" data-kind="refund">Refunds</button>
+        <button type="button" data-kind="correction">Corrections</button>
+      </div>
+      <div id="methods" class="dk-chips" role="group" aria-label="Method">
+        <button type="button" data-method="all">Any method</button>
+        <button type="button" data-method="mobile_money">MoMo</button>
+        <button type="button" data-method="cash">Cash</button>
+        <button type="button" data-method="bank_transfer">Bank</button>
+      </div>
+      <p id="ledInfo" class="dk-help" role="status"></p>
+      <div id="ledRows" class="dk-list"></div>
+      <button type="button" id="ledMore" class="dk-btn dk-wide" hidden>Show more</button>
+      <p id="ledMsg" class="dk-msg" role="alert"></p>
     </section>
 
     <!-- One invoice: the form (new invoice or a draft) or the read-only view -->
@@ -400,6 +444,30 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
         <button type="button" id="pdfBtn" class="dk-btn">Download PDF</button>
       </div>
       <p id="shareHelp" class="dk-help">"Share invoice" copies a short message and opens your phone's share menu with the PDF: choose WhatsApp, then the customer, and paste the message as the caption. The PDF is always made from TCP's records, so it can be shared again at any time.</p>
+      <!-- Phase 2.1: cancelling an issued invoice (owner only). Apart from
+           everything else: it cannot be undone. -->
+      <div id="cxBox" class="dk-danger" hidden>
+        <h3>Cancel invoice</h3>
+        <p id="cxHeld" class="dk-help"></p>
+        <button type="button" id="cxOpen" class="dk-btn">Cancel this invoice…</button>
+        <div id="cxFields" hidden>
+          <label for="cxWhy">Reason (kept with the invoice)</label>
+          <input id="cxWhy" autocomplete="off">
+          <p id="cxErr" class="dk-lerr" role="alert"></p>
+          <div class="dk-row">
+            <button type="button" id="cxNext" class="dk-btn">Continue</button>
+            <button type="button" id="cxBack" class="dk-btn ghost">Don't cancel</button>
+          </div>
+        </div>
+        <div id="cxConfirm" class="dk-confirm" hidden>
+          <p id="cxSummary"></p>
+          <div class="dk-row">
+            <button type="button" id="cxYes" class="dk-btn danger">Cancel the invoice</button>
+            <button type="button" id="cxKeep" class="dk-btn">Keep it</button>
+          </div>
+        </div>
+        <p id="cxMsg" class="dk-msg" role="alert"></p>
+      </div>
       <button type="button" id="newBtn2" class="dk-btn ghost">New invoice</button>
     </section>
     </div>
@@ -408,6 +476,7 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
     <nav id="tabs" class="dk-tabs" aria-label="Back Office">
       <a href="#/" data-tab="home">Home</a>
       <a href="#/invoices" data-tab="invoices">Invoices</a>
+      <a href="#/payments" data-tab="payments">Payments</a>
       <a href="#/new" data-tab="new" id="tabNew">New invoice</a>
     </nav>
   </div>
