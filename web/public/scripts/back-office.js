@@ -770,20 +770,34 @@ async function makePdf(doc){
   sy+=1.5;const gh=3*2+pt(11)*1.45;
   pdf.setFillColor(INK);pdf.rect(sx,sy,TW,gh,"F");pdf.setFillColor(OCHRE);pdf.rect(sx,sy,1.5,gh,"F");
   font("bold",11,"#ffffff");txt("Total due",sx+1.5+2.5,sy+3);txt(money(toP(doc.total)),R-2.5,sy+3,{right:1});
+  // -- A cancelled invoice: a cancellation section under everything else,
+  //    with the WHOLE reason, however long (wrapped, never cut short). If it
+  //    doesn't fit above the footer it starts a new page.
+  if(cancelled){
+    const RED="#b3261e",clh=pt(9)*1.45;
+    font("normal",9);const why=wrap(`Reason: ${String(doc.cancel_reason||"").trim()}`,W-8);
+    const head=`CANCELLED${doc.cancelled_at?" on "+dateText(doc.cancelled_at):""}${doc.cancelled_by?" by "+doc.cancelled_by:""}`;
+    const boxH=4+pt(10)*1.45+2+why.length*clh+3;
+    let cy=Math.max(sy+gh,ny)+8;
+    if(cy+boxH>BOTTOM){pdf.addPage();cy=TOP+6;}
+    pdf.setDrawColor(RED);pdf.setLineWidth(.6);pdf.rect(L,cy,W,boxH);
+    font("bold",10,RED);txt(head,L+4,cy+4);
+    font("normal",9,INK);why.forEach((l,i)=>txt(l,L+4,cy+4+pt(10)*1.45+2+i*clh));
+  }
   // -- Every page: footer; pages 2+ also a "continued" line at the top
   const n=pdf.getNumberOfPages();
   for(let p=1;p<=n;p++){pdf.setPage(p);
     font("normal",7,MUTE);txt(`${B.website}  ·  ${B.phone}`,L,289);txt(`Page ${p} of ${n}`,R,289,{right:1});
     if(p>1){font("bold",7.5);txt(`${B.name}  ·  ${DOC_TITLE} ${doc.invoice_no}`,L,9);font("normal",7.5,MUTE);txt("Continued",R,9,{right:1});}
     if(cancelled){
-      // Across the page, faint, so the invoice stays readable; and a plain
-      // line above the footer with the date and reason.
+      // Across the page, faint, so the invoice stays readable.
       pdf.saveGraphicsState();pdf.setGState(new pdf.GState({opacity:0.14}));
       font("bold",64,"#b3261e");pdf.text("CANCELLED",38,205,{angle:35});
       pdf.restoreGraphicsState();
+      // Above the footer, on every page: short, so it always fits; the
+      // full reason is in the cancellation section.
       font("bold",8,"#b3261e");
-      const why=`CANCELLED${doc.cancelled_at?" on "+dateText(doc.cancelled_at):""}${doc.cancel_reason?": "+doc.cancel_reason:""}`;
-      txt(wrap(why,W)[0],L,284);}}
+      txt(`CANCELLED${doc.cancelled_at?" on "+dateText(doc.cancelled_at):""}. The reason is in the cancellation note.`,L,284);}}
   return pdf;
 }
 

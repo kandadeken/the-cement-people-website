@@ -142,6 +142,8 @@ Phase 2.1 Design, Payments Ledger and Cancelling Invoices (v1.1)"):
   L08  an invoice holding money can't be cancelled (and the "database"
        refuses it); after a full refund it can, keeping its history
   L09  the Payments tab and the Cancel box fit 360 px and 390 px phones
+  L10  a long cancellation reason appears in full in the PDF, never over
+       the footer; CANCELLED is on every page of a long invoice
 """
 import base64
 import io
@@ -2112,4 +2114,36 @@ def test_l09_payments_and_cancel_fit_a_phone(browser, width):
     _ledger(page, "#/payments?period=all"); assert fits()
     page.evaluate("location.hash = '#/invoice/5'"); page.wait_for_selector("#cxBox:not([hidden])")
     page.click("#cxOpen"); page.fill("#cxWhy", "x"); page.click("#cxNext"); page.wait_for_selector("#cxConfirm:not([hidden])"); assert fits()
+    assert not errors
+
+
+
+LONG_WHY = ("Customer cancelled the order after delivery arrangements changed and the materials were no longer required; "
+            "the site manager confirmed by phone on Monday that the foundation work has been postponed until the new year, "
+            "so nothing will be delivered and nothing is owed on this invoice.")
+
+
+@pytest.mark.parametrize("lines", [1, 40])
+def test_l10_long_cancellation_reason_in_full(browser, lines):
+    page, errors = _bo(browser, seed=[{"name": "Ama Unpaid", "phone": "+233241234567", "state": "issued", "due": FUTURE,
+                                       "lines": [{"qty": 1, "price": 10}] * lines}], route="#/invoice/1")
+    page.wait_for_selector("#cxBox:not([hidden])")
+    page.click("#cxOpen"); page.fill("#cxWhy", LONG_WHY); page.click("#cxNext"); page.click("#cxYes")
+    page.wait_for_function("document.querySelector('#viewTitle').textContent === 'Cancelled invoice'")
+    texts, _ = _pdf(page)
+    whole = " ".join(" ".join(t.split()) for t in texts)
+    assert ("Reason: " + LONG_WHY) in whole, "the whole reason, word for word"
+    assert all("CANCELLED" in t for t in texts), "every page is marked"
+    # Nothing is drawn into the footer band (below 282 mm = 799.4 pt) but the
+    # footer itself and the short CANCELLED line: word boxes from poppler.
+    import re, subprocess, tempfile
+    b64 = page.evaluate("async () => (await TCPDesk.makePdf(TCPDesk.doc())).output('datauristring').split(',')[1]")
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
+        f.write(base64.b64decode(b64)); f.flush()
+        boxes = subprocess.run(["pdftotext", "-bbox", f.name, "-"], capture_output=True, text=True, check=True).stdout
+    footer_words = set("CANCELLED on November 2026. The reason is in the cancellation note. thecementpeople.com · 055 846 3468 Page of".split())
+    low = [w for y, w in re.findall(r'yMax="([\d.]+)">([^<]+)</word>', boxes)
+           if float(y) > 799.4 and w not in footer_words and not w.isdigit()]
+    assert not low, low
+    assert len(texts) == (1 if lines == 1 else len(texts)) and (lines == 1 or len(texts) >= 2)
     assert not errors
