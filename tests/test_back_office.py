@@ -2134,16 +2134,21 @@ def test_l10_long_cancellation_reason_in_full(browser, lines):
     whole = " ".join(" ".join(t.split()) for t in texts)
     assert ("Reason: " + LONG_WHY) in whole, "the whole reason, word for word"
     assert all("CANCELLED" in t for t in texts), "every page is marked"
-    # Nothing is drawn into the footer band (below 282 mm = 799.4 pt) but the
-    # footer itself and the short CANCELLED line: word boxes from poppler.
-    import re, subprocess, tempfile
+    # Nothing is drawn into the footer band (below 282 mm = 799.4 pt from the
+    # top) but the footer itself and the short CANCELLED line: word boxes
+    # from pdfminer (pure Python, so it runs the same on GitHub's runners).
+    from pdfminer.high_level import extract_pages
+    from pdfminer.layout import LTTextContainer, LTTextLine
     b64 = page.evaluate("async () => (await TCPDesk.makePdf(TCPDesk.doc())).output('datauristring').split(',')[1]")
-    with tempfile.NamedTemporaryFile(suffix=".pdf") as f:
-        f.write(base64.b64decode(b64)); f.flush()
-        boxes = subprocess.run(["pdftotext", "-bbox", f.name, "-"], capture_output=True, text=True, check=True).stdout
     footer_words = set("CANCELLED on November 2026. The reason is in the cancellation note. thecementpeople.com · 055 846 3468 Page of".split())
-    low = [w for y, w in re.findall(r'yMax="([\d.]+)">([^<]+)</word>', boxes)
-           if float(y) > 799.4 and w not in footer_words and not w.isdigit()]
+    low = []
+    for pg in extract_pages(io.BytesIO(base64.b64decode(b64))):
+        for box in pg:
+            if not isinstance(box, LTTextContainer):
+                continue
+            for line in box:
+                if isinstance(line, LTTextLine) and pg.height - line.y0 > 799.4:   # its bottom edge, from the top
+                    low += [w for w in line.get_text().split() if w not in footer_words and not w.isdigit()]
     assert not low, low
     assert len(texts) == (1 if lines == 1 else len(texts)) and (lines == 1 or len(texts) >= 2)
     assert not errors
