@@ -2,3 +2,5 @@
 pytest==9.1.1
 playwright==1.63.0
 pypdf==6.17.0
+# Word positions in PDFs (the cancelled-invoice footer check), pure Python.
+pdfminer.six==20260107

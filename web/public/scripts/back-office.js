@@ -22,6 +22,7 @@
      8. Sharing                (PDF + the message copied for the caption)
      8b. Payments and receipts (phase 2: record, receipts, corrections,
                                refunds)
+     8c. Payments tab, cancelling invoices (phase 2.1)
      9. Screens and the address (Home, Invoices, one invoice, New invoice)
     10. Start
    =========================================================================== */
@@ -107,6 +108,22 @@ function supabaseApi(){
     byRequest:req=>sb.from("payments").select("id,receipt_no,kind,invoice_id,reverses_payment_id,amount").eq("request_id",req).maybeSingle().then(out),
     // Discarding a draft = the owner-only cancel_invoice (kept, with a reason).
     cancel:(id,reason)=>sb.rpc("cancel_invoice",{p_invoice_id:id,p_reason:reason}).then(out),
+    // Phase 2.1: a period's money figures (payment_totals: today, week,
+    // month or all), worked out by the database, with the period's dates.
+    totals:period=>sb.rpc("payment_totals",{p_period:period}).then(out),
+    // A page of the Payments list (payment_ledger), newest first by date,
+    // then id, between the dates payment_totals gave (so the list and the
+    // totals always cover the same days). terms: see ledgerTerms().
+    ledger:({from,to,kind:k,method,terms,offset,limit})=>{
+      let q=sb.from("payment_ledger").select("id,receipt_no,kind,amount,method,reference,paid_on,invoice_id,invoice_no,billed_to_name,billed_to_phone,reverses_receipt_no,corrected",{count:"exact"})
+        .order("paid_on",{ascending:false}).order("id",{ascending:false}).range(offset,offset+limit-1);
+      if(from)q=q.gte("paid_on",from);
+      if(to)q=q.lte("paid_on",to);
+      if(k&&k!=="all")q=q.eq("kind",k);
+      if(method&&method!=="all")q=q.eq("method",method);
+      if(terms&&terms.length)q=q.or(terms.map(t=>`search_text.ilike.${t}`).join(","));
+      return q.then(r=>{if(r.error)throw r.error;return{rows:r.data||[],count:r.count||0};});
+    },
     // The Home figures, worked out by the database (back_office_home).
     home:()=>sb.from("back_office_home").select("owed,unpaid,part_paid,overdue,drafts").single().then(out),
     // A page of the Invoices list (invoice_list). Order: newest first, then
@@ -223,7 +240,8 @@ async function expire(){
 async function leave(why){
   S=blank();DOC=null;ME=null;PRODUCTS=[];NOTE="";LOOKED="";HERE="#/";
   ["#items","#issued","#matches","#custPicked","#rows","#recent","#viewLines","#unsavedNote"].forEach(s=>{const el=$(s);if(el)el.innerHTML="";});
-  ["#hOwed","#hUnpaid","#hPart","#hOverdue","#hDrafts"].forEach(s=>{$(s).textContent="—";});
+  ["#hOwed","#hUnpaid","#hPart","#hOverdue","#hDrafts","#hToday","#tNet","#tRec","#tRef","#tCount"].forEach(s=>{$(s).textContent="—";});
+  ["#ledRows","#tRecBy","#tRefBy"].forEach(s=>{$(s).innerHTML="";});
   ["#guard","#discardBox","#copyBox","#rCopyBox"].forEach(s=>show(s,false));
   PAY=null;FIX=null;RDOC=null;show("#soBox",false);["#payList","#rcpt"].forEach(s=>{$(s).innerHTML="";});
   ["#paste","#cName","#cPhone"].forEach(s=>{const el=$(s);if(el)el.value="";});
@@ -614,13 +632,18 @@ function showView(doc){
     ${row("Issued by",doc.issued_by||"")}
     ${row("Pay by",doc.due_date?dateText(doc.due_date):"")}
     ${row("Delivery",dlv)}
+    ${row("Cancelled",doc.state==="cancelled"&&doc.cancelled_at?dateText(doc.cancelled_at)+(doc.cancelled_by?" by "+doc.cancelled_by:""):"")}
     ${row("Cancelled because",doc.state==="cancelled"?doc.cancel_reason||"":"")}
     <div class="dk-total"><span>Total</span><b>${money(toP(doc.total))}</b></div></div>`;
   $("#viewLines").innerHTML=(doc.lines||[]).map((l,i)=>`<div class="dk-vline"><span>${i+1}. ${esc(l.description)}<small>${fmtQ(l.quantity)} ${esc(UNIT_WORD(l.unit,l.quantity)||l.unit||"")} × ${money(toP(l.unit_price))}</small></span><b>${+l.unit_price===0&&l.kind==="product"?"Free item":money(toP(l.line_total))}</b></div>`).join("");
   $("#iMsg").textContent="";show("#copyBox",false);
-  show("#shareRow",issued);show("#shareHelp",issued);
+  // A cancelled invoice keeps its PDF, marked CANCELLED, for TCP's records
+  // (decision 4), but is never shared.
+  const cancelled=doc.state==="cancelled"&&!!doc.invoice_no;
+  show("#shareRow",issued||cancelled);show("#shareHelp",issued);show("#shareBtn",issued);
   showPayments(doc);
-  $("#shareBtn").disabled=!issued;$("#pdfBtn").disabled=!issued;
+  $("#shareBtn").disabled=!issued;$("#pdfBtn").disabled=!(issued||cancelled);
+  showCancel(doc);
 }
 function fromDraft(doc){
   const items=doc.lines.filter(l=>l.kind==="product").map(l=>{const p=PRODUCTS.find(x=>x.id===l.product_id);
@@ -657,9 +680,12 @@ function logoPng(){return new Promise((ok,fail)=>{const img=new Image();
   img.onerror=()=>fail(new Error("Could not load the logo"));img.src="/brand/tcp-logo-horizontal-on-light.svg";});}
 function dateText(iso){const[y,m,d]=String(iso||today()).slice(0,10).split("-").map(Number);
   return new Date(y,m-1,d).toLocaleDateString("en-GB",{year:"numeric",month:"long",day:"numeric"});}
-const fileName=doc=>`TCP Invoice ${doc.invoice_no}.pdf`;
+const fileName=doc=>`TCP Invoice ${doc.invoice_no}${doc.state==="cancelled"?" CANCELLED":""}.pdf`;
 async function makePdf(doc){
-  if(!doc||doc.state!=="issued")throw new Error("Only an issued invoice has a PDF");
+  // An issued invoice, or one cancelled after issue (marked CANCELLED on
+  // every page, decision 4 of Phase 2.1).
+  const cancelled=!!doc&&doc.state==="cancelled"&&!!doc.invoice_no;
+  if(!doc||(doc.state!=="issued"&&!cancelled))throw new Error("Only an issued invoice has a PDF");
   const{jsPDF,logo}=await pdfKit(),F=window.TCP_PDF_FONTS;
   const pdf=new jsPDF({unit:"mm",format:"a4",compress:true});
   [["r","normal"],["s","semibold"],["x","bold"]].forEach(([k,st])=>{pdf.addFileToVFS(`M-${k}.ttf`,F[k]);pdf.addFont(`M-${k}.ttf`,"Montserrat",st);});
@@ -744,11 +770,34 @@ async function makePdf(doc){
   sy+=1.5;const gh=3*2+pt(11)*1.45;
   pdf.setFillColor(INK);pdf.rect(sx,sy,TW,gh,"F");pdf.setFillColor(OCHRE);pdf.rect(sx,sy,1.5,gh,"F");
   font("bold",11,"#ffffff");txt("Total due",sx+1.5+2.5,sy+3);txt(money(toP(doc.total)),R-2.5,sy+3,{right:1});
+  // -- A cancelled invoice: a cancellation section under everything else,
+  //    with the WHOLE reason, however long (wrapped, never cut short). If it
+  //    doesn't fit above the footer it starts a new page.
+  if(cancelled){
+    const RED="#b3261e",clh=pt(9)*1.45;
+    font("normal",9);const why=wrap(`Reason: ${String(doc.cancel_reason||"").trim()}`,W-8);
+    const head=`CANCELLED${doc.cancelled_at?" on "+dateText(doc.cancelled_at):""}${doc.cancelled_by?" by "+doc.cancelled_by:""}`;
+    const boxH=4+pt(10)*1.45+2+why.length*clh+3;
+    let cy=Math.max(sy+gh,ny)+8;
+    if(cy+boxH>BOTTOM){pdf.addPage();cy=TOP+6;}
+    pdf.setDrawColor(RED);pdf.setLineWidth(.6);pdf.rect(L,cy,W,boxH);
+    font("bold",10,RED);txt(head,L+4,cy+4);
+    font("normal",9,INK);why.forEach((l,i)=>txt(l,L+4,cy+4+pt(10)*1.45+2+i*clh));
+  }
   // -- Every page: footer; pages 2+ also a "continued" line at the top
   const n=pdf.getNumberOfPages();
   for(let p=1;p<=n;p++){pdf.setPage(p);
     font("normal",7,MUTE);txt(`${B.website}  ·  ${B.phone}`,L,289);txt(`Page ${p} of ${n}`,R,289,{right:1});
-    if(p>1){font("bold",7.5);txt(`${B.name}  ·  ${DOC_TITLE} ${doc.invoice_no}`,L,9);font("normal",7.5,MUTE);txt("Continued",R,9,{right:1});}}
+    if(p>1){font("bold",7.5);txt(`${B.name}  ·  ${DOC_TITLE} ${doc.invoice_no}`,L,9);font("normal",7.5,MUTE);txt("Continued",R,9,{right:1});}
+    if(cancelled){
+      // Across the page, faint, so the invoice stays readable.
+      pdf.saveGraphicsState();pdf.setGState(new pdf.GState({opacity:0.14}));
+      font("bold",64,"#b3261e");pdf.text("CANCELLED",38,205,{angle:35});
+      pdf.restoreGraphicsState();
+      // Above the footer, on every page: short, so it always fits; the
+      // full reason is in the cancellation section.
+      font("bold",8,"#b3261e");
+      txt(`CANCELLED${doc.cancelled_at?" on "+dateText(doc.cancelled_at):""}. The reason is in the cancellation note.`,L,284);}}
   return pdf;
 }
 
@@ -1208,11 +1257,152 @@ async function makeReceiptPdf(rd){
   return pdf;
 }
 
+// ---- 8c. Payments tab and cancelling invoices (Phase 2.1) ---------------
+// "TCP Back Office: Phase 2.1 Design, Payments Ledger and Cancelling
+// Invoices (v1.1)", approved by ChatGPT and Daniel on 24 Nov 2026.
+// Every figure is the database's (payment_totals); the phone never adds up
+// money. The totals cover the whole period whatever the filters, search or
+// paging, so the headline never changes because of them.
+const PERIOD_WORD={today:"Today",week:"This week",month:"This month",all:"All time"};
+const KIND_OK=["all","payment","refund","correction"],METHOD_OK=["all","mobile_money","cash","bank_transfer"];
+let LED={period:"today",kind:"all",method:"all",q:"",from:null,to:null,rows:[],count:0,seq:0};
+// Search: the database keeps each record's receipt, invoice, customer name,
+// reference and phone (as +233… and as 0…) in one lower-case text. Words are
+// matched as typed. A phone number typed any way is also matched on its
+// digits without the country code or the leading 0 (so "4567" also works).
+function ledgerTerms(q){
+  const raw=String(q||"").trim(),out=[];
+  const clean=raw.toLowerCase().replace(/[^\p{L}\p{N} .\-'&\/]/gu," ").trim().replace(/\s+/g,"*");
+  if(clean)out.push(`*${clean}*`);
+  // Only something typed like a phone number (digits, spaces, +, -, brackets)
+  // is also matched as one: "TCP-INV-0002" must not find every "002".
+  if(!/^[\d\s+\-()]+$/.test(raw))return out;
+  let d=raw.replace(/\D/g,"");
+  if(/^\s*\+\s*233/.test(raw))d=d.slice(3);
+  else if(d.startsWith("00233"))d=d.slice(5);
+  else if(d.length===12&&d.startsWith("233"))d=d.slice(3);
+  else if(d.startsWith("0"))d=d.slice(1);
+  if(d.length>=3&&!out.includes(`*${d}*`))out.push(`*${d}*`);
+  return out;
+}
+const ledgerHash=(o)=>{const p=new URLSearchParams();
+  if(o.period&&o.period!=="today")p.set("period",o.period);
+  if(o.kind&&o.kind!=="all")p.set("kind",o.kind);
+  if(o.method&&o.method!=="all")p.set("method",o.method);
+  if(o.q)p.set("q",o.q);
+  const qs=p.toString();return"#/payments"+(qs?"?"+qs:"");};
+const byMethod=t=>[["mobile_money","MoMo"],["cash","Cash"],["bank_transfer","Bank"]]
+  .map(([k,w])=>`${w} ${money(toP(t[k]))}`).join(" · ");
+function periodText(t){
+  if(t.period==="all")return"All time";
+  if(t.from===t.to)return`${PERIOD_WORD[t.period]}, ${shortDate(t.from)}`;
+  return`${PERIOD_WORD[t.period]}, ${shortDate(t.from)} to ${shortDate(t.to)}`;}
+async function showLedger(params){
+  view("#ledV","payments");
+  const period=PERIOD_WORD[params.get("period")]?params.get("period"):"today";
+  const k=KIND_OK.includes(params.get("kind"))?params.get("kind"):"all";
+  const m=METHOD_OK.includes(params.get("method"))?params.get("method"):"all";
+  const q=params.get("q")||"";
+  $("#lq").value=q;
+  document.querySelectorAll("#periods button").forEach(b=>b.classList.toggle("on",b.dataset.period===period));
+  document.querySelectorAll("#kinds button").forEach(b=>b.classList.toggle("on",b.dataset.kind===k));
+  document.querySelectorAll("#methods button").forEach(b=>b.classList.toggle("on",b.dataset.method===m));
+  LED={period,kind:k,method:m,q,from:null,to:null,rows:[],count:0,seq:LED.seq+1};
+  const my=LED.seq;
+  $("#ledRows").innerHTML="";$("#ledMsg").textContent="";$("#ledInfo").textContent="";show("#ledMore",false);
+  try{
+    const t=await api.totals(period);
+    if(my!==LED.seq)return;
+    LED.from=t.from;LED.to=t.to;
+    $("#ledWhen").textContent=periodText(t);
+    $("#tNet").textContent=smoney(toP(t.net));
+    $("#tRec").textContent=money(toP(t.received.total));$("#tRecBy").textContent=byMethod(t.received);
+    const refunded=toP(t.refunded.total);
+    show("#tRefBox",refunded>0);
+    $("#tRef").textContent=money(refunded);$("#tRefBy").textContent=byMethod(t.refunded);
+    $("#tCount").textContent=t.records;
+  }catch(err){if(my===LED.seq)readFailed(err,"#ledMsg");return;}
+  await ledgerMore();
+}
+// One row: the kind is said in words, so the three kinds never depend on
+// colour. A corrected payment stays, struck through; a correction moves no
+// money ("reverses"); a refund is money out.
+function ledgerRowHTML(r){
+  const amt=toP(r.amount),how=METHOD[r.method]||r.method;
+  let label,amount,cls="";
+  if(r.kind==="payment"&&r.corrected){label=`<i class="dk-kind k-corrected">Payment · corrected</i>`;amount=`<span class="amt"><s>${money(amt)}</s></span>`;cls="k-corrected";}
+  else if(r.kind==="payment"){label=`<i class="dk-kind k-payment">Payment</i>`;amount=`<span class="amt">+${money(amt)}</span>`;}
+  else if(r.kind==="refund"){label=`<i class="dk-kind k-refund">Refund of ${esc(r.reverses_receipt_no||"")}</i>`;amount=`<span class="amt out">−${money(-amt)}</span>`;}
+  else{label=`<i class="dk-kind k-correction">Correction of ${esc(r.reverses_receipt_no||"")}</i>`;amount=`<span class="amt rev">Reverses ${money(-amt)}</span>`;}
+  return`<a class="dk-led ${cls}" href="#/receipt/${r.id}" data-rid="${r.id}">
+    <span class="dk-led-top"><b>${esc(r.receipt_no)}</b>${label}</span>
+    <span class="dk-led-bot"><small>${esc(r.invoice_no||"")} · ${esc(r.billed_to_name||"(no name)")} · ${shortDate(r.paid_on)} · ${esc(how)}${r.reference?" · ref "+esc(r.reference):""}</small>${amount}</span>
+  </a>`;}
+async function ledgerMore(){
+  const my=LED.seq,btn=$("#ledMore");busy(btn,true,"Loading…");$("#ledMsg").textContent="";
+  try{
+    const res=await api.ledger({from:LED.from,to:LED.to,kind:LED.kind,method:LED.method,terms:ledgerTerms(LED.q),offset:LED.rows.length,limit:PAGE});
+    if(my!==LED.seq)return;
+    LED.rows=LED.rows.concat(res.rows);LED.count=res.count;
+    const narrowed=LED.q||LED.kind!=="all"||LED.method!=="all";
+    $("#ledRows").innerHTML=LED.rows.length?LED.rows.map(ledgerRowHTML).join(""):`<p class="dk-help">${narrowed?"No records match.":"No payments recorded in this period."}</p>`;
+    $("#ledInfo").textContent=LED.count?`${LED.count} ${LED.count===1?"record":"records"}${narrowed?" match":""} · newest first`:"";
+    show("#ledMore",LED.rows.length<LED.count);
+  }catch(err){if(my===LED.seq)readFailed(err,"#ledMsg");}
+  finally{busy(btn,false);}
+}
+$("#ledMore").addEventListener("click",ledgerMore);
+$("#periods").addEventListener("click",e=>{const b=e.target.closest("[data-period]");if(b)go(ledgerHash({...LED,period:b.dataset.period}));});
+$("#kinds").addEventListener("click",e=>{const b=e.target.closest("[data-kind]");if(b)go(ledgerHash({...LED,kind:b.dataset.kind}));});
+$("#methods").addEventListener("click",e=>{const b=e.target.closest("[data-method]");if(b)go(ledgerHash({...LED,method:b.dataset.method}));});
+// Searching as you type: the list only (the totals are for the period).
+let ledTyping=null;
+function ledgerSearch(){const q=$("#lq").value.trim(),h=ledgerHash({...LED,q});history.replaceState(null,"",h);HERE=h;
+  LED={...LED,q,rows:[],count:0,seq:LED.seq+1};$("#ledRows").innerHTML="";ledgerMore();}
+$("#lq").addEventListener("input",()=>{clearTimeout(ledTyping);ledTyping=setTimeout(ledgerSearch,350);});
+$("#ledSearchForm").addEventListener("submit",e=>{e.preventDefault();clearTimeout(ledTyping);ledgerSearch();});
+
+// -- Cancelling an issued invoice (owner only; design "Cancelling an issued
+//    invoice"). The database refuses it while money is held, and refuses a
+//    second cancel; the screen says why before trying.
+function showCancel(doc){
+  const own=!!ME&&ME.role==="owner"&&doc.state==="issued";
+  show("#cxBox",own);if(!own)return;
+  const held=toP(doc.paid);
+  ["#cxErr","#cxMsg"].forEach(e=>{$(e).textContent="";});
+  show("#cxFields",false);show("#cxConfirm",false);$("#cxWhy").value="";
+  $("#cxHeld").textContent=held!==0
+    ?`This invoice holds ${smoney(held)} in payments. Refund or correct them first, then cancel.`
+    :"Cancelling keeps the invoice, its number and its history, marked Cancelled with your reason. It cannot be undone.";
+  show("#cxOpen",held===0);
+}
+$("#cxOpen").addEventListener("click",()=>{show("#cxOpen",false);show("#cxFields",true);$("#cxWhy").focus();});
+$("#cxBack").addEventListener("click",()=>{if(DOC)showCancel(DOC);});
+$("#cxNext").addEventListener("click",()=>{const why=$("#cxWhy").value.trim();
+  if(!why){$("#cxErr").textContent="Give a reason: it is kept with the invoice.";return;}
+  $("#cxErr").textContent="";
+  $("#cxSummary").textContent=`Cancel ${DOC.invoice_no} for ${DOC.billed_to_name||"(no name)"}, ${money(toP(DOC.total))}? It stays on record as Cancelled, with this reason: "${why}". This cannot be undone.`;
+  show("#cxFields",false);show("#cxConfirm",true);});
+$("#cxKeep").addEventListener("click",()=>{if(DOC)showCancel(DOC);});
+$("#cxYes").addEventListener("click",async()=>{
+  const btn=$("#cxYes");if(btn.disabled||!DOC)return;const id=DOC.id,why=$("#cxWhy").value.trim();
+  busy(btn,true,"Cancelling…");$("#cxMsg").textContent="";
+  try{await api.cancel(id,why);const d=await api.document(id);showView(d);$("#iMsg").textContent="Invoice cancelled.";}
+  catch(err){const k=kind(err);
+    if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+    if(k==="expired")return expire();
+    // Whatever happened, show the invoice as the database has it now: a
+    // cancel whose answer was lost shows as cancelled, not as an error.
+    try{const d=await api.document(id);if(d.state==="cancelled"){showView(d);$("#iMsg").textContent="Invoice cancelled.";return;}}catch(e){}
+    $("#cxMsg").textContent=k==="offline"?"Not cancelled: no connection. Try again when you have signal.":"Not cancelled: "+String(err&&err.message||err);}
+  finally{busy(btn,false);}
+});
+
 // ---- 9. Screens and the address -----------------------------------------------
 // One page, four screens, picked by the part of the address after "#/":
 //   #/  Home · #/invoices  the list · #/invoice/<id>  one invoice · #/new
 // Anything else after "#" (a sign-in link's details) is not a screen.
-const VIEWS=["#homeV","#listV","#invV"];
+const VIEWS=["#homeV","#listV","#ledV","#invV"];
 let HERE="#/",SKIP=false;   // HERE: the screen shown now (for "Go back")
 const canEdit=()=>!!ME&&(ME.role==="owner"||ME.role==="sales");
 function view(name,tab){VIEWS.forEach(v=>show(v,v===name));
@@ -1224,6 +1414,7 @@ function parseRoute(){
   if(!h.startsWith("#/"))return{name:"home",params:new URLSearchParams()};
   const[path,qs]=h.slice(2).split("?"),parts=path.split("/").filter(Boolean),params=new URLSearchParams(qs||"");
   if(parts[0]==="invoices")return{name:"invoices",params};
+  if(parts[0]==="payments")return{name:"payments",params};
   if(parts[0]==="invoice"&&/^\d+$/.test(parts[1]||""))return{name:"invoice",id:+parts[1],params};
   if(parts[0]==="new")return{name:"new",params};
   if(parts[0]==="receipt"&&/^\d+$/.test(parts[1]||""))return{name:"receipt",id:+parts[1],params};
@@ -1247,6 +1438,7 @@ async function route(){
   HERE=location.hash||"#/";
   if(r.name==="home")return showHome();
   if(r.name==="invoices")return showList(r.params);
+  if(r.name==="payments")return showLedger(r.params);
   if(r.name==="receipt"){view("#invV","invoices");return showReceipt(r.id);}
   view("#invV",r.name==="new"?"new":"invoices");
   if(r.name==="new"){
@@ -1310,10 +1502,12 @@ async function showHome(){
   view("#homeV","home");$("#homeMsg").textContent="";
   $("#unsavedNote").innerHTML=unsaved()?`<div class="dk-card dk-alert"><b>An invoice is in progress and not saved.</b> <a href="${S.invoiceId?"#/invoice/"+S.invoiceId:"#/new"}">Continue it</a></div>`:"";
   try{
-    const[h,recent]=await Promise.all([api.home(),api.list({status:"all",terms:[],offset:0,limit:5})]);
+    const[h,recent,today]=await Promise.all([api.home(),api.list({status:"all",terms:[],offset:0,limit:5}),api.totals("today")]);
     // Removed access reads as zeros and an empty list, not as an error.
     if(!recent.rows.length)await stillStaff();
     $("#hOwed").textContent=money(toP(h.owed));
+    // Received today (decision 1): the same figure as Payments → Today.
+    $("#hToday").textContent=smoney(toP(today.net));
     $("#hUnpaid").textContent=h.unpaid;$("#hPart").textContent=h.part_paid;
     $("#hOverdue").textContent=h.overdue;$("#hDrafts").textContent=h.drafts;
     $("#recent").innerHTML=recent.rows.length?recent.rows.map(rowHTML).join(""):`<p class="dk-help">No invoices yet.</p>`;
@@ -1402,5 +1596,5 @@ else{
 }
 
 // For the tests (and nothing else): the desk's own functions.
-window.TCPDesk={parseEstimate,num,totals,problems,waNumber,waText,makePdf,makeReceiptPdf,waReceiptText,linesForDb,searchTerms,state:()=>S,doc:()=>DOC,receipt:()=>RDOC,pay:()=>PAY,fix:()=>FIX,op:()=>pendingOp()};
+window.TCPDesk={parseEstimate,num,totals,problems,waNumber,waText,makePdf,makeReceiptPdf,waReceiptText,linesForDb,searchTerms,ledgerTerms,state:()=>S,doc:()=>DOC,receipt:()=>RDOC,pay:()=>PAY,fix:()=>FIX,op:()=>pendingOp()};
 })();

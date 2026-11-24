@@ -121,6 +121,29 @@ phone so it is never recorded twice):
   P17  a record found by request id that is a DIFFERENT operation (other
        invoice, kind, payment or amount) is never taken as success, and
        nothing new can be recorded
+
+Phase 2.1, the Payments tab and cancelling invoices ("TCP Back Office:
+Phase 2.1 Design, Payments Ledger and Cancelling Invoices (v1.1)"):
+  L01  Today: received (corrected payments left out), refunded, net,
+       records, the method split; each kind said in words; Home's Received
+       today is the same figure
+  L02  All time: net = every stored amount = every invoice's paid
+  L03  kind and method filters narrow the list, never the totals; the
+       address keeps the view
+  L04  more than 30 records: the totals count them all; Show more adds rows
+       and leaves the totals as they were
+  L05  search: receipt, invoice, name, part of a reference, and a phone
+       typed as 0…, +233…, spaced or its last digits
+  L06  roles: owner, sales and finance see Payments; only the owner sees
+       Cancel invoice
+  L07  cancelling an unpaid invoice: reason, confirm, the Cancelled view
+       (when, by whom, why), no Share or Record payment, a PDF marked
+       CANCELLED, and it leaves Owed
+  L08  an invoice holding money can't be cancelled (and the "database"
+       refuses it); after a full refund it can, keeping its history
+  L09  the Payments tab and the Cancel box fit 360 px and 390 px phones
+  L10  a long cancellation reason appears in full in the PDF, never over
+       the footer; CANCELLED is on every page of a long invoice
 """
 import base64
 import io
@@ -281,6 +304,7 @@ STANDIN = r"""
       if (!inv) throw new Error("No such invoice"); const c = db.customers.find(x => x.id === inv.customer_id);
       const issued = !!inv.invoice_no, t = total(id);
       return {id: inv.id, invoice_no: inv.invoice_no, state: inv.state, status: status(inv), cancel_reason: inv.cancel_reason || null, created_at: inv.created_at,
+        cancelled_at: inv.cancelled_at || null, cancelled_by: inv.cancelled_by || null,
         issued_at: inv.issued_at || null, issued_by: inv.issued_by || null, due_date: inv.due_date, notes: inv.notes,
         customer_id: inv.customer_id, customer_code: c.code,
         billed_to_name: issued ? inv.billed_to_name : c.name, billed_to_phone: issued ? inv.billed_to_phone : c.phone,
@@ -338,8 +362,46 @@ STANDIN = r"""
     cancel: (id, reason) => net("cancel", () => { staffOnly("owner");
       if (!reason || !reason.trim()) throw new Error("A reason is needed to cancel an invoice");
       const inv = db.invoices.find(i => i.id === id);
-      if (!inv || inv.state === "cancelled") throw new Error("Only a draft or issued invoice can be cancelled");
-      Object.assign(inv, {state: "cancelled", cancel_reason: reason.trim()}); }),
+      if (!inv || inv.state === "cancelled") throw dbErr("Only a draft or issued invoice can be cancelled");
+      const held = paidOf(id);
+      if (held !== 0) throw dbErr(`This invoice still holds GH₵ ${held.toFixed(2)} in payments; correct or refund them first`);
+      Object.assign(inv, {state: "cancelled", cancel_reason: reason.trim(), cancelled_at: stamp(), cancelled_by: me().full_name}); }),
+    // Phase 2.1: payment_totals, with the database's rules (corrected
+    // payments count nothing; refunds are money out; "today" is the
+    // stand-in's own date, as the database's Ghana date).
+    totals: period => net("totals", () => { staffOnly("owner", "sales", "finance");
+      const d = new Date(today + "T00:00:00"), iso = x => x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0");
+      let from, to;
+      if (period === "today") { from = to = today; }
+      else if (period === "week") { const w = new Date(d); w.setDate(d.getDate() - ((d.getDay() + 6) % 7)); from = iso(w); to = today; }
+      else if (period === "month") { from = today.slice(0, 8) + "01"; to = today; }
+      else if (period === "all") { from = to = null; }
+      else throw dbErr("Unknown period: " + period);
+      const rows = db.payments.filter(p => (!from || p.paid_on >= from) && (!to || p.paid_on <= to));
+      const corrected = p => p.kind === "payment" && db.payments.some(c => c.reverses_payment_id === p.id && c.kind === "correction");
+      const sum = (f, m) => Math.round(rows.filter(p => f(p) && p.method === m).reduce((a, p) => a + p.amount * 100, 0)) / 100;
+      const split = f => { const o = {mobile_money: sum(f, "mobile_money"), cash: sum(f, "cash"), bank_transfer: sum(f, "bank_transfer")};
+        o.total = Math.round((o.mobile_money + o.cash + o.bank_transfer) * 100) / 100; return o; };
+      const received = split(p => p.kind === "payment" && !corrected(p));
+      const refunded = split(p => p.kind === "refund"); ["mobile_money", "cash", "bank_transfer", "total"].forEach(k => refunded[k] = -refunded[k] || 0);
+      return {period, from, to, received, refunded, net: Math.round((received.total - refunded.total) * 100) / 100, records: rows.length}; }),
+    // payment_ledger (row rules: nothing for non-staff), newest first, paged.
+    ledger: ({from, to, kind: k, method: m, terms, offset, limit}) => net("ledger", () => {
+      let rows = rlsRead(db.payments.map(p => { const inv = db.invoices.find(i => i.id === p.invoice_id), o = db.payments.find(x => x.id === p.reverses_payment_id);
+        const phone = inv.billed_to_phone || "";
+        return {id: p.id, receipt_no: p.receipt_no, kind: p.kind, amount: p.amount, method: p.method, reference: p.reference, paid_on: p.paid_on,
+          invoice_id: p.invoice_id, invoice_no: inv.invoice_no, billed_to_name: inv.billed_to_name, billed_to_phone: phone || null,
+          reverses_receipt_no: o ? o.receipt_no : null,
+          corrected: p.kind === "payment" && db.payments.some(c => c.reverses_payment_id === p.id && c.kind === "correction"),
+          search_text: [p.receipt_no, inv.invoice_no, inv.billed_to_name, p.reference, o && o.receipt_no, phone,
+            phone.startsWith("+233") ? "0" + phone.slice(4) : null].filter(Boolean).join(" ").toLowerCase()}; }));
+      if (from) rows = rows.filter(r => r.paid_on >= from);
+      if (to) rows = rows.filter(r => r.paid_on <= to);
+      if (k && k !== "all") rows = rows.filter(r => r.kind === k);
+      if (m && m !== "all") rows = rows.filter(r => r.method === m);
+      if (terms && terms.length) rows = rows.filter(r => terms.some(t => ilike(r.search_text, t)));
+      rows.sort((a, b) => a.paid_on < b.paid_on ? 1 : a.paid_on > b.paid_on ? -1 : b.id - a.id);
+      return {rows: rows.slice(offset, offset + limit).map(({search_text, ...r}) => r), count: rows.length}; }),
     // back_office_home (runs with the caller's rights: zeros for non-staff).
     home: () => net("home", () => { const rows = me() ? db.invoices.map(listRow) : [], n = s => rows.filter(r => r.status === s).length;
       return {owed: rows.filter(r => ["unpaid", "part_paid", "overdue"].includes(r.status)).reduce((a, r) => a + r.balance, 0),
@@ -1845,4 +1907,248 @@ def test_p17_request_id_match_alone_is_not_success(browser, change):
     assert not page.locator("#payBtn").is_visible() and page.locator("[data-fix]").count() == 0, "nothing new can be recorded"
     assert page.evaluate("TCPDesk.op()") is not None
     assert page.evaluate("__db.payments.length") == 3
+    assert not errors
+
+
+
+# ---- Phase 2.1: the Payments tab and cancelling invoices ---------------------
+# MIX: invoices of GH₵750: 2 = TCP-INV-0001 Ama (+233241234567), unpaid;
+# 3 = TCP-INV-0002 Yaw, GH₵300 paid (TCP-RCT-0001, dated 22 Nov 2026);
+# 4 = Efua, paid (TCP-RCT-0002); 5 = Kwame, unpaid and overdue.
+def _api(page, js):
+    return page.evaluate("async () => { const today = new Date().toLocaleDateString('en-CA'); return " + js + "; }")
+
+
+def _ledger(page, hash_="#/payments"):
+    page.evaluate("h => location.hash = h", hash_)
+    page.wait_for_selector("#ledV:not([hidden])")
+    page.wait_for_function("document.querySelector('#tNet').textContent !== '—' && !document.querySelector('#ledMore').disabled")
+
+
+def _today_records(page):
+    """Today: 200 MoMo on Ama (then corrected), 300 cash on Yaw (50 refunded)."""
+    _api(page, """(async () => {
+      const a = await TCPDeskApi.recordPayment({p_invoice_id: 2, p_amount: 200, p_method: 'mobile_money', p_reference: 'MP5551234',
+        p_paid_on: today, p_request_id: crypto.randomUUID()});
+      const b = await TCPDeskApi.recordPayment({p_invoice_id: 3, p_amount: 300, p_method: 'cash', p_paid_on: today, p_request_id: crypto.randomUUID()});
+      await TCPDeskApi.correctPayment({p_payment_id: a.id, p_reason: 'Never arrived', p_request_id: crypto.randomUUID()});
+      await TCPDeskApi.refundPayment({p_payment_id: b.id, p_amount: 50, p_method: 'cash', p_reason: 'One bag back', p_request_id: crypto.randomUUID()});
+    })()""")
+
+
+def test_l01_today_totals_kinds_and_home(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/")
+    page.wait_for_function("document.querySelector('#hToday').textContent !== '—'")
+    assert page.text_content("#hToday") == "GH₵0.00", "nothing received today yet"
+    _today_records(page)
+    _ledger(page)
+    assert "Today" in page.text_content("#ledWhen")
+    assert page.text_content("#tNet") == "GH₵250.00"
+    assert page.text_content("#tRec") == "GH₵300.00"
+    assert page.text_content("#tRecBy") == "MoMo GH₵0.00 · Cash GH₵300.00 · Bank GH₵0.00", "the corrected MoMo payment counts nothing"
+    assert page.text_content("#tRef") == "GH₵50.00" and page.locator("#tRefBox").is_visible()
+    assert page.text_content("#tCount") == "4"
+    assert "Recorded by TCP staff" in page.text_content("#ledTotals")
+    rows = {r.locator(".dk-led-top b").text_content(): (r.locator(".dk-kind").text_content(), r.locator(".amt").text_content())
+            for r in page.locator("#ledRows .dk-led").all()}
+    assert rows == {"TCP-RCT-0006": ("Refund of TCP-RCT-0004", "−GH₵50.00"),
+                    "TCP-RCT-0005": ("Correction of TCP-RCT-0003", "Reverses GH₵200.00"),
+                    "TCP-RCT-0004": ("Payment", "+GH₵300.00"),
+                    "TCP-RCT-0003": ("Payment · corrected", "GH₵200.00")}, rows
+    assert page.locator(".dk-led.k-corrected .amt s").count() == 1, "the corrected payment is struck through, and still listed"
+    # Rows open their receipts.
+    page.click('#ledRows [data-rid="6"]')
+    _receipt_shown(page, "TCP-RCT-0006")
+    # Home's Received today is the same figure.
+    page.goto(BO + "#/")
+    page.wait_for_function("document.querySelector('#hToday').textContent !== '—'")
+    assert page.text_content("#hToday") == "GH₵250.00"
+    page.click("#hTodayLink")
+    page.wait_for_selector("#ledV:not([hidden])")
+    assert not errors
+
+
+def test_l02_all_time_three_sums_agree(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/")
+    _today_records(page)
+    _ledger(page, "#/payments?period=all")
+    assert page.text_content("#ledWhen") == "All time"
+    ledger_sum = page.evaluate("Math.round(__db.payments.reduce((a, p) => a + p.amount * 100, 0)) / 100")
+    paid_sum = page.evaluate("[1,2,3,4,5,6].map(i => TCPDeskApi.__doc(i).paid).reduce((a, b) => a + b, 0)")
+    assert ledger_sum == paid_sum == 1300, (ledger_sum, paid_sum)   # 300 + 750 seeded, + 200 - 200 + 300 - 50
+    assert page.text_content("#tNet") == "GH₵1,300.00"
+    assert page.text_content("#tRec") == "GH₵1,350.00" and page.text_content("#tRef") == "GH₵50.00"
+    assert page.text_content("#tCount") == "6"
+    assert not errors
+
+
+def test_l03_filters_narrow_the_list_not_the_totals(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/")
+    _today_records(page)
+    _ledger(page)
+    before = [page.text_content(x) for x in ("#tNet", "#tRec", "#tRef", "#tCount")]
+    page.click('#kinds [data-kind="refund"]')
+    page.wait_for_function("location.hash.includes('kind=refund')")
+    _ledger(page, page.evaluate("location.hash"))
+    assert page.locator("#ledRows .dk-led").count() == 1 and "1 record match" in page.text_content("#ledInfo")
+    assert [page.text_content(x) for x in ("#tNet", "#tRec", "#tRef", "#tCount")] == before
+    page.click('#kinds [data-kind="all"]'); page.click('#methods [data-method="mobile_money"]')
+    page.wait_for_function("location.hash.includes('method=mobile_money') && !location.hash.includes('kind=')")
+    _ledger(page, page.evaluate("location.hash"))
+    assert page.locator("#ledRows .dk-led").count() == 2, "the MoMo payment and its correction"
+    assert [page.text_content(x) for x in ("#tNet", "#tRec", "#tRef", "#tCount")] == before
+    # Back returns to the previous view.
+    page.go_back()
+    page.wait_for_function("!location.hash.includes('method=')")
+    assert not errors
+
+
+def test_l04_paging_never_changes_the_totals(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/")
+    _api(page, """(async () => { for (let i = 0; i < 35; i++) await TCPDeskApi.recordPayment({p_invoice_id: 2, p_amount: 1,
+        p_method: 'cash', p_paid_on: today, p_request_id: crypto.randomUUID()}); })()""")
+    _ledger(page)
+    assert page.text_content("#tCount") == "35" and page.text_content("#tNet") == "GH₵35.00"
+    assert page.locator("#ledRows .dk-led").count() == 30 and page.locator("#ledMore").is_visible()
+    page.click("#ledMore")
+    page.wait_for_function("document.querySelectorAll('#ledRows .dk-led').length === 35")
+    assert not page.locator("#ledMore").is_visible()
+    assert page.text_content("#tCount") == "35" and page.text_content("#tNet") == "GH₵35.00"
+    ids = page.evaluate("[...document.querySelectorAll('#ledRows .dk-led')].map(a => +a.dataset.rid)")
+    assert len(set(ids)) == 35 and ids == sorted(ids, reverse=True), "no record skipped or repeated, newest first"
+    assert not errors
+
+
+@pytest.mark.parametrize("typed,want", [
+    ("0241234567", {"TCP-RCT-0003", "TCP-RCT-0005"}),        # Ama's number, the way staff type it
+    ("024 123 4567", {"TCP-RCT-0003", "TCP-RCT-0005"}),
+    ("+233 24 123 4567", {"TCP-RCT-0003", "TCP-RCT-0005"}),
+    ("4567", {"TCP-RCT-0003", "TCP-RCT-0005"}),              # its last digits
+    ("mp555", {"TCP-RCT-0003", "TCP-RCT-0005"}),              # part of the MoMo reference (its correction carries it too)
+    ("RCT-0006", {"TCP-RCT-0006"}),
+    ("TCP-INV-0002", {"TCP-RCT-0001", "TCP-RCT-0004", "TCP-RCT-0006"}),
+    ("yaw", {"TCP-RCT-0001", "TCP-RCT-0004", "TCP-RCT-0006"}),
+])
+def test_l05_search_on_stored_formats(browser, typed, want):
+    page, errors = _bo(browser, seed=MIX, route="#/")
+    _today_records(page)
+    _ledger(page, "#/payments?period=all")
+    page.fill("#lq", typed)
+    page.wait_for_function("n => document.querySelectorAll('#ledRows .dk-led').length === n && location.hash.includes('q=')", arg=len(want))
+    got = {b.text_content() for b in page.locator("#ledRows .dk-led-top b").all()}
+    assert got == want, (typed, got)
+    assert page.text_content("#tCount") == "6", "search narrows the list only"
+    assert not errors
+
+
+@pytest.mark.parametrize("who,owner", [(OWNER, True), (SALES, False), (FIN, False)])
+def test_l06_roles(browser, who, owner):
+    page, errors = _bo(browser, seed=MIX, route="#/payments", staff=TEAM, users=[OWNER, FIN, SALES], who=who)
+    page.wait_for_selector("#ledV:not([hidden])")
+    page.wait_for_function("document.querySelector('#tNet').textContent !== '—'")
+    assert page.locator('#tabs [data-tab="payments"]').is_visible()
+    page.evaluate("location.hash = '#/invoice/2'")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert page.locator("#cxBox").is_visible() == owner
+    if not owner:
+        err = page.evaluate("() => TCPDeskApi.cancel(2, 'x').then(() => 'done', e => e.message)")
+        assert "role cannot do this" in err
+    assert not errors
+
+
+def test_l07_cancel_an_unpaid_invoice(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/")
+    page.wait_for_function("document.querySelector('#hOwed').textContent !== '—'")
+    owed = page.text_content("#hOwed")
+    page.evaluate("location.hash = '#/invoice/2'")
+    page.wait_for_selector("#cxBox:not([hidden])")
+    assert "cannot be undone" in page.text_content("#cxHeld")
+    page.click("#cxOpen"); page.click("#cxNext")
+    assert "Give a reason" in page.text_content("#cxErr")
+    page.fill("#cxWhy", "Customer changed their mind"); page.click("#cxNext")
+    page.wait_for_selector("#cxConfirm:not([hidden])")
+    summary = page.text_content("#cxSummary")
+    assert "Cancel TCP-INV-0001 for Ama Unpaid, GH₵750.00?" in summary and "cannot be undone" in summary
+    assert page.evaluate("TCPDeskApi.__doc(2).state") == "issued", "nothing happens before the confirm"
+    page.click("#cxKeep"); assert not page.locator("#cxConfirm").is_visible()
+    page.click("#cxOpen"); page.fill("#cxWhy", "Customer changed their mind"); page.click("#cxNext"); page.click("#cxYes")
+    page.wait_for_function("document.querySelector('#viewTitle').textContent === 'Cancelled invoice'")
+    sumtext = page.text_content("#issued")
+    assert "Cancelled because" in sumtext and "Customer changed their mind" in sumtext and "by Test Owner" in sumtext
+    assert not page.locator("#shareBtn").is_visible() and page.locator("#pdfBtn").is_enabled()
+    assert not page.locator("#payBtn").is_visible() and not page.locator("#cxBox").is_visible()
+    # The PDF, marked CANCELLED, named so.
+    t = _pdf(page)[0][0]
+    assert "CANCELLED on" in t and "Customer changed their mind" in t and "TCP-INV-0001" in t
+    with page.expect_download() as d:
+        page.click("#pdfBtn")
+    assert d.value.suggested_filename == "TCP Invoice TCP-INV-0001 CANCELLED.pdf"
+    page.goto(BO + "#/")
+    page.wait_for_function("o => document.querySelector('#hOwed').textContent !== '—' && document.querySelector('#hOwed').textContent !== o", arg=owed)
+    assert page.text_content("#hOwed") == "GH₵1,200.00", "only Yaw's 450 and Kwame's 750 are owed now"
+    assert not errors
+
+
+def test_l08_money_held_then_refunded_in_full(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/3")
+    page.wait_for_selector("#cxBox:not([hidden])")
+    assert "holds GH₵300.00 in payments" in page.text_content("#cxHeld")
+    assert not page.locator("#cxOpen").is_visible()
+    err = page.evaluate("() => TCPDeskApi.cancel(3, 'x').then(() => 'done', e => e.message)")
+    assert "still holds GH₵ 300.00" in err
+    _api(page, "TCPDeskApi.refundPayment({p_payment_id: 1, p_amount: 300, p_method: 'cash', p_reason: 'Order called off', p_request_id: crypto.randomUUID()})")
+    page.reload(); page.wait_for_selector("#cxOpen:not([hidden])")
+    page.click("#cxOpen"); page.fill("#cxWhy", "Order called off"); page.click("#cxNext"); page.click("#cxYes")
+    page.wait_for_function("document.querySelector('#viewTitle').textContent === 'Cancelled invoice'")
+    hist = page.text_content("#payList")
+    assert "TCP-RCT-0001" in hist and "Refund of TCP-RCT-0001" in hist, "the history stays: payment, then refund"
+    assert not errors
+
+
+@pytest.mark.parametrize("width", [360, 390])
+def test_l09_payments_and_cancel_fit_a_phone(browser, width):
+    page, errors = _bo(browser, width=width, seed=MIX, route="#/")
+    _today_records(page)
+    fits = lambda: page.evaluate("document.documentElement.scrollWidth") <= width
+    _ledger(page); assert fits()
+    _ledger(page, "#/payments?period=all"); assert fits()
+    page.evaluate("location.hash = '#/invoice/5'"); page.wait_for_selector("#cxBox:not([hidden])")
+    page.click("#cxOpen"); page.fill("#cxWhy", "x"); page.click("#cxNext"); page.wait_for_selector("#cxConfirm:not([hidden])"); assert fits()
+    assert not errors
+
+
+
+LONG_WHY = ("Customer cancelled the order after delivery arrangements changed and the materials were no longer required; "
+            "the site manager confirmed by phone on Monday that the foundation work has been postponed until the new year, "
+            "so nothing will be delivered and nothing is owed on this invoice.")
+
+
+@pytest.mark.parametrize("lines", [1, 40])
+def test_l10_long_cancellation_reason_in_full(browser, lines):
+    page, errors = _bo(browser, seed=[{"name": "Ama Unpaid", "phone": "+233241234567", "state": "issued", "due": FUTURE,
+                                       "lines": [{"qty": 1, "price": 10}] * lines}], route="#/invoice/1")
+    page.wait_for_selector("#cxBox:not([hidden])")
+    page.click("#cxOpen"); page.fill("#cxWhy", LONG_WHY); page.click("#cxNext"); page.click("#cxYes")
+    page.wait_for_function("document.querySelector('#viewTitle').textContent === 'Cancelled invoice'")
+    texts, _ = _pdf(page)
+    whole = " ".join(" ".join(t.split()) for t in texts)
+    assert ("Reason: " + LONG_WHY) in whole, "the whole reason, word for word"
+    assert all("CANCELLED" in t for t in texts), "every page is marked"
+    # Nothing is drawn into the footer band (below 282 mm = 799.4 pt from the
+    # top) but the footer itself and the short CANCELLED line: word boxes
+    # from pdfminer (pure Python, so it runs the same on GitHub's runners).
+    from pdfminer.high_level import extract_pages
+    from pdfminer.layout import LTTextContainer, LTTextLine
+    b64 = page.evaluate("async () => (await TCPDesk.makePdf(TCPDesk.doc())).output('datauristring').split(',')[1]")
+    footer_words = set("CANCELLED on November 2026. The reason is in the cancellation note. thecementpeople.com · 055 846 3468 Page of".split())
+    low = []
+    for pg in extract_pages(io.BytesIO(base64.b64decode(b64))):
+        for box in pg:
+            if not isinstance(box, LTTextContainer):
+                continue
+            for line in box:
+                if isinstance(line, LTTextLine) and pg.height - line.y0 > 799.4:   # its bottom edge, from the top
+                    low += [w for w in line.get_text().split() if w not in footer_words and not w.isdigit()]
+    assert not low, low
+    assert len(texts) == (1 if lines == 1 else len(texts)) and (lines == 1 or len(texts) >= 2)
     assert not errors
