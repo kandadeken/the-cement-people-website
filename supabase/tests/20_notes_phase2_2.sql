@@ -91,7 +91,7 @@ select tcp_test.fails(format($$select public.record_payment(%s, 10, 'cash', null
 select tcp_test.fails(format($$select public.record_payment(%s, 10, 'cash', null, current_date, null, null, %L)$$, :inv1, repeat('x', 501)),
                       'payments_internal_note_length');
 select tcp_test.fails(format($$select public.save_draft_invoice(%s, %s, null, null, null, null, %L,
-  '[{"kind":"product","product_id":3,"quantity":10}]'::jsonb)$$, :inv3, :ama, repeat('x', 601)), 'invoices_notes_length');
+  '[{"kind":"product","product_id":3,"quantity":10}]'::jsonb)$$, :inv3, :ama, repeat('x', 601)), 'too long: at most 600 characters');
 reset role;
 select tcp_test.fails(format($$insert into public.payments (receipt_no, invoice_id, kind, amount, method, reverses_payment_id, reason, customer_note)
                               values ('X-1', %s, 'correction', -50, 'cash', %s, 'x', 'hello')$$, :inv1, :p3),
@@ -283,4 +283,23 @@ select tcp_test.ok((select inv_doc from snap) = pg_temp.customer_view(public.inv
                    'the invoice document is unchanged by internal notes and their corrections');
 select tcp_test.ok((select rct_doc from snap) = public.receipt_document(:p1) - 'internal_note_chain',
                    'the receipt document is unchanged by internal notes and their corrections');
+reset role;
+
+-- ------------------------------------------------ I. the notes column's own lines
+-- (ChatGPT's review of PR #42, check 1.) Search leaves out exactly the lines
+-- the Back Office writes for delivery and the estimate reference, and keeps
+-- every line of the note to the customer, even one that starts "Estimate".
+set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+set role authenticated;
+select public.save_draft_invoice(null, :ama, null, null, null, null,
+  E'Customer pickup\nEstimate TCP-261120-MEBLV2\nEstimate valid for 7 days, pelican',
+  '[{"kind":"product","product_id":3,"quantity":10}]'::jsonb) as inv_est \gset
+select tcp_test.ok((select e->>'body' from jsonb_array_elements(public.search_notes('pelican')->'rows') e
+                     where e->>'kind' = 'invoice_customer_note') = 'Estimate valid for 7 days, pelican',
+                   'search keeps a customer line starting "Estimate", and leaves out the delivery and reference lines');
+select tcp_test.ok((select count(*) from jsonb_array_elements(public.search_notes('MEBLV2')->'rows') e
+                     where (e->>'invoice_id')::bigint = :inv_est) = 0
+                   and (select count(*) from jsonb_array_elements(public.search_notes('pickup')->'rows') e
+                     where (e->>'invoice_id')::bigint = :inv_est) = 0,
+                   'the estimate reference and Customer pickup lines are never found as notes');
 reset role;

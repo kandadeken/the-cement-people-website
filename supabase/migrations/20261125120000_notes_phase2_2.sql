@@ -44,10 +44,28 @@ create extension if not exists pg_trgm with schema extensions;
 -- 2. Notes to the customer and internal notes on payments; lengths.
 -- -----------------------------------------------------------------------------
 -- The invoice's notes column: the note box allows 500 characters, plus the
--- delivery and estimate lines. Checked for new and changed rows only, so
--- no existing invoice is touched.
-alter table public.invoices
-  add constraint invoices_notes_length check (notes is null or char_length(notes) <= 600) not valid;
+-- delivery and estimate lines, so at most 600 in all. Checked by a trigger
+-- only when the notes themselves are written or changed. (A CHECK
+-- constraint, even NOT VALID, is checked again whenever ANY column of a row
+-- changes, so issuing or cancelling an older invoice with a longer note
+-- would have been refused. Existing invoices are never blocked this way.)
+create function tcp_private.invoices_notes_length()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.notes is not null and char_length(new.notes) > 600
+     and (tg_op = 'INSERT' or new.notes is distinct from old.notes) then
+    raise exception 'The note to the customer is too long: at most 600 characters, including the delivery and estimate lines'
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+create trigger invoices_notes_length
+  before insert or update of notes on public.invoices
+  for each row execute function tcp_private.invoices_notes_length();
 
 alter table public.payments
   add column customer_note text,
@@ -811,7 +829,11 @@ begin
         from public.invoices i
         cross join lateral (select array_to_string(array(
                  select l from unnest(string_to_array(i.notes, E'\n')) l
-                  where l not in ('Customer pickup', 'Free delivery') and l !~ '^Estimate '), E'\n') as body) x
+                  where l not in ('Customer pickup', 'Free delivery')
+                    -- only the exact estimate line the Back Office writes
+                    -- ("Estimate TCP-261120-MEBLV2"), so a customer's line
+                    -- such as "Estimate valid for 7 days" is still found
+                    and l !~ '^Estimate TCP-[0-9]{6}-[A-Z0-9]{6}$'), E'\n') as body) x
        where i.notes is not null and x.body <> '' %13$s %14$s %15$s %16$s
     ),
     -- The page first (the count over every match comes with it), then the

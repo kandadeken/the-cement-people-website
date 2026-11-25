@@ -371,6 +371,11 @@ function combineIdentical(){
   return said;}
 function totals(s){const mat=s.items.some(l=>!lineOk(l))?NaN:s.items.reduce((a,l)=>a+lineTotal(l),0);
   const fee=s.dl==="fee"?(feeIssue(s)?NaN:toP(typedNum(s.fee))):0;return{mat,fee,total:mat+fee};}
+// The estimate line the Back Office writes into the invoice's notes column
+// ("Estimate TCP-261120-MEBLV2", the estimator's only reference format).
+// Matched exactly, so a note to the customer such as "Estimate valid for 7
+// days" stays part of the note.
+const EST_LINE=/^Estimate TCP-\d{6}-[A-Z0-9]{6}$/;
 const DL_TEXT={pending:"Not agreed yet",free:"Free delivery",fee:"Delivery fee",pickup:"Customer pickup"};
 // What is missing before the invoice can be saved or issued. The database
 // checks everything again; this only saves a wasted trip.
@@ -680,12 +685,12 @@ function fromDraft(doc){
   const fee=doc.lines.find(l=>l.kind==="delivery");
   const notes=String(doc.notes||"").split("\n");
   const dl=fee?"fee":notes.includes("Customer pickup")?"pickup":notes.includes("Free delivery")?"free":"pending";
-  const ref=(notes.find(n=>/^Estimate /.test(n))||"").replace(/^Estimate /,"")||null;
+  const ref=(notes.find(n=>EST_LINE.test(n))||"").slice(9)||null;
   return{...blank(),invoiceId:doc.id,customerId:doc.customer_id,customerCode:doc.customer_code,ref,
     name:doc.billed_to_name||"",phone:doc.billed_to_phone||"",site:doc.deliver_to_location||"",
     contact:doc.deliver_to_contact||"",contactPhone:doc.deliver_to_phone||"",items,dl,
     fee:fee?String(fee.unit_price):"",due:doc.due_date||"",
-    note:notes.filter(n=>n&&n!=="Customer pickup"&&n!=="Free delivery"&&!/^Estimate /.test(n)).join("\n"),dirty:false};
+    note:notes.filter(n=>n&&n!=="Customer pickup"&&n!=="Free delivery"&&!EST_LINE.test(n)).join("\n"),dirty:false};
 }
 
 // ---- 7. The PDF --------------------------------------------------------------
@@ -726,7 +731,7 @@ async function makePdf(doc){
     pdf.text(str,o.right?x-w:x,y,{baseline:"top",charSpace:sp});return w;};
   const wrap=(str,w)=>pdf.splitTextToSize(str,w);
   const notes=String(doc.notes||"").split("\n").filter(Boolean);
-  const ref=(notes.find(n=>/^Estimate /.test(n))||"").replace(/^Estimate /,"");
+  const ref=(notes.find(n=>EST_LINE.test(n))||"").slice(9);
   const pickup=notes.includes("Customer pickup"),free=notes.includes("Free delivery");
   const products=doc.lines.filter(l=>l.kind==="product"),delivery=doc.lines.filter(l=>l.kind==="delivery"),discounts=doc.lines.filter(l=>l.kind==="discount");
   const sum=ls=>ls.reduce((a,l)=>a+toP(l.line_total),0);
@@ -778,7 +783,7 @@ async function makePdf(doc){
   });
   // -- Bottom: notes left, totals right (kept together on one page)
   const TW=98,LW=W-TW-8,tlh=pt(7.5)*1.4;
-  const extra=notes.filter(n=>n!=="Customer pickup"&&n!=="Free delivery"&&!/^Estimate /.test(n)).join("\n");
+  const extra=notes.filter(n=>n!=="Customer pickup"&&n!=="Free delivery"&&!EST_LINE.test(n)).join("\n");
   const nb=[];
   if(extra)nb.push(["Note",extra]);
   nb.push(["Questions",`WhatsApp or call ${B.phone} and quote invoice ${doc.invoice_no}.`]);

@@ -496,7 +496,7 @@ STANDIN = r"""
           body: p.internal_note, author: p.recorded_by_id, at: p.recorded_at, corrected: db.notes.some(c => c.corrects_payment_id === p.id)});
         if (p.customer_note) hits.push({kind: "receipt_customer_note", category: null, payment_id: p.id, invoice_id: p.invoice_id, body: p.customer_note,
           author: p.recorded_by_id, at: p.recorded_at, corrected: false}); });
-      db.invoices.forEach(i => { const t = String(i.notes || "").split("\n").filter(l => l && l !== "Customer pickup" && l !== "Free delivery" && !/^Estimate /.test(l)).join("\n");
+      db.invoices.forEach(i => { const t = String(i.notes || "").split("\n").filter(l => l && l !== "Customer pickup" && l !== "Free delivery" && !/^Estimate TCP-\d{6}-[A-Z0-9]{6}$/.test(l)).join("\n");
         if (t) hits.push({kind: "invoice_customer_note", category: null, invoice_id: i.id, body: t, author: null, at: i.created_at, corrected: false}); });
       let rows = hits.filter(h => words.every(w => h.body.toLowerCase().includes(w.toLowerCase()))
         && (!a.p_category || h.category === a.p_category) && (!a.p_author || h.author === a.p_author)
@@ -2610,4 +2610,24 @@ def test_n10_notes_fit_a_phone(browser, width):
     assert fits()
     _open_pay(page); assert fits()
     page.evaluate("location.hash = '#/notes?q=many'"); page.wait_for_selector("#nsRows .dk-nres"); assert fits()
+    assert not errors
+
+
+# N11: the notes column's own lines (ChatGPT's review of PR #42): only the
+# exact lines the Back Office writes are read as delivery and the estimate
+# reference; a note to the customer starting "Estimate" stays a note, in
+# the form and on the PDF.
+def test_n11_customer_note_starting_estimate(browser):
+    notes = "Customer pickup\nEstimate TCP-261120-MEBLV2\nEstimate valid for 7 days"
+    page, errors = _bo(browser, seed=[{"name": "Ama Owusu", "phone": "+233241234567", "state": "draft", "notes": notes},
+                                      {"name": "Yaw Mensah", "phone": "+233552331234", "state": "issued", "due": FUTURE, "notes": notes}],
+                       route="#/invoice/1")
+    page.wait_for_selector("#form:not([hidden])")
+    assert page.input_value("#iNote") == "Estimate valid for 7 days"
+    assert page.evaluate("TCPDesk.state().ref") == "TCP-261120-MEBLV2"
+    assert page.get_attribute("#iNote", "maxlength") == "500"
+    page.evaluate("location.hash = '#/invoice/2'")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    whole = " ".join(_pdf(page)[0])
+    assert "Estimate valid for 7 days" in whole and "TCP-261120-MEBLV2" in whole
     assert not errors

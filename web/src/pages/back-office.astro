@@ -325,7 +325,7 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
         <h2><span class="dk-no">5</span>Invoice details</h2>
         <div class="dk-grid">
           <div><label for="iDue">Pay by (optional)</label><input id="iDue" type="date"></div>
-          <div class="wide"><label for="iNote">Note to the customer (optional, printed on the invoice)</label><textarea id="iNote" rows="2" placeholder="e.g. MTN MoMo number and name, or bank details"></textarea></div>
+          <div class="wide"><label for="iNote">Note to the customer (optional, printed on the invoice)</label><textarea id="iNote" rows="2" maxlength="500" placeholder="e.g. MTN MoMo number and name, or bank details"></textarea></div>
         </div>
       </section>
 
