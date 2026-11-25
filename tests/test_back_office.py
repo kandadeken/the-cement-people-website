@@ -281,11 +281,12 @@ STANDIN = r"""
   // a different request under that id is refused.
   // A database refusal (raise exception) carries a Postgres error code.
   const dbErr = m => Object.assign(new Error(m), {code: "P0001"});
-  function repeatOf(req, kind, inv, rev, amt, method, reason, cnote, inote) { if (!req) return null;
+  function repeatOf(req, kind, inv, rev, amt, method, reason, cnote, inote, paidOn) { if (!req) return null;
     const e = db.payments.find(p => p.request_id === req); if (!e) return null;
     if (e.kind !== kind || e.invoice_id !== inv || (e.reverses_payment_id || null) !== (rev || null) || Math.abs(e.amount - amt) > 1e-9
         || e.method !== method || (e.reason || "").trim() !== (reason || "").trim()
-        || (e.customer_note || null) !== (cnote || null) || (e.internal_note || null) !== (inote || null)) throw dbErr("This request id was already used for a different payment");
+        || (e.customer_note || null) !== (cnote || null) || (e.internal_note || null) !== (inote || null)
+        || (paidOn && e.paid_on !== paidOn)) throw dbErr("This request id was already used for a different payment");
     return e; }
   // Phase 2.2: tcp_private.note_chain, the corrections of a note or of a
   // payment's internal note, oldest first.
@@ -363,7 +364,7 @@ STANDIN = r"""
     // Phase 2, with record_payment / correct_payment / refund_payment's rules.
     recordPayment: a => net("recordPayment", () => { staffOnly("owner", "sales", "finance");
       const again = repeatOf(a.p_request_id, "payment", a.p_invoice_id, null, Math.round(a.p_amount * 100) / 100, a.p_method, null,
-        noteText(a.p_customer_note), noteText(a.p_internal_note)); if (again) return again;
+        noteText(a.p_customer_note), noteText(a.p_internal_note), a.p_paid_on); if (again) return again;
       const inv = db.invoices.find(i => i.id === a.p_invoice_id);
       if (!inv || inv.state !== "issued") throw dbErr("Payments can only be recorded against an issued invoice");
       if (!(a.p_amount > 0)) throw dbErr("A payment must be more than zero");

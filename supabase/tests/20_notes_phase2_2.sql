@@ -72,6 +72,10 @@ select tcp_test.ok((public.record_payment(:inv1, 400, 'cash', null, current_date
         'Thank you. Balance due Friday.', 'Paid by his brother Kwame.')).id = :p1, 'the same payment again gives the first receipt');
 select tcp_test.fails(format($$select public.record_payment(%s, 400, 'cash', null, current_date, 'c0000000-0000-4000-8000-000000000001',
         'Thank you. Balance due Friday.', 'Paid by his brother Kofi.')$$, :inv1), 'already used for a different payment');
+-- (ChatGPT's review of PR #42.) The payment date is part of the request:
+-- the same request id, same details, a different date, is refused.
+select tcp_test.fails(format($$select public.record_payment(%s, 400, 'cash', null, current_date - 1, 'c0000000-0000-4000-8000-000000000001',
+        'Thank you. Balance due Friday.', 'Paid by his brother Kwame.')$$, :inv1), 'already used for a different payment');
 select tcp_test.fails(format($$select public.record_payment(%s, 300, 'mobile_money', 'MP2', current_date, 'c0000000-0000-4000-8000-000000000002',
         null, 'Sent from Kofi''s phone')$$, :inv1), 'already used for a different payment');
 select tcp_test.ok((select customer_note = 'Thank you. Balance due Friday.' and internal_note = 'Paid by his brother Kwame.'

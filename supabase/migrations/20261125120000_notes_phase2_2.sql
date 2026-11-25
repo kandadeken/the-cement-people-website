@@ -182,7 +182,12 @@ revoke all on function tcp_private.note_chain(bigint, bigint) from public, anon,
 create function tcp_private.repeat_payment(
   p_request_id uuid, p_kind text, p_invoice_id bigint, p_reverses bigint,
   p_amount numeric, p_method text, p_reference text, p_reason text,
-  p_customer_note text, p_internal_note text
+  p_customer_note text, p_internal_note text,
+  -- The date the money was paid: given by record_payment only. Refunds and
+  -- corrections are dated by the server when recorded, so they pass null
+  -- and their date is not compared (a retry just after midnight is still
+  -- the same refund).
+  p_paid_on date default null
 )
 returns public.payments
 language plpgsql
@@ -206,13 +211,14 @@ begin
      or existing.reference is distinct from nullif(trim(p_reference), '')
      or coalesce(trim(existing.reason), '') is distinct from coalesce(trim(p_reason), '')
      or existing.customer_note is distinct from nullif(trim(p_customer_note), '')
-     or existing.internal_note is distinct from nullif(trim(p_internal_note), '') then
+     or existing.internal_note is distinct from nullif(trim(p_internal_note), '')
+     or (p_paid_on is not null and existing.paid_on is distinct from p_paid_on) then
     raise exception 'This request id was already used for a different payment';
   end if;
   return existing;
 end;
 $$;
-revoke all on function tcp_private.repeat_payment(uuid, text, bigint, bigint, numeric, text, text, text, text, text)
+revoke all on function tcp_private.repeat_payment(uuid, text, bigint, bigint, numeric, text, text, text, text, text, date)
   from public, anon, authenticated;
 
 -- -----------------------------------------------------------------------------
@@ -252,7 +258,7 @@ begin
     -- invoice has since been fully paid.
     receipt := tcp_private.repeat_payment(p_request_id, 'payment', p_invoice_id, null,
                                      round(p_amount, 2), p_method, p_reference, null,
-                                     p_customer_note, p_internal_note);
+                                     p_customer_note, p_internal_note, p_paid_on);
     if receipt.id is not null then
       return receipt;
     end if;
@@ -260,7 +266,7 @@ begin
   end if;
   receipt := tcp_private.repeat_payment(p_request_id, 'payment', p_invoice_id, null,
                                    round(p_amount, 2), p_method, p_reference, null,
-                                   p_customer_note, p_internal_note);
+                                   p_customer_note, p_internal_note, p_paid_on);
   if receipt.id is not null then
     return receipt;
   end if;
