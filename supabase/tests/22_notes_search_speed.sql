@@ -31,6 +31,13 @@ select (select min(id) from public.invoices) + (g % 5000),
        (array['11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222222','33333333-3333-3333-3333-333333333333'])[1 + g % 3]::uuid,
        timestamptz '2026-01-01 08:00+00' + (g % 330) * interval '1 day' + (g % 600) * interval '1 minute'
   from generate_series(1, 50000) g;
+-- Postgres's statistics normally come from a random sample of rows, so the
+-- planner's guess for a rare word (and so its plan) could differ from run
+-- to run (it did once, on GitHub's runner). A statistics target of 1,000
+-- samples up to 300,000 rows: all 50,000 notes, every time, so the plan is
+-- the same on every machine. (Test database only; production keeps the
+-- default, where a growing table gives the sample more to work with.)
+alter table public.invoice_notes alter column body set statistics 1000;
 analyze public.invoice_notes;
 analyze public.invoices;
 analyze public.payments;
@@ -45,7 +52,8 @@ begin
     p := p || l."QUERY PLAN" || E'\n';
   end loop;
   if p !~ 'invoice_notes_body_trgm' then
-    raise exception 'TEST FAILED: the rare-word search does not use the trigram index:%', E'\n' || p;
+    -- The plan on one line, so the test runner's one-line report shows it all.
+    raise exception 'TEST FAILED: the rare-word search does not use the trigram index: %', replace(p, E'\n', ' | ');
   end if;
 end $$;
 
