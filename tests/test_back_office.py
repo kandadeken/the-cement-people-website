@@ -487,7 +487,9 @@ STANDIN = r"""
       return db.staff.map(s => ({id: s.user_id, name: s.full_name, active: s.active})); }),
     // search_notes: the four sources, filters, newest first, paged.
     searchNotes: a => net("searchNotes", () => { staffOnly("owner", "sales", "finance");
-      const words = (a.p_words || []).map(w => String(w).trim()).filter(Boolean);
+      // Text, split on spaces, as search_notes does (the contract check
+      // above refuses anything else).
+      const words = String(a.p_words || "").trim().split(/\s+/).filter(Boolean);
       if (words.some(w => w.length < 3)) throw dbErr("Type at least 3 letters or digits for each word");
       const hits = [];
       db.notes.forEach(n => hits.push({kind: "invoice_note", category: n.category, note_id: n.id, payment_id: null, invoice_id: n.invoice_id, body: n.body,
@@ -531,13 +533,83 @@ STANDIN = r"""
 """
 
 
+# ---- The real database contract, checked on every stand-in call --------------
+# The stand-in answers like the database, but it would also accept arguments
+# the real database cannot use. (That is how Notes search shipped sending
+# its words as a list to a text input: the stand-in searched fine, the real
+# database found nothing.) So the inputs of each database function the
+# screens call with their arguments as they are, are read from the
+# migrations, and every call made during the screen tests is checked
+# against them: each argument must be a real input of the right JSON type.
+# A wrong one is thrown as a page error, which every test fails on.
+ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
+RPC_PASS_THROUGH = {  # Back Office api method -> database function (sb.rpc(name, a))
+    "saveDraft": "save_draft_invoice", "recordPayment": "record_payment", "correctPayment": "correct_payment",
+    "refundPayment": "refund_payment", "addNote": "add_invoice_note", "searchNotes": "search_notes"}
+
+
+def _rpc_inputs():
+    """{function: {input: sql type}} from the LAST definition of each function in the migrations."""
+    found = {}
+    for m in sorted((ROOT / "supabase" / "migrations").glob("*.sql")):
+        sql = m.read_text()
+        for fn in RPC_PASS_THROUGH.values():
+            for hit in re.finditer(r"create (?:or replace )?function public\." + fn + r"\s*\(", sql):
+                i, depth = hit.end(), 1
+                j = i
+                while depth:
+                    depth += {"(": 1, ")": -1}.get(sql[j], 0)
+                    j += 1
+                body = re.sub(r"--[^\n]*", "", sql[i:j - 1])
+                params = {}
+                for part in re.split(r",(?![^(]*\))", body):
+                    words = part.split()
+                    if words:
+                        params[words[0]] = " ".join(words[1:]).split(" default ")[0].strip().lower()
+                found[fn] = params
+    assert set(found) == set(RPC_PASS_THROUGH.values()), "a database function was not found in the migrations"
+    return found
+
+
+RPC_CONTRACT_JS = r"""
+(() => {
+  const inputs = %INPUTS%, map = %MAP%;
+  // Is this JSON value usable for this SQL type, as PostgREST passes it?
+  const fits = (v, t) => v === null || (
+    t === "text" ? typeof v === "string"
+    : t === "uuid" ? typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+    : t === "date" ? typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)
+    : t === "boolean" ? typeof v === "boolean"
+    : t === "integer" || t === "bigint" ? Number.isInteger(v)
+    : t === "numeric" ? typeof v === "number"
+    : t === "jsonb" ? v !== undefined
+    : t.endsWith("[]") ? Array.isArray(v)
+    : false);
+  window.__rpcChecked = 0;
+  for (const [method, fn] of Object.entries(map)) {
+    const real = window.TCPDeskApi[method];
+    window.TCPDeskApi[method] = a => {
+      for (const [k, v] of Object.entries(a || {})) {
+        const t = inputs[fn][k];
+        if (!t) setTimeout(() => { throw new Error(`RPC contract: ${fn} has no input ${k}`); });
+        else if (!fits(v, t)) setTimeout(() => { throw new Error(`RPC contract: ${fn}.${k} is ${t}, but the screen sent ${JSON.stringify(v)}`); });
+      }
+      window.__rpcChecked++;
+      return real(a);
+    };
+  }
+})();
+"""
+
+
 def _standin(staff=None, users=None, email_code=True):
     # email_code: the sign-in email carries a 6-digit code (TCP's own email
     # sending). False is today's free-plan email: a link only.
     cfg = {"products": DB_PRODUCTS, "emailCode": email_code,
            "staff": staff if staff is not None else [{"user_id": OWNER["id"], "full_name": "Test Owner", "role": "owner", "active": True}],
            "users": users if users is not None else [OWNER]}
-    return STANDIN.replace("%CFG%", json.dumps(json.dumps(cfg)))
+    return (STANDIN.replace("%CFG%", json.dumps(json.dumps(cfg)))
+            + RPC_CONTRACT_JS.replace("%INPUTS%", json.dumps(_rpc_inputs())).replace("%MAP%", json.dumps(RPC_PASS_THROUGH)))
 
 
 def _desk(browser, width=390, standin=True, signed_in=True, **kw):
@@ -969,8 +1041,9 @@ def _bo(browser, width=390, route="#/", staff=None, users=None, seed=None, signe
     return page, errors
 
 
-FIN = {"id": "u-f", "email": "fin@test.invalid"}
-SALES = {"id": "u-s", "email": "sales@test.invalid"}
+# Real staff ids are UUIDs (the author filter sends one to search_notes).
+FIN = {"id": "f1000000-0000-4000-8000-000000000002", "email": "fin@test.invalid"}
+SALES = {"id": "5a1e5000-0000-4000-8000-000000000003", "email": "sales@test.invalid"}
 TEAM = [{"user_id": OWNER["id"], "full_name": "Test Owner", "role": "owner", "active": True},
         {"user_id": FIN["id"], "full_name": "Fin", "role": "finance", "active": True},
         {"user_id": SALES["id"], "full_name": "Sal", "role": "sales", "active": True}]
@@ -1904,7 +1977,7 @@ def test_p13_p14_lost_reply_then_expired_sign_in_records_once(browser, kind):
     page.evaluate("__db.expired = true")
     page.click("#fYes")
     page.wait_for_selector("#signin:not([hidden])")
-    kept = page.evaluate("JSON.parse(localStorage.getItem('tcp-desk-op-u-f'))")
+    kept = page.evaluate("JSON.parse(localStorage.getItem('tcp-desk-op-f1000000-0000-4000-8000-000000000002'))")
     assert kept["req"] == req and kept["type"] == kind and kept["payId"] == 1
     page.evaluate("__db.expired = false")
     page.evaluate("sessionStorage.setItem('no-auto-sign-in', '1')"); page.reload()
@@ -1918,7 +1991,7 @@ def test_p13_p14_lost_reply_then_expired_sign_in_records_once(browser, kind):
     assert "already recorded" in page.text_content("#rMsg")
     assert page.evaluate(f"__db.payments.filter(p => p.kind === '{kind}').length") == 1
     assert page.evaluate("__db.payments.find(p => p.receipt_no === 'TCP-RCT-0003').request_id") == req
-    assert page.evaluate("localStorage.getItem('tcp-desk-op-u-f')") is None
+    assert page.evaluate("localStorage.getItem('tcp-desk-op-f1000000-0000-4000-8000-000000000002')") is None
     page.click("#rInv"); page.wait_for_selector("#issuedSec:not([hidden])")
     assert not page.locator("#opBox").is_visible() and page.locator("#payBtn").is_visible()
     assert not errors
@@ -1959,7 +2032,7 @@ def test_p15_sign_out_expiry_isolation_and_unknown_outcome(browser):
     old = {"user": "u-owner", "at": 0, "type": "payment", "invoiceId": 2, "req": "11111111-1111-4111-8111-111111111111",
            "amount": 100, "method": "cash", "ref": None, "date": "2026-11-01", "reason": None, "payId": None}
     page.evaluate("o => localStorage.setItem('tcp-desk-op-u-owner', JSON.stringify(o))", old)
-    page.evaluate("o => localStorage.setItem('tcp-desk-op-u-f', JSON.stringify({...o, at: Date.now()}))", old)
+    page.evaluate("o => localStorage.setItem('tcp-desk-op-f1000000-0000-4000-8000-000000000002', JSON.stringify({...o, at: Date.now()}))", old)
     # (The test's sign-in is restored on every load.)
     page.evaluate("location.hash = '#/invoice/2'"); page.reload()
     page.wait_for_selector("#payBtn:not([hidden])")
@@ -1976,10 +2049,10 @@ def test_p15b_another_staff_member_never_inherits_it(browser):
     # The owner's note, and a copy filed under the sales login but still
     # naming the owner.
     page.evaluate("o => { const now = {...o, at: Date.now()}; localStorage.setItem('tcp-desk-op-u-owner', JSON.stringify(now));"
-                  " localStorage.setItem('tcp-desk-op-u-s', JSON.stringify(now)); }", fresh)
+                  " localStorage.setItem('tcp-desk-op-5a1e5000-0000-4000-8000-000000000003', JSON.stringify(now)); }", fresh)
     page.reload(); page.wait_for_selector("#payBtn:not([hidden])")
     assert not page.locator("#opBox").is_visible()
-    assert page.evaluate("localStorage.getItem('tcp-desk-op-u-s')") is None, "a note naming someone else is dropped"
+    assert page.evaluate("localStorage.getItem('tcp-desk-op-5a1e5000-0000-4000-8000-000000000003')") is None, "a note naming someone else is dropped"
     assert page.evaluate("localStorage.getItem('tcp-desk-op-u-owner')") is not None, "the owner's own note is left for the owner"
     assert not errors
 
@@ -1990,7 +2063,7 @@ def test_p16_the_note_holds_nothing_about_the_customer(browser):
     page.evaluate("__db.offline = true")
     _fix(page, "refund", 1, "Two bags returned", amount="50", method="mobile_money", ref="MP42")
     page.wait_for_function("document.querySelector('#fMsg').textContent.includes('No connection')")
-    raw = page.evaluate("localStorage.getItem('tcp-desk-op-u-f')")
+    raw = page.evaluate("localStorage.getItem('tcp-desk-op-f1000000-0000-4000-8000-000000000002')")
     kept = json.loads(raw)
     assert set(kept) == {"user", "at", "type", "invoiceId", "payId", "req", "amount", "method", "ref", "date", "reason"}
     for private in ["Yaw", "Part", "233552331234", "552331234", "TCP-C-"]:
@@ -2291,11 +2364,11 @@ def _correct(page, button, body):
     page.wait_for_function("!document.querySelector('#ncBox')")
 
 
-def _seed_note(page, invoice_id, body, by="u-s", corrects_note=None, corrects_payment=None, at="2026-11-22T09:00:00.000Z", cat="general"):
+def _seed_note(page, invoice_id, body, by=None, corrects_note=None, corrects_payment=None, at="2026-11-22T09:00:00.000Z", cat="general"):
     """A note added by another staff member, straight into the database."""
     page.evaluate("""a => { __db.notes.push({id: __db.notes.length + 1, invoice_id: a.inv, body: a.body, category: a.cat,
         corrects_note_id: a.cn, corrects_payment_id: a.cp, estimate_ref: null, created_by: a.by, created_at: a.at, request_id: null}); }""",
-                  {"inv": invoice_id, "body": body, "cat": cat, "cn": corrects_note, "cp": corrects_payment, "by": by, "at": at})
+                  {"inv": invoice_id, "body": body, "cat": cat, "cn": corrects_note, "cp": corrects_payment, "by": by or SALES["id"], "at": at})
 
 
 def _latest(locator):
@@ -2543,7 +2616,7 @@ def test_n08_notes_search(browser):
     page.evaluate("location.hash = '#/invoices'")
     page.wait_for_selector("#listV:not([hidden])")
     assert page.locator('#listV a[href="#/notes"]').is_visible()
-    _seed_note(page, 2, "Balance comes Friday " + SECRET, by="u-s", cat="payment", at="2026-11-20T09:00:00.000Z")
+    _seed_note(page, 2, "Balance comes Friday " + SECRET, by=SALES["id"], cat="payment", at="2026-11-20T09:00:00.000Z")
     _seed_note(page, 3, "Complaint about broken bags on Friday", by="u-owner", cat="complaint", at="2026-11-21T09:00:00.000Z")
     _seed_note(page, 3, "Bags replaced on Friday", by="u-owner", corrects_note=2, at="2026-11-21T10:00:00.000Z", cat="complaint")
     page.evaluate("TCPDeskApi.home()")
@@ -2555,6 +2628,7 @@ def test_n08_notes_search(browser):
     page.wait_for_function("document.querySelector('#nsInfo').textContent.startsWith('3 notes')")
     assert page.locator("#nsRows mark").first.text_content() == "Friday"
     assert "ZEBRAQUARTZ" not in page.url and "q=friday" in page.url
+    assert page.evaluate("window.__rpcChecked") > 0, "the database contract check ran on these searches"
     page.click('#nsCats [data-ncat="complaint"]')
     page.wait_for_function("document.querySelector('#nsInfo').textContent.startsWith('2 notes')")
     assert "cat=complaint" in page.url
@@ -2563,7 +2637,7 @@ def test_n08_notes_search(browser):
     assert "Bags replaced" in page.text_content("#nsRows")
     page.uncheck("#nsHide")
     page.click('#nsCats [data-ncat="all"]')
-    page.select_option("#nsBy", "u-s")
+    page.select_option("#nsBy", SALES["id"])
     page.wait_for_function("document.querySelector('#nsInfo').textContent.startsWith('1 note')")
     assert "Sal ·" in page.text_content("#nsRows")
     page.select_option("#nsBy", "")

@@ -1626,7 +1626,10 @@ async function notesMore(){
   if(words.some(w=>w.length<3)){$("#nsInfo").textContent="Type at least 3 letters or digits for each word.";$("#nsRows").innerHTML="";show("#nsMore",false);return;}
   busy(btn,true,"Loading…");$("#nsMsg").textContent="";
   try{
-    const res=await api.searchNotes({p_words:words.length?words:null,p_category:NS.cat==="all"?null:NS.cat,p_author:NS.by||null,
+    // The words go as one text, the way search_notes takes them (it splits
+    // them itself). A list here reached the database as '["word"]' and
+    // matched nothing.
+    const res=await api.searchNotes({p_words:words.length?words.join(" "):null,p_category:NS.cat==="all"?null:NS.cat,p_author:NS.by||null,
       p_from:NS.from||null,p_to:NS.to||null,p_hide_corrected:NS.hide,p_offset:NS.rows.length,p_limit:PAGE});
     if(my!==NS.seq)return;
     NS.rows=NS.rows.concat(res.rows||[]);NS.count=res.count||0;
