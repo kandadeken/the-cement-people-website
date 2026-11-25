@@ -358,7 +358,7 @@ section.nobanner .banner{display:none}
 .edeliv h3{margin:0 0 2px;font-size:var(--t-body);font-weight:var(--w-strong)}
 .edeliv p{margin:0 0 var(--s2);font-size:var(--t-small);color:var(--mute)}
 .dl{display:block;font-weight:var(--w-label);font-size:var(--t-small)}
-#loc{display:block;width:100%;min-height:var(--tap);margin-top:6px;padding:10px;font-size:var(--t-body);border:1px solid var(--field-line);border-radius:var(--r-control);background:var(--field);color:var(--ink)}
+#loc,#enote{display:block;width:100%;min-height:var(--tap);margin-top:6px;padding:10px;font-size:var(--t-body);border:1px solid var(--field-line);border-radius:var(--r-control);background:var(--field);color:var(--ink)}
 .fine{margin:0;padding:var(--s3) 0 var(--s4);font-size:var(--t-label);color:var(--mute)}
 /* The bottom: totals and the two actions. */
 .efoot{flex:none;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -8px 18px rgba(0,0,0,.05);padding:10px var(--s4) 14px}
@@ -510,7 +510,7 @@ main{display:block;padding:16px}
 .docket{position:static;border:1px solid #000}
 .dh{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .step{border:0}.step button{display:none}.step input{border:0;width:auto;text-align:left;padding:0}
-#loc{border:0;padding:0}#loc::placeholder{color:transparent}
+#loc,#enote{border:0;padding:0}#loc::placeholder,#enote::placeholder{color:transparent}
 }
 /* The quotation inherits the page's base text size where print.css sets
    none. The screen moved to 16 px in this phase; print keeps the old 15 px
@@ -636,3 +636,5 @@ main{display:block;padding:16px}
   .ln .pn{box-shadow:inset 0 0 0 1.5px var(--pn-edge)}
   :root[data-theme="dark"] .ln .pn{font-weight:700}
 }
+/* Phase 2.2: the estimate's note box takes words on several lines. */
+#enote{resize:vertical;font-family:inherit;line-height:1.4}

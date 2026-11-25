@@ -272,14 +272,16 @@ $("#tot").innerHTML=(TAX_RATE?`<div><span>Materials</span><span>${money(sub)}</s
 $("#bar").classList.toggle("on",rows.length>0);
 $("#barTxt").innerHTML=`<small>${rows.length} ${rows.length===1?"item":"items"}<span class="bl"> in your estimate</span></small>${money(total)}`;
 const loc=$("#loc").value.trim();
+// Phase 2.2: the customer's optional note for TCP, one line in WhatsApp.
+const note=$("#enote").value.trim().replace(/\s+/g," ");
 // WhatsApp message (18 Nov 2026): the opening asks the question once; the
 // full itemised list, reference, date and total follow unchanged.
 const msg=`Hello The Cement People,\n\nI'd like to enquire about the following estimate. Please confirm product availability and delivery cost.\n\n*Estimate ${REF}* (${DATE})\n`
-+(loc?`\n*Drop-off location:* ${loc}\n`:"")
++(loc||note?"\n"+(loc?`*Drop-off location:* ${loc}\n`:"")+(note?`*Note:* ${note}\n`:""):"")
 +"\n*Items*\n"+rows.map((p,i)=>`${i+1}. ${p.name} (${p.unit})\n   ${fmtQ(qty[p.id])} × ${money(p.price)} = ${money(p.price*qty[p.id])}`).join("\n")
 +`\n\n*Materials total: ${money(sub)}*`
 +(TAX_RATE?`\nTax (${+(TAX_RATE*100).toFixed(2)}%): ${money(tax)}\nTotal (excl. delivery): ${money(total)}`:"");
-renderQuote(S,sub,tax,total,loc);
+renderQuote(S,sub,tax,total,loc,note);
 const sd=$("#send");
 if(rows.length){sd.href="https://wa.me/"+WA_NUMBER+"?text="+encodeURIComponent(msg);sd.classList.remove("off");sd.removeAttribute("aria-disabled")}
 else{sd.removeAttribute("href");sd.classList.add("off");sd.setAttribute("aria-disabled","true")}
@@ -303,7 +305,7 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-sec]");if(
 // The logo's drawing is copied once from the hidden #q-logo in QuotePieces.astro.
 const LOGO=(document.getElementById("q-logo")||{}).innerHTML||"";
 const esc=s=>s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-function renderQuote(S,sub,tax,total,loc){
+function renderQuote(S,sub,tax,total,loc,note){
 let n=0;
 // PDF (19 Nov 2026): category headings carry no "01 ·" numbers (products are
 // numbered 1, 2, 3... instead, as on screen); an empty drop-off location
@@ -318,6 +320,7 @@ const body=S.length?S.map((x,i)=>`<tr class="q-sec"><td colspan="5">${x.name}<sp
 $("#quote").innerHTML=`<header class="q-head"><svg class="q-logo" viewBox="0 0 592.329 100" role="img" aria-label="The Cement People">${LOGO}</svg>`
 +`<div class="q-doc"><h1>Estimate</h1><dl><dt>Reference</dt><dd>${REF}</dd><dt>Date</dt><dd>${DATE}</dd></dl></div></header>`
 +`<div class="q-to"><div><small>Drop-off location</small><p>${loc?esc(loc):"To be agreed"}</p></div><div><small>Delivery</small><p>To be confirmed after you send this estimate</p></div><div><small>Contact</small><p>${TCP.business.phone} (call or WhatsApp)<br>${TCP.business.website}<br>${TCP.business.town}</p></div></div>`
++(note?`<div class="q-note"><small>Your note</small><p>${esc(note)}</p></div>`:"")
 +`<table><thead><tr><th class="n">#</th><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>${body}</tbody></table>`
 +`<div class="q-close"><div class="q-terms"><h2>Delivery and terms</h2><ul>`
 +`<li>We deliver to your drop-off location. The delivery cost depends on your order and location, and is agreed with you before delivery.</li>`
@@ -389,14 +392,14 @@ askClear($("#clearAsk").hidden);
 $("#clearNo").addEventListener("click",()=>{askClear(false);$("#clear").focus();});
 $("#clearYes").addEventListener("click",()=>{
 askClear(false);
-undoSnap={qty:{...qty},loc:$("#loc").value,REF,DATE};
+undoSnap={qty:{...qty},loc:$("#loc").value,note:$("#enote").value,REF,DATE};
 qty={};newQuote();renderList();renderEst();
 clearTimeout(undoT);undoT=setTimeout(dropUndo,10000);
 const u=$("#undo");if(u)u.focus();
 });
 document.addEventListener("click",e=>{if(!e.target.closest("#undo")||!undoSnap)return;
 const u=undoSnap;undoSnap=null;clearTimeout(undoT);
-qty=u.qty;$("#loc").value=u.loc;REF=u.REF;DATE=u.DATE;$("#ref").textContent="Ref "+REF;$("#date").textContent=DATE;
+qty=u.qty;$("#loc").value=u.loc;$("#enote").value=u.note||"";REF=u.REF;DATE=u.DATE;$("#ref").textContent="Ref "+REF;$("#date").textContent=DATE;
 renderList();renderEst();$("#clear").focus();});
 
 // ---- Phones: the estimate opens as a full-screen view -------------------------
@@ -467,6 +470,7 @@ newQuote();
 document.addEventListener("input",e=>{if(e.target.matches(".step input"))e.target.dataset.w=QW(e.target.value)});
 const WA_NUMBER=TCP.business.whatsapp;
 $("#loc").addEventListener("input",renderEst);
+$("#enote").addEventListener("input",renderEst);
 document.querySelectorAll("[data-wa]").forEach(a=>{if(WA_NUMBER)a.href="https://wa.me/"+WA_NUMBER+"?text="+encodeURIComponent("Hello, I would like to enquire about your materials.")});
 
 // ---- Category tiles under the hero: removed in the design-system phase
