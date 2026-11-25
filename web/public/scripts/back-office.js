@@ -104,6 +104,13 @@ function supabaseApi(){
     correctPayment:a=>sb.rpc("correct_payment",a).then(out),
     refundPayment:a=>sb.rpc("refund_payment",a).then(out),
     receipt:id=>sb.rpc("receipt_document",{p_payment_id:id}).then(out),
+    // Phase 2.2: internal notes. add_invoice_note adds a note, or a
+    // correction of one (never an edit); a request id kept for retries means
+    // a note is never added twice. search_notes searches every note the
+    // database keeps; note_authors lists who can be picked in its filter.
+    addNote:a=>sb.rpc("add_invoice_note",a).then(out),
+    searchNotes:a=>sb.rpc("search_notes",a).then(out),
+    noteAuthors:()=>sb.rpc("note_authors").then(out),
     // Was this request recorded? The receipt it made, or null.
     byRequest:req=>sb.from("payments").select("id,receipt_no,kind,invoice_id,reverses_payment_id,amount").eq("request_id",req).maybeSingle().then(out),
     // Discarding a draft = the owner-only cancel_invoice (kept, with a reason).
@@ -115,7 +122,7 @@ function supabaseApi(){
     // then id, between the dates payment_totals gave (so the list and the
     // totals always cover the same days). terms: see ledgerTerms().
     ledger:({from,to,kind:k,method,terms,offset,limit})=>{
-      let q=sb.from("payment_ledger").select("id,receipt_no,kind,amount,method,reference,paid_on,invoice_id,invoice_no,billed_to_name,billed_to_phone,reverses_receipt_no,corrected",{count:"exact"})
+      let q=sb.from("payment_ledger").select("id,receipt_no,kind,amount,method,reference,paid_on,invoice_id,invoice_no,billed_to_name,billed_to_phone,reverses_receipt_no,corrected,customer_note,internal_note",{count:"exact"})
         .order("paid_on",{ascending:false}).order("id",{ascending:false}).range(offset,offset+limit-1);
       if(from)q=q.gte("paid_on",from);
       if(to)q=q.lte("paid_on",to);
@@ -272,6 +279,8 @@ function parseEstimate(text){
   const t=String(text||"").replace(/\r/g,"").replace(/ /g," ");
   const ref=(t.match(/TCP-(\d{6})-([A-Z0-9]{6})\b/)||[]);
   const loc=(t.match(/Drop-off location:\*?\s*(.+)/i)||[])[1];
+  // Phase 2.2: the customer's note from the estimator ("*Note:* …").
+  const note=(t.match(/^\s*\*?Note:\*?\s*(.+)$/im)||[])[1];
   const lines=t.split("\n"),items=[];
   const same=s=>String(s).toLowerCase().replace(/\s+/g," ").trim();
   for(let i=0;i<lines.length;i++){
@@ -288,7 +297,7 @@ function parseEstimate(text){
                :{kind:"product",pid:null,name,unit,qty,price:isNaN(quoted)?NaN:toP(quoted),list:null,quoted:isNaN(quoted)?null:toP(quoted)});
     i=j;
   }
-  return{ref:ref[0]||null,loc:loc?loc.replace(/\*+$/,"").trim():"",items};
+  return{ref:ref[0]||null,loc:loc?loc.replace(/\*+$/,"").trim():"",note:note?note.replace(/\*+$/,"").trim().slice(0,1000):"",items};
 }
 
 // ---- 5. The invoice being prepared -------------------------------------------
@@ -300,7 +309,7 @@ let S=blank(),DOC=null;
 // saved: no connection…"). It stays until the next edit.
 let NOTE="",LOOKED="";
 function blank(){return{invoiceId:null,draftRequest:newId(),customerRequest:newId(),ref:null,customerId:null,customerCode:null,
-  name:"",phone:"",site:"",contact:"",contactPhone:"",items:[],dl:"pending",fee:"",due:"",note:"",dirty:false};}
+  name:"",phone:"",site:"",contact:"",contactPhone:"",items:[],dl:"pending",fee:"",due:"",note:"",estNote:null,dirty:false};}
 const draftKey=()=>"tcp-desk-work-"+(ME?ME.id:"none");
 function keep(){if(!ME)return;try{localStorage.setItem(draftKey(),JSON.stringify(S))}catch(e){}}
 function forget(){try{localStorage.removeItem(draftKey())}catch(e){}}
@@ -362,6 +371,11 @@ function combineIdentical(){
   return said;}
 function totals(s){const mat=s.items.some(l=>!lineOk(l))?NaN:s.items.reduce((a,l)=>a+lineTotal(l),0);
   const fee=s.dl==="fee"?(feeIssue(s)?NaN:toP(typedNum(s.fee))):0;return{mat,fee,total:mat+fee};}
+// The estimate line the Back Office writes into the invoice's notes column
+// ("Estimate TCP-261120-MEBLV2", the estimator's only reference format).
+// Matched exactly, so a note to the customer such as "Estimate valid for 7
+// days" stays part of the note.
+const EST_LINE=/^Estimate TCP-\d{6}-[A-Z0-9]{6}$/;
 const DL_TEXT={pending:"Not agreed yet",free:"Free delivery",fee:"Delivery fee",pickup:"Customer pickup"};
 // What is missing before the invoice can be saved or issued. The database
 // checks everything again; this only saves a wasted trip.
@@ -501,7 +515,10 @@ $("#matches").addEventListener("click",e=>{const b=e.target.closest("[data-cid]"
 $("#readBtn").addEventListener("click",()=>{
   const r=parseEstimate($("#paste").value),m=$("#readMsg");
   if(!r.items.length){m.textContent="No items found. Paste the whole estimate message, from \"Hello The Cement People\" to the total.";return;}
-  S={...blank(),ref:r.ref,site:r.loc,items:r.items,dirty:true};
+  S={...blank(),ref:r.ref,site:r.loc,items:r.items,dirty:true,
+     // The customer's note is added to the draft's internal notes on its
+     // first save (one request id, so a retry never adds it twice).
+     estNote:r.note?{text:r.note,ref:r.ref,req:newId()}:null};
   const merged=combineIdentical();
   const odd=r.items.filter(l=>!l.pid).length,moved=r.items.filter(l=>l.quoted!=null&&l.list!=null&&l.quoted!==l.list).length;
   m.textContent=`Read ${r.items.length} ${r.items.length===1?"item":"items"}${r.ref?" from estimate "+r.ref:""}.`
@@ -571,7 +588,21 @@ async function save(){
   // A new draft now has an address of its own, so a reload (or the list)
   // reopens it from the database.
   if(first){history.replaceState(null,"","#/invoice/"+id);HERE=location.hash;}
+  await addEstimateNote(id);
   return id;
+}
+// The estimate's note, once the draft exists. If it can't be added now it
+// stays waiting (shown in the notes panel) and is tried on the next save.
+async function addEstimateNote(id){
+  const n=S.estNote;
+  if(!n){if(!$("#form").hidden)renderNotes(NDOC&&NDOC.id===id?NDOC:{id,state:"draft",internal_notes:[]},true);return;}
+  try{await api.addNote({p_invoice_id:id,p_body:n.text,p_category:"general",p_estimate_ref:n.ref||null,p_request_id:n.req});
+    S.estNote=null;keep();
+    const d=await api.document(id).catch(()=>null);
+    renderNotes(d||{id,state:"draft",internal_notes:[]},true);}
+  catch(err){const k=kind(err);if(k==="revoked"||k==="expired")throw err;
+    renderNotes(NDOC&&NDOC.id===id?NDOC:{id,state:"draft",internal_notes:[]},true);
+    $("#nMsg").textContent="The estimate's note is not in the internal notes yet"+(k==="offline"?" (no connection)":"")+". It is added on the next save.";}
 }
 $("#saveBtn").addEventListener("click",async()=>{
   if(problems(S,false).length)return;const btn=$("#saveBtn");busy(btn,true,"Saving…");NOTE="";
@@ -608,7 +639,9 @@ $("#issueBtn").addEventListener("click",async()=>{
 async function openInvoice(id){
   let doc;
   try{doc=await api.document(id);}catch(err){view("#invV");showOnly("#issuedSec");$("#viewTitle").textContent="Invoice";$("#issued").innerHTML="";$("#viewLines").innerHTML="";show("#shareRow",false);show("#shareHelp",false);show("#payBox",false);return readFailed(err,"#iMsg");}
-  if(doc.state==="draft"&&canEdit()){S=fromDraft(doc);showForm();return;}
+  if(doc.state==="draft"&&canEdit()){const was=S;S=fromDraft(doc);
+    if(was.invoiceId===doc.id&&was.estNote)S.estNote=was.estNote;
+    NDOC=doc;showForm();return;}
   showView(doc);
 }
 const STATUS={draft:"Draft",unpaid:"Unpaid",part_paid:"Part paid",overdue:"Overdue",paid:"Paid",cancelled:"Cancelled"};
@@ -644,6 +677,7 @@ function showView(doc){
   showPayments(doc);
   $("#shareBtn").disabled=!issued;$("#pdfBtn").disabled=!(issued||cancelled);
   showCancel(doc);
+  renderNotes(doc,false);
 }
 function fromDraft(doc){
   const items=doc.lines.filter(l=>l.kind==="product").map(l=>{const p=PRODUCTS.find(x=>x.id===l.product_id);
@@ -651,12 +685,12 @@ function fromDraft(doc){
   const fee=doc.lines.find(l=>l.kind==="delivery");
   const notes=String(doc.notes||"").split("\n");
   const dl=fee?"fee":notes.includes("Customer pickup")?"pickup":notes.includes("Free delivery")?"free":"pending";
-  const ref=(notes.find(n=>/^Estimate /.test(n))||"").replace(/^Estimate /,"")||null;
+  const ref=(notes.find(n=>EST_LINE.test(n))||"").slice(9)||null;
   return{...blank(),invoiceId:doc.id,customerId:doc.customer_id,customerCode:doc.customer_code,ref,
     name:doc.billed_to_name||"",phone:doc.billed_to_phone||"",site:doc.deliver_to_location||"",
     contact:doc.deliver_to_contact||"",contactPhone:doc.deliver_to_phone||"",items,dl,
     fee:fee?String(fee.unit_price):"",due:doc.due_date||"",
-    note:notes.filter(n=>n&&n!=="Customer pickup"&&n!=="Free delivery"&&!/^Estimate /.test(n)).join("\n"),dirty:false};
+    note:notes.filter(n=>n&&n!=="Customer pickup"&&n!=="Free delivery"&&!EST_LINE.test(n)).join("\n"),dirty:false};
 }
 
 // ---- 7. The PDF --------------------------------------------------------------
@@ -697,7 +731,7 @@ async function makePdf(doc){
     pdf.text(str,o.right?x-w:x,y,{baseline:"top",charSpace:sp});return w;};
   const wrap=(str,w)=>pdf.splitTextToSize(str,w);
   const notes=String(doc.notes||"").split("\n").filter(Boolean);
-  const ref=(notes.find(n=>/^Estimate /.test(n))||"").replace(/^Estimate /,"");
+  const ref=(notes.find(n=>EST_LINE.test(n))||"").slice(9);
   const pickup=notes.includes("Customer pickup"),free=notes.includes("Free delivery");
   const products=doc.lines.filter(l=>l.kind==="product"),delivery=doc.lines.filter(l=>l.kind==="delivery"),discounts=doc.lines.filter(l=>l.kind==="discount");
   const sum=ls=>ls.reduce((a,l)=>a+toP(l.line_total),0);
@@ -749,7 +783,7 @@ async function makePdf(doc){
   });
   // -- Bottom: notes left, totals right (kept together on one page)
   const TW=98,LW=W-TW-8,tlh=pt(7.5)*1.4;
-  const extra=notes.filter(n=>n!=="Customer pickup"&&n!=="Free delivery"&&!/^Estimate /.test(n)).join("\n");
+  const extra=notes.filter(n=>n!=="Customer pickup"&&n!=="Free delivery"&&!EST_LINE.test(n)).join("\n");
   const nb=[];
   if(extra)nb.push(["Note",extra]);
   nb.push(["Questions",`WhatsApp or call ${B.phone} and quote invoice ${doc.invoice_no}.`]);
@@ -954,7 +988,7 @@ function showPayments(doc){
     return`<div class="dk-pay"><a href="#/receipt/${p.id}" data-rid="${p.id}">
       <span class="dk-pay-top"><b>${esc(p.receipt_no)}</b><b class="${amt<0?"neg":""}">${smoney(amt)}</b></span>
       <span class="dk-pay-bot"><small>${what} · ${shortDate(p.paid_on)} · ${esc(METHOD[p.method]||p.method)}${p.reference?" · ref "+esc(p.reference):""}</small><small>left ${money(toP(p.balance_after))}</small></span>
-      ${flag?`<span class="dk-pay-flag">${flag}</span>`:""}</a>${acts}</div>`;}).join(""):`<p class="dk-help">No payments yet.</p>`;
+      ${flag?`<span class="dk-pay-flag">${flag}</span>`:""}</a>${acts}${payNotesHTML(p,(RECORD_WORD[p.kind]||"payment").replace(/^./,c=>c.toUpperCase())+" note")}</div>`;}).join(""):`<p class="dk-help">No payments yet.</p>`;
   $("#paySum").innerHTML=issued||pays.length?`<span>Paid ${money(toP(doc.paid))}</span><span>Left ${money(toP(doc.balance))}</span>`:"";
   // While an operation's outcome is unknown, nothing new can be started.
   show("#payBtn",issued&&toP(doc.balance)>0&&canPay()&&!op);
@@ -1027,12 +1061,14 @@ function openPay(kept){
   // retry (double tap, no connection, lost reply) until it is recorded.
   PAY=kept?{invoiceId:kept.invoiceId,req:kept.req,amt:(+kept.amount).toFixed(2),method:kept.method,ref:kept.ref||"",date:kept.date||today(),sent:false}
     :{invoiceId:doc.id,req:newId(),amt:"",method:"",ref:"",date:today(),sent:false};
+  // Notes are never kept on the phone (only in this form while it is open).
+  PAY.cnote="";PAY.inote="";$("#pCustNote").value="";$("#pIntNote").value="";
   showOnly("#payForm");
   $("#payFor").textContent=`${doc.invoice_no} · ${doc.billed_to_name||""} · left to pay ${money(toP(doc.balance))}`;
   $("#pAmt").value=PAY.amt;$("#pRef").value=PAY.ref;$("#pDate").value=PAY.date;$("#pDate").max=today();
   document.querySelectorAll('input[name="pm"]').forEach(r=>r.checked=r.value===PAY.method);
   ["#pAmtErr","#pErr"].forEach(e=>{$(e).textContent="";});
-  $("#pMsg").textContent=kept?"This payment was not recorded. Check it, then tap Continue and Record it.":"";
+  $("#pMsg").textContent=kept?"This payment was not recorded. Check it, then tap Continue and Record it. Notes are not kept on this phone: type any notes again.":"";
   show("#payFields",true);show("#pConfirm",false);refLabel("#pRefLabel",PAY.method);
   window.scrollTo(0,0);
 }
@@ -1048,8 +1084,8 @@ function payProblems(){
   else if(!PAY.date)out.rest="Enter the date paid.";
   else if(PAY.date>today())out.rest="The date paid can't be in the future.";
   return{out,p};}
-["#pAmt","#pRef","#pDate"].forEach(sel=>$(sel).addEventListener("input",()=>{if(!PAY)return;
-  PAY.amt=$("#pAmt").value;PAY.ref=$("#pRef").value;PAY.date=$("#pDate").value;
+["#pAmt","#pRef","#pDate","#pCustNote","#pIntNote"].forEach(sel=>$(sel).addEventListener("input",()=>{if(!PAY)return;
+  PAY.amt=$("#pAmt").value;PAY.ref=$("#pRef").value;PAY.date=$("#pDate").value;PAY.cnote=$("#pCustNote").value;PAY.inote=$("#pIntNote").value;
   $("#pAmtErr").textContent="";$("#pErr").textContent="";}));
 document.querySelectorAll('input[name="pm"]').forEach(r=>r.addEventListener("change",()=>{if(!PAY)return;
   PAY.method=r.value;refLabel("#pRefLabel",PAY.method);$("#pErr").textContent="";}));
@@ -1060,7 +1096,8 @@ $("#pNext").addEventListener("click",()=>{
   const{out,p}=payProblems();$("#pAmtErr").textContent=out.amt||"";$("#pErr").textContent=out.rest||"";
   if(out.amt||out.rest)return;
   // Confirm before saving: a receipt number is permanent.
-  $("#pSummary").textContent=`${money(p)} by ${METHOD[PAY.method]}${PAY.ref.trim()?" (ref "+PAY.ref.trim()+")":""} for ${DOC.invoice_no}, paid ${shortDate(PAY.date)}. Balance after: ${money(toP(DOC.balance)-p)}.`;
+  $("#pSummary").textContent=`${money(p)} by ${METHOD[PAY.method]}${PAY.ref.trim()?" (ref "+PAY.ref.trim()+")":""} for ${DOC.invoice_no}, paid ${shortDate(PAY.date)}. Balance after: ${money(toP(DOC.balance)-p)}.`
+    +(PAY.cnote.trim()?` Note to the customer: ${PAY.cnote.trim()}`:"")+(PAY.inote.trim()?` Internal note: ${PAY.inote.trim()}`:"");
   show("#payFields",false);show("#pConfirm",true);$("#pMsg").textContent="";});
 $("#pChange").addEventListener("click",()=>{show("#pConfirm",false);show("#payFields",true);});
 $("#pYes").addEventListener("click",async()=>{
@@ -1068,7 +1105,8 @@ $("#pYes").addEventListener("click",async()=>{
   const{p}=payProblems(),st=PAY;busy(btn,true,"Recording…");$("#pMsg").textContent="";
   const op={type:"payment",invoiceId:st.invoiceId,req:st.req,amount:p/100,method:st.method,ref:st.ref.trim(),date:st.date};
   try{await opDone(await sendOp(op,st,()=>api.recordPayment({p_invoice_id:st.invoiceId,p_amount:p/100,p_method:st.method,
-      p_reference:st.ref.trim()||null,p_paid_on:st.date,p_request_id:st.req})));}
+      p_reference:st.ref.trim()||null,p_paid_on:st.date,p_request_id:st.req,
+      p_customer_note:st.cnote.trim()||null,p_internal_note:st.inote.trim()||null})));}
   catch(err){await opFailed(err,st,"#pMsg");}
   finally{busy(btn,false);}
 });
@@ -1078,7 +1116,9 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-fix]");if(
   const pay=(DOC.payments||[]).find(x=>x.id===+b.dataset.pid);if(pay)openFix(b.dataset.fix,pay,null);});
 function openFix(kindName,pay,kept){
   FIX={kind:kindName,pay,req:kept?kept.req:newId(),amt:kept&&kindName==="refund"?(+kept.amount).toFixed(2):"",
-    method:kept&&kindName==="refund"?kept.method:"",ref:kept&&kept.ref||"",why:kept&&kept.reason||"",sent:false};
+    method:kept&&kindName==="refund"?kept.method:"",ref:kept&&kept.ref||"",why:kept&&kept.reason||"",sent:false,
+    cnote:"",inote:""};   // notes are never kept on the phone
+  $("#fCustNote").value="";$("#fIntNote").value="";
   showOnly("#fixForm");
   const left=toP(pay.amount)-toP(pay.refunded||0);
   $("#fixTitle").textContent=kindName==="correction"?"Correct a payment":"Refund a payment";
@@ -1086,10 +1126,12 @@ function openFix(kindName,pay,kept){
     ?`Reverses all of ${pay.receipt_no} (${money(toP(pay.amount))} by ${METHOD[pay.method]}). Use it when the payment was recorded wrongly; then record the right payment.`
     :`From ${pay.receipt_no} (${money(toP(pay.amount))} by ${METHOD[pay.method]}). Up to ${money(left)} can be refunded.`;
   show("#fixMoney",kindName==="refund");
+  // A correction is internal: no note to the customer.
+  show("#fCustNoteBox",kindName==="refund");
   $("#fAmt").value=FIX.amt;$("#fRef").value=FIX.ref;$("#fWhy").value=FIX.why;
   document.querySelectorAll('input[name="fm"]').forEach(r=>r.checked=r.value===FIX.method);
   refLabel("#fRefLabel",FIX.method);$("#fErr").textContent="";
-  $("#fMsg").textContent=kept?`This ${OP_WORD[kindName]} was not recorded. Check it, then tap Continue and Record it.`:"";
+  $("#fMsg").textContent=kept?`This ${OP_WORD[kindName]} was not recorded. Check it, then tap Continue and Record it. Notes are not kept on this phone: type any notes again.`:"";
   show("#fixFields",true);show("#fConfirm",false);window.scrollTo(0,0);
 }
 function fixProblems(){const out=[];let p=0;
@@ -1100,16 +1142,17 @@ function fixProblems(){const out=[];let p=0;
   else p=toP(FIX.pay.amount);
   if(!FIX.why.trim())out.push("Give a reason: it is kept with the record.");
   return{out,p};}
-["#fAmt","#fRef","#fWhy"].forEach(sel=>$(sel).addEventListener("input",()=>{if(!FIX)return;
-  FIX.amt=$("#fAmt").value;FIX.ref=$("#fRef").value;FIX.why=$("#fWhy").value;$("#fErr").textContent="";}));
+["#fAmt","#fRef","#fWhy","#fCustNote","#fIntNote"].forEach(sel=>$(sel).addEventListener("input",()=>{if(!FIX)return;
+  FIX.amt=$("#fAmt").value;FIX.ref=$("#fRef").value;FIX.why=$("#fWhy").value;FIX.cnote=$("#fCustNote").value;FIX.inote=$("#fIntNote").value;$("#fErr").textContent="";}));
 document.querySelectorAll('input[name="fm"]').forEach(r=>r.addEventListener("change",()=>{if(!FIX)return;FIX.method=r.value;refLabel("#fRefLabel",r.value);}));
 $("#fAll").addEventListener("click",()=>{if(!FIX)return;FIX.amt=((toP(FIX.pay.amount)-toP(FIX.pay.refunded||0))/100).toFixed(2);$("#fAmt").value=FIX.amt;});
 $("#fCancel").addEventListener("click",()=>cancelOp(FIX,"#fMsg",()=>{FIX=null;if(DOC)showView(DOC);}));
 $("#fNext").addEventListener("click",()=>{const{out,p}=fixProblems();$("#fErr").textContent=out.join(" ");if(out.length)return;
   const after=toP(DOC.balance)+p;
-  $("#fSummary").textContent=FIX.kind==="correction"
+  $("#fSummary").textContent=(FIX.kind==="correction"
     ?`Reverse ${FIX.pay.receipt_no} (${money(p)}) because: ${FIX.why.trim()}. Balance after: ${money(after)}.`
-    :`Refund ${money(p)} by ${METHOD[FIX.method]} from ${FIX.pay.receipt_no} because: ${FIX.why.trim()}. Balance after: ${money(after)}.`;
+    :`Refund ${money(p)} by ${METHOD[FIX.method]} from ${FIX.pay.receipt_no} because: ${FIX.why.trim()}. Balance after: ${money(after)}.`)
+    +(FIX.kind==="refund"&&FIX.cnote.trim()?` Note to the customer: ${FIX.cnote.trim()}`:"")+(FIX.inote.trim()?` Internal note: ${FIX.inote.trim()}`:"");
   show("#fixFields",false);show("#fConfirm",true);$("#fMsg").textContent="";});
 $("#fChange").addEventListener("click",()=>{show("#fConfirm",false);show("#fixFields",true);});
 $("#fYes").addEventListener("click",async()=>{
@@ -1119,9 +1162,10 @@ $("#fYes").addEventListener("click",async()=>{
   const op={type:st.kind,invoiceId:DOC.id,payId:st.pay.id,req:st.req,amount:p/100,method:corr?st.pay.method:st.method,
     ref:corr?null:st.ref.trim(),reason:why};
   try{await opDone(await sendOp(op,st,()=>corr
-      ?api.correctPayment({p_payment_id:st.pay.id,p_reason:why,p_request_id:st.req})
+      ?api.correctPayment({p_payment_id:st.pay.id,p_reason:why,p_request_id:st.req,p_internal_note:st.inote.trim()||null})
       :api.refundPayment({p_payment_id:st.pay.id,p_amount:p/100,p_method:st.method,p_reason:why,
-          p_reference:st.ref.trim()||null,p_request_id:st.req})));}
+          p_reference:st.ref.trim()||null,p_request_id:st.req,
+          p_customer_note:st.cnote.trim()||null,p_internal_note:st.inote.trim()||null})));}
   catch(err){await opFailed(err,st,"#fMsg");}
   finally{busy(btn,false);}
 });
@@ -1130,7 +1174,7 @@ $("#fYes").addEventListener("click",async()=>{
 //    frozen at the moment it was recorded.
 const RTITLE={payment:"Receipt",correction:"Correction",refund:"Refund"};
 async function showReceipt(id){
-  showOnly("#rcptSec");$("#rcpt").innerHTML="";$("#rMsg").textContent="";show("#rCopyBox",false);
+  showOnly("#rcptSec");$("#rcpt").innerHTML="";$("#rNotes").innerHTML="";$("#rMsg").textContent="";show("#rCopyBox",false);
   const note=RNOTE;RNOTE="";
   let rd;try{rd=await api.receipt(id);}catch(err){return readFailed(err,"#rMsg");}
   $("#rMsg").textContent=note;
@@ -1154,6 +1198,9 @@ async function showReceipt(id){
   const internal=rd.kind==="correction";
   show("#rShare",!internal);show("#rInternal",internal);
   $("#rInv").href="#/invoice/"+inv.id;
+  // Phase 2.2: both notes, shown to staff (the PDF prints only the note to
+  // the customer; the WhatsApp message carries neither).
+  $("#rNotes").innerHTML=payNotesHTML({...rd,id:RDOC.id},(RECORD_WORD[rd.kind]||"payment").replace(/^./,c=>c.toUpperCase())+" note");
 }
 function waReceiptText(rd){const inv=rd.invoice||{},first=String(inv.billed_to_name||"").trim().split(/\s+/)[0]||"",bal=toP(rd.balance_after);
   const what=rd.kind==="refund"?"refund receipt":"receipt";
@@ -1250,7 +1297,8 @@ async function makeReceiptPdf(rd){
   pdf.setFillColor(INK);pdf.rect(sx,sy,TW,gh,"F");pdf.setFillColor(OCHRE);pdf.rect(sx,sy,1.5,gh,"F");
   font("bold",11,"#ffffff");txt("Balance after",sx+1.5+2.5,sy+3);txt(money(bal),R-2.5,sy+3,{right:1});
   // -- Left of the account: notes
-  let ny=y;const nb=[["Recorded by",rd.recorded_by||""],["Questions",`WhatsApp or call ${B.phone} and quote ${rd.receipt_no}.`],["Terms","All amounts are in Ghana cedis (GH₵)."]];
+  // Phase 2.2: the note to the customer is printed; the internal note never is.
+  let ny=y;const nb=[["Note",rd.customer_note||""],["Recorded by",rd.recorded_by||""],["Questions",`WhatsApp or call ${B.phone} and quote ${rd.receipt_no}.`],["Terms","All amounts are in Ghana cedis (GH₵)."]];
   nb.filter(n=>n[1]).forEach(([h,b])=>{font("bold",7.5,MUTE);txt(h.toUpperCase(),L,ny,{sp:pt(7.5)*.1});ny+=pt(7.5)*1.4+1.5;
     font("normal",7.5,"#333333");wrap(b,W-TW-8).forEach(l=>{txt(l,L,ny);ny+=pt(7.5)*1.4;});ny+=3;});
   font("normal",7,MUTE);txt(`${B.website}  ·  ${B.phone}`,L,289);txt("Page 1 of 1",R,289,{right:1});
@@ -1335,7 +1383,7 @@ function ledgerRowHTML(r){
   else if(r.kind==="refund"){label=`<i class="dk-kind k-refund">Refund of ${esc(r.reverses_receipt_no||"")}</i>`;amount=`<span class="amt out">−${money(-amt)}</span>`;}
   else{label=`<i class="dk-kind k-correction">Correction of ${esc(r.reverses_receipt_no||"")}</i>`;amount=`<span class="amt rev">Reverses ${money(-amt)}</span>`;}
   return`<a class="dk-led ${cls}" href="#/receipt/${r.id}" data-rid="${r.id}">
-    <span class="dk-led-top"><b>${esc(r.receipt_no)}</b>${label}</span>
+    <span class="dk-led-top"><b>${esc(r.receipt_no)}${r.internal_note?`<i class="dk-note-led" title="Has an internal note">note</i>`:""}</b>${label}</span>
     <span class="dk-led-bot"><small>${esc(r.invoice_no||"")} · ${esc(r.billed_to_name||"(no name)")} · ${shortDate(r.paid_on)} · ${esc(how)}${r.reference?" · ref "+esc(r.reference):""}</small>${amount}</span>
   </a>`;}
 async function ledgerMore(){
@@ -1361,6 +1409,248 @@ function ledgerSearch(){const q=$("#lq").value.trim(),h=ledgerHash({...LED,q});h
   LED={...LED,q,rows:[],count:0,seq:LED.seq+1};$("#ledRows").innerHTML="";ledgerMore();}
 $("#lq").addEventListener("input",()=>{clearTimeout(ledTyping);ledTyping=setTimeout(ledgerSearch,350);});
 $("#ledSearchForm").addEventListener("submit",e=>{e.preventDefault();clearTimeout(ledTyping);ledgerSearch();});
+
+// ---- Phase 2.2: internal notes ------------------------------------------------
+// Internal notes are for TCP staff only: never on a PDF, a WhatsApp message
+// or the address. A note is never edited: a mistake is fixed with a new,
+// linked note (a correction), and the original stays, struck through, with
+// its latest correction beneath it. Each note can be corrected once, so a
+// chain is one straight line: original, correction 1, correction 2…
+// ONE renderer (noteHTML) draws a note everywhere it appears (the invoice's
+// notes log, the payment history, the receipt view and Notes search), so a
+// chain always reads the same in all four places.
+const NCAT={general:"General",payment:"Payment",delivery:"Delivery",customer_request:"Customer request",
+  complaint:"Complaint",stock:"Stock",follow_up:"Follow-up"};
+const RECORD_WORD={payment:"payment",refund:"refund",correction:"correction"};
+// A note's time, in Ghana time whatever the phone's clock is set to.
+function noteTime(at){if(!at)return"";try{return new Date(at).toLocaleString("en-GB",{timeZone:"Africa/Accra",day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:false});}catch(e){return String(at);}}
+const timesText=n=>`Corrected ${n} ${n===1?"time":"times"}`;
+// What a correction corrects, in words, linked to it.
+function correctsHTML(c){
+  if(c.corrects_note_id)return`<span class="dk-note-corrects">Corrects ${esc(c.corrects_by||"a")}'s note of ${esc(noteTime(c.corrects_at))}</span>`;
+  if(c.corrects_payment_id)return`<span class="dk-note-corrects">Correction to the internal note on ${RECORD_WORD[c.corrects_kind]||"payment"} <a href="#/receipt/${c.corrects_payment_id}">${esc(c.corrects_receipt_no||"")}</a></span>`;
+  return"";}
+// The latest correction beneath a corrected note: who, when, its words, and
+// how many times the note has been corrected. The same in every view.
+function latestHTML(chain){
+  if(!chain||!chain.length)return"";const l=chain[chain.length-1];
+  return`<div class="dk-note-latest" data-latest="${l.id}"><small>Latest correction · ${esc(l.by||"")} · ${esc(noteTime(l.at))} · ${timesText(chain.length)}</small>${esc(l.body)}</div>`;}
+// One note. n: {id, body, by, at, tags[], chain[], corrects (html), acts
+// (html), bodyHTML (search: the body with matched words marked)}.
+function noteHTML(n){
+  const corrected=!!(n.chain&&n.chain.length);
+  const tags=(n.tags||[]).map(t=>`<i class="dk-note-tag">${esc(t)}</i>`).join("")
+    +(n.correction?`<i class="dk-note-tag t-correction">Correction</i>`:"")
+    +(corrected?`<i class="dk-note-tag t-corrected">Corrected</i>`:"");
+  return`<div class="dk-note${corrected?" k-corrected":""}"${n.id?` data-note="${n.id}"`:""}>
+    <div class="dk-note-head">${tags}<span>${esc(n.by||"")}${n.at?" · "+esc(noteTime(n.at)):""}</span></div>
+    ${n.corrects?`<div class="dk-note-head">${n.corrects}</div>`:""}
+    <p class="dk-note-body">${n.bodyHTML!=null?n.bodyHTML:esc(n.body)}</p>
+    ${latestHTML(n.chain)}
+    ${n.acts?`<div class="dk-note-acts">${n.acts}</div>`:""}
+  </div>`;}
+// "Correct this note" on the latest entry of a chain; on a corrected note
+// it reads "Correct the latest" and corrects the end of its chain.
+function corrActs(chain,target){
+  if(chain&&chain.length)return`<button type="button" class="dk-link" data-ncorr="note" data-nid="${chain[chain.length-1].id}">Correct the latest</button>`;
+  return target.note?`<button type="button" class="dk-link" data-ncorr="note" data-nid="${target.note}">Correct this note</button>`
+                    :`<button type="button" class="dk-link" data-ncorr="payment" data-pid="${target.payment}">Correct this note</button>`;}
+// A payment record's notes (payment history and receipt view): the note
+// to the customer as printed, and the internal note with its chain.
+function payNotesHTML(p,label){
+  let h="";
+  if(p.customer_note)h+=`<p><span class="lbl">Note to the customer:</span> ${esc(p.customer_note)}</p>`;
+  if(p.internal_note)h+=noteHTML({body:p.internal_note,by:p.recorded_by_name||p.recorded_by||"",at:p.recorded_at,
+    tags:[label||"Internal note"],chain:p.internal_note_chain||[],acts:corrActs(p.internal_note_chain,{payment:p.id})});
+  return h?`<div class="dk-pay-notes">${h}</div>`:"";}
+
+// -- The invoice's notes log (under the draft form or the invoice view)
+let NDOC=null;          // the invoice whose notes are shown: {id,state,internal_notes}
+let NADD={req:newId()}; // the note being added; a new request id per new note
+// A note's chain in the log: follow corrected_by_note_id to the end.
+function chainIn(list,note){const by=new Map(list.map(n=>[n.id,n])),out=[];let c=note;
+  while(c&&c.corrected_by_note_id&&out.length<1000){c=by.get(c.corrected_by_note_id);if(c)out.push(c);}
+  return out;}
+function renderNotes(doc,draftForm){
+  NDOC=doc?{id:doc.id,state:doc.state,internal_notes:doc.internal_notes||[]}:null;
+  show("#notesSec",true);
+  const has=!!(NDOC&&NDOC.id);
+  show("#nAdd",has);show("#nNeedSave",!has);
+  const list=has?NDOC.internal_notes:[];
+  const copy=draftForm&&canEdit();
+  $("#nList").innerHTML=list.length?list.map(n=>{
+    const chain=chainIn(list,n),was=n.corrects_note_id&&list.find(x=>x.id===n.corrects_note_id);
+    const tags=[NCAT[n.category]||n.category].concat(n.estimate_ref?["From estimate "+n.estimate_ref]:[]);
+    return noteHTML({id:n.id,body:n.body,by:n.by,at:n.at,tags,chain,correction:!!(n.corrects_note_id||n.corrects_payment_id),
+      corrects:correctsHTML({...n,corrects_by:was?was.by:null,corrects_at:was?was.at:null}),acts:corrActs(chain,{note:n.id})+(copy&&n.estimate_ref?`<button type="button" class="dk-link" data-ncopy="${n.id}">Copy to note to customer</button>`:"")});
+  }).join(""):(has?`<p class="dk-help">No internal notes yet.</p>`:"");
+  // An estimate's note waiting for the draft's first save.
+  const est=draftForm&&S.estNote;show("#nEst",!!est);
+  $("#nEst").innerHTML=est?`<p class="dk-help">From the customer's estimate${S.estNote.ref?" "+esc(S.estNote.ref):""}. It is added to the internal notes when the draft is saved.</p>
+    <p class="dk-note-body">${esc(S.estNote.text)}</p>${canEdit()?`<div class="dk-note-acts"><button type="button" class="dk-link" data-ncopy="est">Copy to note to customer</button></div>`:""}`:"";
+}
+// Re-read the invoice's notes after a change. In the draft form only the
+// notes are refreshed, so unsaved work in the form is never touched.
+async function reloadNotes(){
+  if(!NDOC)return;const d=await api.document(NDOC.id);
+  if($("#issuedSec").hidden){renderNotes(d,true);}else{DOC=d;showView(d);}
+}
+// Adding a note: the request id stays the same for every retry of the same
+// note (a double tap or a lost reply gives one note), and changes when the
+// words or the category change.
+const nCat=()=>(document.querySelector('input[name="ncat"]:checked')||{}).value||"general";
+$("#nBody").addEventListener("input",()=>{NADD.req=newId();$("#nMsg").textContent="";});
+document.querySelectorAll('input[name="ncat"]').forEach(r=>r.addEventListener("change",()=>{NADD.req=newId();}));
+$("#nSave").addEventListener("click",async()=>{
+  const btn=$("#nSave"),m=$("#nMsg"),body=$("#nBody").value.trim();
+  if(btn.disabled||!NDOC||!NDOC.id)return;
+  if(!body){m.textContent="Type the note first.";return;}
+  busy(btn,true,"Saving…");m.textContent="";
+  try{await api.addNote({p_invoice_id:NDOC.id,p_body:body,p_category:nCat(),p_request_id:NADD.req});
+    NADD={req:newId()};$("#nBody").value="";
+    const g=document.querySelector('input[name="ncat"][value="general"]');if(g)g.checked=true;
+    await reloadNotes();$("#nMsg").textContent="Note saved.";}
+  catch(err){noteFailed(err,m,"Tap Save note again: it is never saved twice.");}
+  finally{busy(btn,false);}
+});
+function noteFailed(err,m,again){const k=kind(err);
+  if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+  if(k==="expired")return expire();
+  m.textContent=k==="offline"?"Not saved: no connection. "+again:"Not saved: "+String(err&&err.message||err);}
+// Copy to note to customer (drafts only): the customer's words go into
+// the note to the customer, to tidy before issuing. The internal note stays.
+document.addEventListener("click",e=>{const b=e.target.closest("[data-ncopy]");if(!b||!canEdit()||$("#form").hidden)return;
+  const n=b.dataset.ncopy==="est"?S.estNote:(NDOC&&NDOC.internal_notes||[]).find(x=>x.id===+b.dataset.ncopy);
+  const text=n&&(n.text||n.body);if(!text)return;
+  S.note=S.note.trim()?S.note.trim()+"\n"+text:text;$("#iNote").value=S.note;changed();
+  $("#nMsg").textContent="Copied into the note to the customer. Save the draft to keep it.";});
+
+// -- Correcting a note: a box opens under the note being corrected (in the
+//    notes log, the payment history or the receipt view).
+let CORR=null;   // {note|payment, invoiceId, req, where}
+function corrBoxHTML(){return`<div class="dk-corr" id="ncBox">
+  <label for="ncText">Correction (the original stays, marked corrected)</label>
+  <textarea id="ncText" rows="3" maxlength="1000"></textarea>
+  <div class="dk-row"><button type="button" id="ncSave" class="dk-btn primary">Save correction</button><button type="button" id="ncCancel" class="dk-btn ghost">Cancel</button></div>
+  <p id="ncMsg" class="dk-msg" role="alert"></p></div>`;}
+function openCorr(el,target,text,msg){
+  const old=$("#ncBox");if(old)old.remove();
+  const host=el.closest(".dk-note,.dk-pay-notes")||el;
+  host.insertAdjacentHTML("afterend",corrBoxHTML());
+  CORR={...target,req:newId()};
+  $("#ncText").value=text||"";$("#ncMsg").textContent=msg||"";
+  $("#ncText").addEventListener("input",()=>{if(CORR)CORR.req=newId();});
+  $("#ncCancel").addEventListener("click",()=>{CORR=null;const b=$("#ncBox");if(b)b.remove();});
+  $("#ncSave").addEventListener("click",saveCorr);
+  $("#ncText").focus();
+}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-ncorr]");if(!b)return;
+  const invoiceId=!$("#rcptSec").hidden&&RDOC?(RDOC.invoice||{}).id:NDOC&&NDOC.id||DOC&&DOC.id;
+  if(!invoiceId)return;
+  openCorr(b,b.dataset.ncorr==="note"?{note:+b.dataset.nid,invoiceId}:{payment:+b.dataset.pid,invoiceId});});
+async function saveCorr(){
+  const btn=$("#ncSave"),m=$("#ncMsg"),body=$("#ncText").value.trim(),st=CORR;
+  if(!st||btn.disabled)return;if(!body){m.textContent="Type the correction first.";return;}
+  busy(btn,true,"Saving…");m.textContent="";
+  try{await api.addNote({p_invoice_id:st.invoiceId,p_body:body,p_corrects_note_id:st.note||null,
+      p_corrects_payment_id:st.payment||null,p_request_id:st.req});
+    CORR=null;await reloadCorrView();}
+  catch(err){
+    // Someone else corrected it first: show their correction, and keep the
+    // words typed here in a box against the new latest (design v1.5).
+    if(/was just corrected by/.test(String(err&&err.message||""))){
+      const msg=String(err.message);
+      try{await reloadCorrView();}catch(e){}
+      const latest=latestAfter(st);
+      // The latest entry itself if it is on screen (the notes log), else the
+      // line showing it under the corrected note (receipt view).
+      const el=latest?document.querySelector(`[data-note="${latest}"]`)||document.querySelector(`[data-latest="${latest}"]`):null;
+      if(el&&latest){openCorr(el,{note:latest,invoiceId:st.invoiceId},body,msg);return;}
+      m.textContent=msg;return;}
+    noteFailed(err,m,"Tap Save correction again: it is never saved twice.");}
+  finally{if(btn.isConnected)busy(btn,false);}
+}
+// Re-read whichever screen the correction was made on.
+async function reloadCorrView(){
+  if(!$("#rcptSec").hidden&&RDOC){await showReceipt(RDOC.id);return;}
+  await reloadNotes();}
+// After a lost race: the latest entry of the chain the target is in.
+function latestAfter(t){
+  if(!$("#rcptSec").hidden&&RDOC){const c=RDOC.internal_note_chain||[];return c.length?c[c.length-1].id:null;}
+  const list=NDOC&&NDOC.internal_notes||[];
+  if(t.payment){const first=list.find(n=>n.corrects_payment_id===t.payment);if(!first)return null;const c=chainIn(list,first);return(c.length?c[c.length-1]:first).id;}
+  const n=list.find(x=>x.id===t.note);if(!n)return null;const c=chainIn(list,n);return c.length?c[c.length-1].id:null;}
+
+// -- Searching notes (#/notes): the database searches; the phone sends the
+//    words and filters and shows a page of results at a time. The address
+//    holds only the typed words and filters, never a note's text.
+let NS={q:"",cat:"all",by:"",from:"",to:"",hide:false,rows:[],count:0,seq:0},AUTHORS=null;
+const NKIND={invoice_note:"Internal note",receipt_customer_note:"Note to the customer · receipt",invoice_customer_note:"Note to the customer · invoice"};
+function notesHash(o){const p=new URLSearchParams();
+  if(o.q)p.set("q",o.q);if(o.cat&&o.cat!=="all")p.set("cat",o.cat);if(o.by)p.set("by",o.by);
+  if(o.from)p.set("from",o.from);if(o.to)p.set("to",o.to);if(o.hide)p.set("hide","1");
+  const s=p.toString();return"#/notes"+(s?"?"+s:"");}
+const noteWords=q=>String(q||"").trim().split(/\s+/).filter(Boolean);
+// The note's words with the typed words marked; a long note shows the part
+// around the first match.
+function markWords(text,words){
+  let t=String(text||"");
+  if(words.length&&t.length>300){const i=t.toLowerCase().indexOf(words[0].toLowerCase());
+    if(i>120){t="…"+t.slice(i-100);}if(t.length>300)t=t.slice(0,300)+"…";}
+  if(!words.length)return esc(t);
+  const re=new RegExp("("+words.map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")","ig");
+  return t.split(re).map((part,i)=>i%2?`<mark>${esc(part)}</mark>`:esc(part)).join("");}
+function noteRowHTML(r,words){
+  const kindWord=r.kind==="payment_note"?(r.record_kind==="refund"?"Refund note":r.record_kind==="correction"?"Correction note":"Payment note"):NKIND[r.kind]||r.kind;
+  const tags=[kindWord].concat(r.category?[NCAT[r.category]||r.category]:[]);
+  const link=r.payment_id&&(r.kind==="payment_note"||r.kind==="receipt_customer_note")?"#/receipt/"+r.payment_id:"#/invoice/"+r.invoice_id;
+  const bal=toP(r.balance||0),status=r.invoice_state==="draft"?"Draft":STATUS[r.status]||r.status||"";
+  const rec=[r.invoice_no||"Draft",r.receipt_no,r.customer||"(no name)",status+(bal>0&&r.invoice_state==="issued"?`, ${money(bal)} left`:"")].filter(Boolean).map(esc).join(" · ");
+  return`<div class="dk-nres"><a class="dk-nres-rec" href="${link}">${rec}</a>`+noteHTML({body:r.body,bodyHTML:markWords(r.body,words),by:r.by,at:r.at,tags,
+    chain:r.chain||[],correction:!!(r.corrects_note_id||r.corrects_payment_id),
+    corrects:correctsHTML({...r,corrects_kind:r.corrects_record_kind})})+`</div>`;}
+async function showNotes(params){
+  view("#notesV",null);
+  NS={q:params.get("q")||"",cat:params.get("cat")||"all",by:params.get("by")||"",from:params.get("from")||"",to:params.get("to")||"",
+      hide:params.get("hide")==="1",rows:[],count:0,seq:NS.seq+1};
+  $("#nsq").value=NS.q;$("#nsFrom").value=NS.from;$("#nsTo").value=NS.to;$("#nsHide").checked=NS.hide;
+  document.querySelectorAll("#nsCats [data-ncat]").forEach(b=>b.classList.toggle("on",b.dataset.ncat===NS.cat));
+  $("#nsRows").innerHTML="";$("#nsInfo").textContent="";$("#nsMsg").textContent="";show("#nsMore",false);
+  if(!AUTHORS){try{AUTHORS=await api.noteAuthors()||[];}catch(err){AUTHORS=null;}}
+  $("#nsBy").innerHTML=`<option value="">Anyone</option>`+(AUTHORS||[]).map(a=>`<option value="${esc(a.id)}">${esc(a.name)}${a.active?"":" (left)"}</option>`).join("");
+  $("#nsBy").value=NS.by;
+  notesMore();
+}
+async function notesMore(){
+  const my=NS.seq,btn=$("#nsMore"),words=noteWords(NS.q);
+  if(words.some(w=>w.length<3)){$("#nsInfo").textContent="Type at least 3 letters or digits for each word.";$("#nsRows").innerHTML="";show("#nsMore",false);return;}
+  busy(btn,true,"Loading…");$("#nsMsg").textContent="";
+  try{
+    const res=await api.searchNotes({p_words:words.length?words:null,p_category:NS.cat==="all"?null:NS.cat,p_author:NS.by||null,
+      p_from:NS.from||null,p_to:NS.to||null,p_hide_corrected:NS.hide,p_offset:NS.rows.length,p_limit:PAGE});
+    if(my!==NS.seq)return;
+    NS.rows=NS.rows.concat(res.rows||[]);NS.count=res.count||0;
+    $("#nsRows").innerHTML=NS.rows.length?NS.rows.map(r=>noteRowHTML(r,words)).join(""):`<p class="dk-help">No notes match.</p>`;
+    $("#nsInfo").textContent=NS.count?`${NS.count} ${NS.count===1?"note":"notes"} · newest first`:"";
+    show("#nsMore",NS.rows.length<NS.count);
+  }catch(err){if(my===NS.seq)readFailed(err,"#nsMsg");}
+  finally{busy(btn,false);}
+}
+$("#nsMore").addEventListener("click",notesMore);
+// Any change of words or filter: a new search, and the address updated.
+function notesSearch(patch){
+  NS={...NS,...patch,rows:[],count:0,seq:NS.seq+1};
+  const h=notesHash(NS);history.replaceState(null,"",h);HERE=h;
+  document.querySelectorAll("#nsCats [data-ncat]").forEach(b=>b.classList.toggle("on",b.dataset.ncat===NS.cat));
+  $("#nsRows").innerHTML="";notesMore();}
+let nsTyping=null;
+$("#nsq").addEventListener("input",()=>{clearTimeout(nsTyping);nsTyping=setTimeout(()=>notesSearch({q:$("#nsq").value.trim()}),350);});
+$("#nsForm").addEventListener("submit",e=>{e.preventDefault();clearTimeout(nsTyping);notesSearch({q:$("#nsq").value.trim()});});
+$("#nsCats").addEventListener("click",e=>{const b=e.target.closest("[data-ncat]");if(b)notesSearch({cat:b.dataset.ncat});});
+$("#nsBy").addEventListener("change",()=>notesSearch({by:$("#nsBy").value}));
+$("#nsFrom").addEventListener("change",()=>notesSearch({from:$("#nsFrom").value}));
+$("#nsTo").addEventListener("change",()=>notesSearch({to:$("#nsTo").value}));
+$("#nsHide").addEventListener("change",()=>notesSearch({hide:$("#nsHide").checked}));
 
 // -- Cancelling an issued invoice (owner only; design "Cancelling an issued
 //    invoice"). The database refuses it while money is held, and refuses a
@@ -1402,19 +1692,23 @@ $("#cxYes").addEventListener("click",async()=>{
 // One page, four screens, picked by the part of the address after "#/":
 //   #/  Home · #/invoices  the list · #/invoice/<id>  one invoice · #/new
 // Anything else after "#" (a sign-in link's details) is not a screen.
-const VIEWS=["#homeV","#listV","#ledV","#invV"];
+const VIEWS=["#homeV","#listV","#ledV","#notesV","#invV"];
 let HERE="#/",SKIP=false;   // HERE: the screen shown now (for "Go back")
 const canEdit=()=>!!ME&&(ME.role==="owner"||ME.role==="sales");
 function view(name,tab){VIEWS.forEach(v=>show(v,v===name));
   document.querySelectorAll("#tabs a").forEach(a=>a.classList.toggle("on",a.dataset.tab===tab));window.scrollTo(0,0);}
 // Inside the invoice screen: the estimate box, the form, or the read-only view.
-function showOnly(part){["#start","#form","#issuedSec","#discardBox","#payForm","#fixForm","#rcptSec"].forEach(p=>show(p,p===part));}
+function showOnly(part){["#start","#form","#issuedSec","#discardBox","#payForm","#fixForm","#rcptSec"].forEach(p=>show(p,p===part));
+  // The notes panel is shown again by the form or the view that wants it;
+  // an open correction box goes with the screen it was on.
+  show("#notesSec",false);CORR=null;const b=$("#ncBox");if(b)b.remove();}
 function parseRoute(){
   const h=location.hash||"";
   if(!h.startsWith("#/"))return{name:"home",params:new URLSearchParams()};
   const[path,qs]=h.slice(2).split("?"),parts=path.split("/").filter(Boolean),params=new URLSearchParams(qs||"");
   if(parts[0]==="invoices")return{name:"invoices",params};
   if(parts[0]==="payments")return{name:"payments",params};
+  if(parts[0]==="notes")return{name:"notes",params};
   if(parts[0]==="invoice"&&/^\d+$/.test(parts[1]||""))return{name:"invoice",id:+parts[1],params};
   if(parts[0]==="new")return{name:"new",params};
   if(parts[0]==="receipt"&&/^\d+$/.test(parts[1]||""))return{name:"receipt",id:+parts[1],params};
@@ -1439,6 +1733,7 @@ async function route(){
   if(r.name==="home")return showHome();
   if(r.name==="invoices")return showList(r.params);
   if(r.name==="payments")return showLedger(r.params);
+  if(r.name==="notes")return showNotes(r.params);
   if(r.name==="receipt"){view("#invV","invoices");return showReceipt(r.id);}
   view("#invV",r.name==="new"?"new":"invoices");
   if(r.name==="new"){
@@ -1473,6 +1768,7 @@ function showForm(){view("#invV",S.invoiceId?"invoices":"new");showOnly("#form")
   $("#fee").value=S.fee;$("#iDue").value=S.due;$("#iNote").value=S.note;
   $("#custPicked").textContent=S.customerCode?`Existing customer ${S.customerCode}`:"";
   render();
+  renderNotes(S.invoiceId?(NDOC&&NDOC.id===S.invoiceId?NDOC:{id:S.invoiceId,state:"draft",internal_notes:[]}):null,true);
 }
 
 // Errors while reading a screen: removed access signs out, an expired

@@ -157,6 +157,7 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
         <!-- Phase 2.1 (decision 1): money received today, net of refunds -->
         <a id="hTodayLink" class="dk-today" href="#/payments?period=today"><span>Received today</span><b id="hToday">—</b></a>
         <a id="hNew" class="dk-btn primary dk-wide" href="#/new">New invoice</a>
+        <a class="dk-btn ghost dk-wide" href="#/notes">Search notes</a>
         <p id="homeMsg" class="dk-msg" role="alert"></p>
       </div>
       <div class="dk-card">
@@ -173,6 +174,7 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
         <label for="q" class="sr">Search by number, customer name or phone</label>
         <input id="q" type="search" autocomplete="off" placeholder="Number, name or phone">
       </form>
+      <p class="dk-help dk-notes-link"><a href="#/notes">Search notes</a> (staff notes on invoices and receipts)</p>
       <div id="filters" class="dk-chips" role="group" aria-label="Show">
         <button type="button" data-status="all">All</button>
         <button type="button" data-status="draft">Drafts</button>
@@ -228,6 +230,35 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
       <div id="ledRows" class="dk-list"></div>
       <button type="button" id="ledMore" class="dk-btn dk-wide" hidden>Show more</button>
       <p id="ledMsg" class="dk-msg" role="alert"></p>
+    </section>
+
+    <!-- Phase 2.2: searching every note (design "Searching notes") -->
+    <section id="notesV" class="dk-card" hidden>
+      <h2>Search notes</h2>
+      <form id="nsForm" role="search" class="dk-search">
+        <label for="nsq" class="sr">Words in the note (3 letters or more each)</label>
+        <input id="nsq" type="search" autocomplete="off" placeholder="Words in the note, e.g. balance Friday">
+      </form>
+      <div id="nsCats" class="dk-chips" role="group" aria-label="Category">
+        <button type="button" data-ncat="all">Any category</button>
+        <button type="button" data-ncat="general">General</button>
+        <button type="button" data-ncat="payment">Payment</button>
+        <button type="button" data-ncat="delivery">Delivery</button>
+        <button type="button" data-ncat="customer_request">Customer request</button>
+        <button type="button" data-ncat="complaint">Complaint</button>
+        <button type="button" data-ncat="stock">Stock</button>
+        <button type="button" data-ncat="follow_up">Follow-up</button>
+      </div>
+      <div class="dk-grid">
+        <div><label for="nsBy">Written by</label><select id="nsBy"><option value="">Anyone</option></select></div>
+        <div><label for="nsFrom">From</label><input id="nsFrom" type="date"></div>
+        <div><label for="nsTo">To</label><input id="nsTo" type="date"></div>
+      </div>
+      <label class="dk-check"><input type="checkbox" id="nsHide"> Leave out corrected notes</label>
+      <p id="nsInfo" class="dk-help" role="status"></p>
+      <div id="nsRows" class="dk-list"></div>
+      <button type="button" id="nsMore" class="dk-btn dk-wide" hidden>Show more</button>
+      <p id="nsMsg" class="dk-msg" role="alert"></p>
     </section>
 
     <!-- One invoice: the form (new invoice or a draft) or the read-only view -->
@@ -294,7 +325,7 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
         <h2><span class="dk-no">5</span>Invoice details</h2>
         <div class="dk-grid">
           <div><label for="iDue">Pay by (optional)</label><input id="iDue" type="date"></div>
-          <div class="wide"><label for="iNote">Note to the customer (optional, printed on the invoice)</label><textarea id="iNote" rows="2" placeholder="e.g. MTN MoMo number and name, or bank details"></textarea></div>
+          <div class="wide"><label for="iNote">Note to the customer (optional, printed on the invoice)</label><textarea id="iNote" rows="2" maxlength="500" placeholder="e.g. MTN MoMo number and name, or bank details"></textarea></div>
         </div>
       </section>
 
@@ -345,6 +376,10 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
         <input id="pRef" autocomplete="off">
         <label for="pDate">Date paid</label>
         <input id="pDate" type="date">
+        <label for="pCustNote">Note to the customer (optional, printed on the receipt)</label>
+        <textarea id="pCustNote" rows="2" maxlength="300" placeholder="e.g. Thank you. Balance due by Friday."></textarea>
+        <label for="pIntNote">Internal note (optional, staff only)</label>
+        <textarea id="pIntNote" rows="2" maxlength="500" placeholder="e.g. Paid by his brother Kwame."></textarea>
         <p id="pErr" class="dk-lerr" role="alert"></p>
         <div class="dk-row">
           <button type="button" id="pNext" class="dk-btn primary">Continue</button>
@@ -380,6 +415,12 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
         </div>
         <label for="fWhy">Reason (kept with the record)</label>
         <input id="fWhy" autocomplete="off">
+        <div id="fCustNoteBox">
+          <label for="fCustNote">Note to the customer (optional, printed on the refund receipt)</label>
+          <textarea id="fCustNote" rows="2" maxlength="300"></textarea>
+        </div>
+        <label for="fIntNote">Internal note (optional, staff only)</label>
+        <textarea id="fIntNote" rows="2" maxlength="500"></textarea>
         <p id="fErr" class="dk-lerr" role="alert"></p>
         <div class="dk-row">
           <button type="button" id="fNext" class="dk-btn primary">Continue</button>
@@ -400,6 +441,7 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
     <section id="rcptSec" class="dk-card" hidden>
       <h2 id="rTitle">Receipt</h2>
       <div id="rcpt"></div>
+      <div id="rNotes"></div>
       <p id="rMsg" class="dk-msg" role="status"></p>
       <div id="rCopyBox" class="dk-copy" hidden>
         <label for="rCopyText">Message for the customer</label>
@@ -469,6 +511,31 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
         <p id="cxMsg" class="dk-msg" role="alert"></p>
       </div>
       <button type="button" id="newBtn2" class="dk-btn ghost">New invoice</button>
+    </section>
+
+    <!-- Phase 2.2: the invoice's internal notes (staff only, never sent to
+         the customer), under the draft form or the invoice view -->
+    <section id="notesSec" class="dk-card" hidden>
+      <h2>Internal notes</h2>
+      <p class="dk-help">Staff only. Never on the invoice, a receipt or WhatsApp. Notes are never edited: a mistake is fixed with Correct this note.</p>
+      <div id="nEst" class="dk-note dk-note-est" hidden></div>
+      <div id="nList"></div>
+      <div id="nAdd">
+        <label for="nBody" id="nBodyLabel">Add a note</label>
+        <textarea id="nBody" rows="3" maxlength="1000"></textarea>
+        <fieldset id="nCats" class="dk-methods"><legend>Category</legend>
+          <label><input type="radio" name="ncat" value="general" checked> General</label>
+          <label><input type="radio" name="ncat" value="payment"> Payment</label>
+          <label><input type="radio" name="ncat" value="delivery"> Delivery</label>
+          <label><input type="radio" name="ncat" value="customer_request"> Customer request</label>
+          <label><input type="radio" name="ncat" value="complaint"> Complaint</label>
+          <label><input type="radio" name="ncat" value="stock"> Stock</label>
+          <label><input type="radio" name="ncat" value="follow_up"> Follow-up</label>
+        </fieldset>
+        <button type="button" id="nSave" class="dk-btn primary">Save note</button>
+      </div>
+      <p id="nNeedSave" class="dk-help" hidden>Save the draft first, then notes can be added.</p>
+      <p id="nMsg" class="dk-msg" role="alert"></p>
     </section>
     </div>
 

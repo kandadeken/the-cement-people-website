@@ -85,3 +85,8 @@ body::before,body>*:not(#quote){display:none!important}
 /* Room for totals up to GH₵99,999,999.00 on one line (17 Nov 2026: a
    six-figure total was cut off at the right edge). */
 }
+/* Phase 2.2: the customer's note on the printed estimate, under the
+   drop-off and delivery band. */
+.q-note{margin:-2mm 0 4.5mm;padding:2.5mm 3.5mm;border-left:.8mm solid #ff9802;background:#f4f4f4}
+.q-note small{display:block;font-size:7pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5a5a;margin-bottom:.6mm}
+.q-note p{margin:0;font-weight:600;font-size:8.5pt;white-space:pre-wrap}

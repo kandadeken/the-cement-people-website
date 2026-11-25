@@ -205,3 +205,32 @@ a.dk-btn{text-decoration:none}
 /* Four tabs (Phase 2.1 adds Payments): a little tighter, and words never
    broken mid-word ("New invoice" may take two lines, "Payments" never). */
 .dk-tabs a{margin:0 2px;padding:0 2px;font-size:14px;line-height:1.15;text-align:center;overflow-wrap:normal;word-break:keep-all;hyphens:none}
+/* Phase 2.2: notes. A corrected note stays readable, struck through, with
+   its latest correction beneath it; kinds and categories are words. */
+.dk-note{padding:10px 0;border-bottom:1px solid var(--line)}
+.dk-note-head{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline;font-size:13px;color:var(--mute)}
+.dk-note-head b{color:var(--ink)}
+.dk-note p{margin:4px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.dk-note.k-corrected > p.dk-note-body{text-decoration:line-through;color:var(--mute)}
+.dk-note-latest{margin:6px 0 0;padding:6px 10px;border-left:4px solid var(--y);background:var(--y-tint);font-size:14px}
+.dk-note-latest small{display:block;color:var(--mute);font-size:12px}
+.dk-note-tag{font-style:normal;font-size:12px;font-weight:800;padding:1px 8px;border-radius:10px;background:var(--bg);color:var(--ink)}
+.dk-note-tag.t-corrected{background:#ececec;color:var(--mute)}
+.dk-note-tag.t-correction{background:var(--y-tint)}
+.dk-note-acts{display:flex;flex-wrap:wrap;gap:16px;margin-top:4px}
+.dk-note-est{border:1px dashed var(--line);border-radius:3px;padding:10px}
+#nBody,#pCustNote,#pIntNote,#fCustNote,#fIntNote{width:100%;font:inherit}
+.dk-pay-notes{font-size:13px;margin:2px 0 4px}
+.dk-pay-notes p{margin:2px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.dk-pay-notes .lbl{font-weight:800;color:var(--mute)}
+.dk-check{display:flex;align-items:center;gap:8px;min-height:44px;font-weight:700;font-size:14px}
+.dk-check input{width:20px;height:20px;min-height:0;margin:0;flex:none}
+.dk-notes-link{margin:4px 0 8px}
+mark{background:var(--y-tint);color:inherit;padding:0 1px}
+.dk-note-led{font-style:normal;font-size:11px;font-weight:800;color:var(--mute);border:1px solid var(--line);border-radius:8px;padding:0 6px;margin-left:6px}
+.dk-corr{margin:6px 0 10px;padding:10px;border:1px solid var(--line);border-left:4px solid var(--y);border-radius:3px}
+.dk-corr textarea{width:100%;font:inherit}
+.dk-nres{padding:6px 0;border-bottom:1px solid var(--line)}
+.dk-nres .dk-note{border-bottom:0;padding:4px 0}
+.dk-nres-rec{display:block;font-weight:800;font-size:14px;color:var(--ink);overflow-wrap:anywhere}
+.dk-note-corrects{font-style:italic}

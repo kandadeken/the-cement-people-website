@@ -34,7 +34,10 @@ import WhatsAppIcon from "./WhatsAppIcon.astro";
 <div class="estart" id="start"><b>How to build your estimate</b><ol><li>Choose a category in the price list: Cement, Iron rods or Binding wire.</li><li>Tap <b>Add</b> on each product you need.</li><li>Set the quantity with − and +, or type it. Your total updates as you go.</li></ol></div>
 <div id="lines"></div>
 <section class="edeliv"><h3>Delivery</h3><p>Not included in the total. We confirm the delivery cost for your order and location after you send this estimate.</p>
-<label class="dl">Drop-off location<input type="text" id="loc" placeholder="Town or site address" autocomplete="street-address"></label></section>
+<label class="dl">Drop-off location<input type="text" id="loc" placeholder="Town or site address" autocomplete="street-address"></label>
+<!-- Phase 2.2 (25 Nov 2026): an optional note for TCP. It goes in the
+     WhatsApp message and on the printed estimate, only when filled in. -->
+<label class="dl">Note for The Cement People (optional)<textarea id="enote" rows="2" maxlength="300" placeholder="For example: deliver after 2 pm, or call my site manager"></textarea></label></section>
 <!-- One delivery explanation only (in the box above); this line keeps the
      price disclaimer on screen (17 Nov 2026). -->
 <p class="fine">Estimates are indicative; final prices and availability are confirmed with you.</p>

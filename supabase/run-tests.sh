@@ -80,6 +80,9 @@ for test in "$HERE"/tests/*.sql "$HERE"/tests/*.sh; do
   fi
   if output="$("${run[@]}" 2>&1)"; then
     echo "PASS  $name"
+    # Measured timings (e.g. the notes search speed test) are shown even
+    # when the test passes.
+    echo "$output" | grep -E "TIMING" | sed 's/^.*TIMING/      TIMING/' || true
     passed=$((passed + 1))
   else
     echo "FAIL  $name"

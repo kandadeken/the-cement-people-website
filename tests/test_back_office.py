@@ -144,6 +144,30 @@ Phase 2.1 Design, Payments Ledger and Cancelling Invoices (v1.1)"):
   L09  the Payments tab and the Cancel box fit 360 px and 390 px phones
   L10  a long cancellation reason appears in full in the PDF, never over
        the footer; CANCELLED is on every page of a long invoice
+
+Phase 2.2, notes from estimate to receipt ("TCP Back Office: Phase 2.2
+Design, Notes from Estimate to Receipt (v1.6)"):
+  N01  the estimator's note: in the WhatsApp message and the printed
+       estimate only when filled in; without one the message is as before
+  N02  an estimate's note goes into the draft's internal notes once;
+       Copy to note to customer; gone after issue; the invoice PDF prints
+       the note to the customer and never an internal note
+  N03  adding a note: General by default, a double tap and a lost reply
+       give one note, changed words are a new note
+  N04  payment notes: both on the receipt view, only the customer's on the
+       PDF, neither in WhatsApp; the payment history; the ledger marker
+  N05  correcting a note and its correction: struck through, "Corrected 2
+       times", Correct this note only on the latest, the same in search
+  N06  correcting payment, refund and correction notes: the same latest
+       correction on the receipt view, payment history and search; the
+       receipt unchanged; a correction offers no note to the customer
+  N07  two people correcting at once: told, shown the first correction,
+       typed words kept in a box against the latest
+  N08  Notes search: 3 letters a word, filters, marked words, Leave out
+       corrected notes, the address with no note text, links
+  N09  a lost payment reply then a reload: no note text kept on the phone,
+       the form says notes were not kept, nothing recorded twice
+  N10  notes, forms and search fit 360 px and 390 px phones
 """
 import base64
 import io
@@ -180,7 +204,7 @@ STANDIN = r"""
   const cfg = JSON.parse(%CFG%);
   const db = window.__db = {
     products: cfg.products, staff: cfg.staff, users: cfg.users,
-    customers: [], invoices: [], lines: [], payments: [], counters: {customer: 0, invoice: 0, receipt: 0},
+    customers: [], invoices: [], lines: [], payments: [], notes: [], counters: {customer: 0, invoice: 0, receipt: 0},
     offline: false, offlineOnce: 0, dropReply: 0, expired: false, calls: [], session: null,
     signOutFns: [], inAuthCallback: false, lockViolations: [],
   };
@@ -192,7 +216,7 @@ STANDIN = r"""
   try { const s = sessionStorage.getItem("standin-session"); if (s) db.session = JSON.parse(s); } catch (e) {}
   try { const d = sessionStorage.getItem("standin-db"); if (d) Object.assign(db, JSON.parse(d), {calls: []}); } catch (e) {}
   const persist = () => { try { sessionStorage.setItem("standin-db", JSON.stringify(
-      {customers: db.customers, invoices: db.invoices, lines: db.lines, payments: db.payments, counters: db.counters, staff: db.staff})); } catch (e) {} };
+      {customers: db.customers, invoices: db.invoices, lines: db.lines, payments: db.payments, notes: db.notes, counters: db.counters, staff: db.staff, clock: db.clock})); } catch (e) {} };
   const pad = n => String(n).padStart(4, "0");
   const net = async (name, fn) => {
     if (db.inAuthCallback) db.lockViolations.push(name);
@@ -223,7 +247,9 @@ STANDIN = r"""
   const status = inv => inv.state === "draft" ? "draft" : inv.state === "cancelled" ? "cancelled"
     : paidOf(inv.id) >= total(inv.id) ? "paid" : inv.due_date && inv.due_date < today ? "overdue" : paidOf(inv.id) > 0 ? "part_paid" : "unpaid";
   let clock = 0;
-  const stamp = () => new Date(Date.UTC(2026, 10, 22, 8, 0, 0) + 1000 * (clock++)).toISOString();
+  // The clock carries on across reloads (kept with the data), so a record
+  // made after a reload is always later than the ones before it.
+  const stamp = () => { db.clock = (db.clock || 0) + 1; clock = db.clock; return new Date(Date.UTC(2026, 10, 22, 8, 0, 0) + 1000 * (db.clock - 1)).toISOString(); };
   // invoice_list, as the view builds it.
   const listRow = inv => { const c = db.customers.find(x => x.id === inv.customer_id), t = total(inv.id);
     return {id: inv.id, invoice_no: inv.invoice_no, state: inv.state, status: status(inv), issued_at: inv.issued_at || null,
@@ -248,17 +274,31 @@ STANDIN = r"""
     persist(); });
   // A new receipt: the next number, and the balance after it, stored.
   function addPay(p) { const row = {id: db.payments.length + 1, receipt_no: "TCP-RCT-" + pad(++db.counters.receipt), reason: null,
-      reverses_payment_id: null, request_id: null, ...p};
+      reverses_payment_id: null, request_id: null, customer_note: null, internal_note: null, recorded_at: stamp(),
+      recorded_by_id: me() ? me().user_id : null, ...p};
     db.payments.push(row); row.balance_after = Math.round((total(row.invoice_id) - paidOf(row.invoice_id)) * 100) / 100; persist(); return row; }
   // tcp_private.repeat_of: the same request id gives back the first receipt;
   // a different request under that id is refused.
   // A database refusal (raise exception) carries a Postgres error code.
   const dbErr = m => Object.assign(new Error(m), {code: "P0001"});
-  function repeatOf(req, kind, inv, rev, amt, method, reason) { if (!req) return null;
+  function repeatOf(req, kind, inv, rev, amt, method, reason, cnote, inote, paidOn) { if (!req) return null;
     const e = db.payments.find(p => p.request_id === req); if (!e) return null;
     if (e.kind !== kind || e.invoice_id !== inv || (e.reverses_payment_id || null) !== (rev || null) || Math.abs(e.amount - amt) > 1e-9
-        || e.method !== method || (e.reason || "").trim() !== (reason || "").trim()) throw dbErr("This request id was already used for a different payment");
+        || e.method !== method || (e.reason || "").trim() !== (reason || "").trim()
+        || (e.customer_note || null) !== (cnote || null) || (e.internal_note || null) !== (inote || null)
+        || (paidOn && e.paid_on !== paidOn)) throw dbErr("This request id was already used for a different payment");
     return e; }
+  // Phase 2.2: tcp_private.note_chain, the corrections of a note or of a
+  // payment's internal note, oldest first.
+  const staffName = id => { const s = db.staff.find(x => x.user_id === id); return s ? s.full_name : null; };
+  function noteChain(noteId, payId) { const out = [];
+    let c = db.notes.find(n => noteId ? n.corrects_note_id === noteId : n.corrects_payment_id === payId);
+    while (c) { out.push({id: c.id, body: c.body, category: c.category, by: staffName(c.created_by), at: c.created_at});
+      const cur = c; c = db.notes.find(n => n.corrects_note_id === cur.id); }
+    return out; }
+  const noteText = s => { const t = s == null ? "" : String(s).trim(); return t || null; };
+  const payNotes = p => ({customer_note: p.customer_note, internal_note: p.internal_note, recorded_at: p.recorded_at,
+    internal_note_chain: noteChain(null, p.id)});
   window.TCPDeskApi = {
     emailCode: cfg.emailCode,
     sendCode: email => net("sendCode", () => { db.codeFor = email; }),
@@ -313,11 +353,18 @@ STANDIN = r"""
         total: t, paid: paidOf(id), balance: Math.round((t - paidOf(id)) * 100) / 100, payments: db.payments.filter(p => p.invoice_id === id).map(p => ({...p,
           reverses_receipt_no: p.reverses_payment_id ? db.payments.find(o => o.id === p.reverses_payment_id).receipt_no : null,
           corrected: p.kind === "payment" && db.payments.some(c => c.reverses_payment_id === p.id && c.kind === "correction"),
-          refunded: p.kind === "payment" ? -db.payments.filter(r => r.reverses_payment_id === p.id && r.kind === "refund").reduce((a, r) => a + r.amount, 0) : null}))}; },
+          refunded: p.kind === "payment" ? -db.payments.filter(r => r.reverses_payment_id === p.id && r.kind === "refund").reduce((a, r) => a + r.amount, 0) : null,
+          ...payNotes(p)})),
+        internal_notes: db.notes.filter(n => n.invoice_id === id).map(n => { const cp = db.payments.find(x => x.id === n.corrects_payment_id),
+            by = db.notes.find(c => c.corrects_note_id === n.id);
+          return {id: n.id, body: n.body, category: n.category, by: staffName(n.created_by), at: n.created_at, estimate_ref: n.estimate_ref || null,
+            corrects_note_id: n.corrects_note_id || null, corrects_payment_id: n.corrects_payment_id || null,
+            corrects_receipt_no: cp ? cp.receipt_no : null, corrects_kind: cp ? cp.kind : null, corrected_by_note_id: by ? by.id : null}; })}; },
     document: id => net("document", () => { staffOnly(); return window.TCPDeskApi.__doc(id); }),
     // Phase 2, with record_payment / correct_payment / refund_payment's rules.
     recordPayment: a => net("recordPayment", () => { staffOnly("owner", "sales", "finance");
-      const again = repeatOf(a.p_request_id, "payment", a.p_invoice_id, null, Math.round(a.p_amount * 100) / 100, a.p_method, null); if (again) return again;
+      const again = repeatOf(a.p_request_id, "payment", a.p_invoice_id, null, Math.round(a.p_amount * 100) / 100, a.p_method, null,
+        noteText(a.p_customer_note), noteText(a.p_internal_note), a.p_paid_on); if (again) return again;
       const inv = db.invoices.find(i => i.id === a.p_invoice_id);
       if (!inv || inv.state !== "issued") throw dbErr("Payments can only be recorded against an issued invoice");
       if (!(a.p_amount > 0)) throw dbErr("A payment must be more than zero");
@@ -325,19 +372,22 @@ STANDIN = r"""
       const owed = Math.round((total(inv.id) - paidOf(inv.id)) * 100) / 100;
       if (a.p_amount > owed) throw dbErr(`GH₵ ${a.p_amount.toFixed(2)} is more than the GH₵ ${owed.toFixed(2)} still owed`);
       return addPay({invoice_id: inv.id, kind: "payment", amount: Math.round(a.p_amount * 100) / 100, method: a.p_method, reference: a.p_reference || null,
-        paid_on: a.p_paid_on, request_id: a.p_request_id, recorded_by: me().full_name}); }),
+        paid_on: a.p_paid_on, request_id: a.p_request_id, recorded_by: me().full_name,
+        customer_note: noteText(a.p_customer_note), internal_note: noteText(a.p_internal_note)}); }),
     correctPayment: a => net("correctPayment", () => { staffOnly("owner", "finance");
       const o = db.payments.find(p => p.id === a.p_payment_id);
-      const again = o && repeatOf(a.p_request_id, "correction", o.invoice_id, o.id, -o.amount, o.method, a.p_reason); if (again) return again;
+      const again = o && repeatOf(a.p_request_id, "correction", o.invoice_id, o.id, -o.amount, o.method, a.p_reason, null, noteText(a.p_internal_note)); if (again) return again;
       if (!o || o.kind !== "payment") throw dbErr("Only a payment can be corrected");
       if (!a.p_reason || !a.p_reason.trim()) throw dbErr("A reason is needed");
       if (db.payments.some(c => c.reverses_payment_id === o.id && c.kind === "correction")) throw dbErr("This payment has already been corrected");
       if (db.payments.some(c => c.reverses_payment_id === o.id && c.kind === "refund")) throw dbErr("This payment has refunds against it and can no longer be corrected");
       return addPay({invoice_id: o.invoice_id, kind: "correction", amount: -o.amount, method: o.method, reference: o.reference, paid_on: today,
-        reverses_payment_id: o.id, reason: a.p_reason.trim(), request_id: a.p_request_id, recorded_by: me().full_name}); }),
+        reverses_payment_id: o.id, reason: a.p_reason.trim(), request_id: a.p_request_id, recorded_by: me().full_name,
+        internal_note: noteText(a.p_internal_note)}); }),
     refundPayment: a => net("refundPayment", () => { staffOnly("owner", "finance");
       const o = db.payments.find(p => p.id === a.p_payment_id), amt = Math.round(a.p_amount * 100) / 100;
-      const again = o && repeatOf(a.p_request_id, "refund", o.invoice_id, o.id, -amt, a.p_method, a.p_reason); if (again) return again;
+      const again = o && repeatOf(a.p_request_id, "refund", o.invoice_id, o.id, -amt, a.p_method, a.p_reason,
+        noteText(a.p_customer_note), noteText(a.p_internal_note)); if (again) return again;
       if (!o || o.kind !== "payment") throw dbErr("Only a payment can be refunded");
       if (db.payments.some(c => c.reverses_payment_id === o.id && c.kind === "correction")) throw dbErr("This payment was corrected; there is nothing left to refund");
       if (!(amt > 0)) throw dbErr("A refund must be more than zero");
@@ -345,7 +395,8 @@ STANDIN = r"""
       const before = -db.payments.filter(r => r.reverses_payment_id === o.id && r.kind === "refund").reduce((x, r) => x + r.amount, 0);
       if (before + amt > o.amount + 1e-9) throw dbErr(`Refunds would total GH₵ ${(before + amt).toFixed(2)}, more than the GH₵ ${o.amount.toFixed(2)} paid`);
       return addPay({invoice_id: o.invoice_id, kind: "refund", amount: -amt, method: a.p_method, reference: a.p_reference || null, paid_on: today,
-        reverses_payment_id: o.id, reason: a.p_reason.trim(), request_id: a.p_request_id, recorded_by: me().full_name}); }),
+        reverses_payment_id: o.id, reason: a.p_reason.trim(), request_id: a.p_request_id, recorded_by: me().full_name,
+        customer_note: noteText(a.p_customer_note), internal_note: noteText(a.p_internal_note)}); }),
     // A plain read of the payments table by request id (row-level security:
     // nothing for non-staff).
     byRequest: req => net("byRequest", () => { const p = me() && db.payments.find(x => x.request_id === req);
@@ -354,10 +405,10 @@ STANDIN = r"""
     receipt: id => net("receipt", () => { staffOnly(); const p = db.payments.find(x => x.id === id);
       if (!p) throw new Error("No such receipt");
       const doc = window.TCPDeskApi.__doc(p.invoice_id), earlier = db.payments.filter(x => x.invoice_id === p.invoice_id && x.id < p.id);
-      ["payments", "paid", "balance", "status"].forEach(k => delete doc[k]);
+      ["payments", "paid", "balance", "status", "internal_notes"].forEach(k => delete doc[k]);
       return {receipt_no: p.receipt_no, kind: p.kind, amount: p.amount, method: p.method, reference: p.reference, paid_on: p.paid_on,
         reason: p.reason || null, reverses_receipt_no: p.reverses_payment_id ? db.payments.find(o => o.id === p.reverses_payment_id).receipt_no : null,
-        balance_after: p.balance_after, recorded_by: p.recorded_by, payments_before: earlier.length,
+        balance_after: p.balance_after, recorded_by: p.recorded_by, payments_before: earlier.length, ...payNotes(p),
         paid_before: Math.round(earlier.reduce((a, x) => a + x.amount * 100, 0)) / 100, invoice: doc}; }),
     cancel: (id, reason) => net("cancel", () => { staffOnly("owner");
       if (!reason || !reason.trim()) throw new Error("A reason is needed to cancel an invoice");
@@ -393,7 +444,8 @@ STANDIN = r"""
           invoice_id: p.invoice_id, invoice_no: inv.invoice_no, billed_to_name: inv.billed_to_name, billed_to_phone: phone || null,
           reverses_receipt_no: o ? o.receipt_no : null,
           corrected: p.kind === "payment" && db.payments.some(c => c.reverses_payment_id === p.id && c.kind === "correction"),
-          search_text: [p.receipt_no, inv.invoice_no, inv.billed_to_name, p.reference, o && o.receipt_no, phone,
+          customer_note: p.customer_note || null, internal_note: p.internal_note || null,
+          search_text: [p.receipt_no, inv.invoice_no, inv.billed_to_name, p.reference, o && o.receipt_no, phone, p.customer_note, p.internal_note,
             phone.startsWith("+233") ? "0" + phone.slice(4) : null].filter(Boolean).join(" ").toLowerCase()}; }));
       if (from) rows = rows.filter(r => r.paid_on >= from);
       if (to) rows = rows.filter(r => r.paid_on <= to);
@@ -406,6 +458,65 @@ STANDIN = r"""
     home: () => net("home", () => { const rows = me() ? db.invoices.map(listRow) : [], n = s => rows.filter(r => r.status === s).length;
       return {owed: rows.filter(r => ["unpaid", "part_paid", "overdue"].includes(r.status)).reduce((a, r) => a + r.balance, 0),
         unpaid: n("unpaid"), part_paid: n("part_paid"), overdue: n("overdue"), drafts: n("draft")}; }),
+    // Phase 2.2: add_invoice_note, with the database's rules (a correction
+    // corrects one note once; the same request id gives the first note).
+    addNote: a => net("addNote", () => { staffOnly("owner", "sales", "finance");
+      const inv = db.invoices.find(i => i.id === a.p_invoice_id); if (!inv) throw dbErr("No such invoice");
+      if (a.p_corrects_note_id && a.p_corrects_payment_id) throw dbErr("A correction corrects one note");
+      let cat = a.p_category || null;
+      if (a.p_corrects_note_id) { const t = db.notes.find(n => n.id === a.p_corrects_note_id);
+        if (!t || t.invoice_id !== inv.id) throw dbErr("That note is not on this invoice"); cat = cat || t.category; }
+      if (a.p_corrects_payment_id) { const t = db.payments.find(x => x.id === a.p_corrects_payment_id);
+        if (!t || t.invoice_id !== inv.id) throw dbErr("That receipt is not on this invoice");
+        if (!t.internal_note) throw dbErr("That receipt has no internal note to correct"); cat = cat || "payment"; }
+      cat = cat || "general"; const body = String(a.p_body || "").trim();
+      const e = a.p_request_id && db.notes.find(n => n.request_id === a.p_request_id);
+      if (e) { if (e.invoice_id !== inv.id || e.body !== body || e.category !== cat || (e.corrects_note_id || null) !== (a.p_corrects_note_id || null)
+            || (e.corrects_payment_id || null) !== (a.p_corrects_payment_id || null)) throw dbErr("This request id was already used for a different note");
+        return e; }
+      if (!body) throw dbErr("A note cannot be empty");
+      if (body.length > 1000) throw dbErr("A note can be at most 1,000 characters");
+      if (!["general", "payment", "delivery", "customer_request", "complaint", "stock", "follow_up"].includes(cat)) throw dbErr("Unknown note category: " + cat);
+      const done = db.notes.find(n => (a.p_corrects_note_id && n.corrects_note_id === a.p_corrects_note_id) || (a.p_corrects_payment_id && n.corrects_payment_id === a.p_corrects_payment_id));
+      if (done) throw dbErr(`This note was just corrected by ${staffName(done.created_by)}. Here is the latest; correct that instead.`);
+      const n = {id: db.notes.length + 1, invoice_id: inv.id, body, category: cat, corrects_note_id: a.p_corrects_note_id || null,
+        corrects_payment_id: a.p_corrects_payment_id || null, estimate_ref: a.p_estimate_ref || null, created_by: me().user_id,
+        created_at: stamp(), request_id: a.p_request_id || null};
+      db.notes.push(n); return n; }),
+    noteAuthors: () => net("noteAuthors", () => { staffOnly("owner", "sales", "finance");
+      return db.staff.map(s => ({id: s.user_id, name: s.full_name, active: s.active})); }),
+    // search_notes: the four sources, filters, newest first, paged.
+    searchNotes: a => net("searchNotes", () => { staffOnly("owner", "sales", "finance");
+      const words = (a.p_words || []).map(w => String(w).trim()).filter(Boolean);
+      if (words.some(w => w.length < 3)) throw dbErr("Type at least 3 letters or digits for each word");
+      const hits = [];
+      db.notes.forEach(n => hits.push({kind: "invoice_note", category: n.category, note_id: n.id, payment_id: null, invoice_id: n.invoice_id, body: n.body,
+        author: n.created_by, at: n.created_at, corrects_note_id: n.corrects_note_id, corrects_payment_id: n.corrects_payment_id,
+        corrected: db.notes.some(c => c.corrects_note_id === n.id)}));
+      db.payments.forEach(p => { if (p.internal_note) hits.push({kind: "payment_note", category: "payment", note_id: null, payment_id: p.id, invoice_id: p.invoice_id,
+          body: p.internal_note, author: p.recorded_by_id, at: p.recorded_at, corrected: db.notes.some(c => c.corrects_payment_id === p.id)});
+        if (p.customer_note) hits.push({kind: "receipt_customer_note", category: null, payment_id: p.id, invoice_id: p.invoice_id, body: p.customer_note,
+          author: p.recorded_by_id, at: p.recorded_at, corrected: false}); });
+      db.invoices.forEach(i => { const t = String(i.notes || "").split("\n").filter(l => l && l !== "Customer pickup" && l !== "Free delivery" && !/^Estimate TCP-\d{6}-[A-Z0-9]{6}$/.test(l)).join("\n");
+        if (t) hits.push({kind: "invoice_customer_note", category: null, invoice_id: i.id, body: t, author: null, at: i.created_at, corrected: false}); });
+      let rows = hits.filter(h => words.every(w => h.body.toLowerCase().includes(w.toLowerCase()))
+        && (!a.p_category || h.category === a.p_category) && (!a.p_author || h.author === a.p_author)
+        && (!a.p_from || h.at.slice(0, 10) >= a.p_from) && (!a.p_to || h.at.slice(0, 10) <= a.p_to)
+        && !(a.p_hide_corrected && h.corrected));
+      rows.sort((x, y) => (x.at < y.at) - (x.at > y.at));
+      const count = rows.length;
+      rows = rows.slice(a.p_offset || 0, (a.p_offset || 0) + (a.p_limit || 30)).map(h => { const inv = db.invoices.find(i => i.id === h.invoice_id),
+          p = db.payments.find(x => x.id === h.payment_id), t = total(inv.id), c = db.customers.find(x => x.id === inv.customer_id),
+          cn = db.notes.find(n => n.id === h.corrects_note_id), cp = db.payments.find(x => x.id === h.corrects_payment_id);
+        return {kind: h.kind, category: h.category, note_id: h.note_id || null, payment_id: h.payment_id || null, record_kind: p ? p.kind : null,
+          receipt_no: p ? p.receipt_no : null, invoice_id: inv.id, invoice_no: inv.invoice_no, invoice_state: inv.state,
+          customer: inv.invoice_no ? inv.billed_to_name : c.name, status: status(inv), balance: Math.round((t - paidOf(inv.id)) * 100) / 100,
+          body: h.body, by: staffName(h.author), at: h.at, corrected: h.corrected,
+          chain: h.corrected ? noteChain(h.note_id, h.kind === "payment_note" ? h.payment_id : null) : null,
+          corrects_note_id: h.corrects_note_id || null, corrects_payment_id: h.corrects_payment_id || null,
+          corrects_by: cn ? staffName(cn.created_by) : null, corrects_at: cn ? cn.created_at : null,
+          corrects_receipt_no: cp ? cp.receipt_no : null, corrects_record_kind: cp ? cp.kind : null}; });
+      return {count, rows}; }),
     // invoice_list with the desk's filters, newest first then id, paged.
     list: ({status: st, terms, offset, limit}) => net("list", () => {
       let rows = rlsRead(db.invoices.map(listRow));
@@ -445,7 +556,7 @@ def _desk(browser, width=390, standin=True, signed_in=True, **kw):
     return page, errors
 
 
-def _estimate_message(browser, order, loc=""):
+def _estimate_message(browser, order, loc="", note=""):
     ctx = browser.new_context(viewport={"width": 1280, "height": 900}, locale="en-US")
     page = ctx.new_page()
     page.goto(SITE_URL, wait_until="load")
@@ -454,6 +565,8 @@ def _estimate_message(browser, order, loc=""):
     page.evaluate("o => { for (const k in o) qty[k] = o[k]; renderList(); renderEst(); }", order)
     if loc:
         page.fill("#loc", loc)
+    if note:
+        page.fill("#enote", note)
     msg = whatsapp_message(page)
     ctx.close()
     return msg
@@ -2151,4 +2264,371 @@ def test_l10_long_cancellation_reason_in_full(browser, lines):
                     low += [w for w in line.get_text().split() if w not in footer_words and not w.isdigit()]
     assert not low, low
     assert len(texts) == (1 if lines == 1 else len(texts)) and (lines == 1 or len(texts) >= 2)
+    assert not errors
+
+
+# ---- Phase 2.2: notes from estimate to receipt --------------------------------
+# An unusual phrase written into internal notes: it must never appear in a
+# PDF, a WhatsApp message or the address (design, "Search security").
+SECRET = "ZEBRAQUARTZ internal only"
+NOTE_TEAM = TEAM
+
+
+def _add_note(page, body, cat="general"):
+    page.wait_for_selector("#nAdd:not([hidden])")
+    page.fill("#nBody", body)
+    page.check(f'input[name="ncat"][value="{cat}"]')
+    page.click("#nSave")
+    page.wait_for_function("document.querySelector('#nMsg').textContent === 'Note saved.'")
+
+
+def _correct(page, button, body):
+    """Tap a Correct link, type the correction and save it."""
+    button.click()
+    page.wait_for_selector("#ncBox")
+    page.fill("#ncText", body)
+    page.click("#ncSave")
+    page.wait_for_function("!document.querySelector('#ncBox')")
+
+
+def _seed_note(page, invoice_id, body, by="u-s", corrects_note=None, corrects_payment=None, at="2026-11-22T09:00:00.000Z", cat="general"):
+    """A note added by another staff member, straight into the database."""
+    page.evaluate("""a => { __db.notes.push({id: __db.notes.length + 1, invoice_id: a.inv, body: a.body, category: a.cat,
+        corrects_note_id: a.cn, corrects_payment_id: a.cp, estimate_ref: null, created_by: a.by, created_at: a.at, request_id: null}); }""",
+                  {"inv": invoice_id, "body": body, "cat": cat, "cn": corrects_note, "cp": corrects_payment, "by": by, "at": at})
+
+
+def _latest(locator):
+    """The latest-correction line under a corrected note, as shown."""
+    return " ".join(locator.locator(".dk-note-latest").first.text_content().split())
+
+
+# N01: the estimator's note: in the WhatsApp message and the printed
+# estimate only when filled in; a message without a note is as before.
+def test_n01_estimator_note(browser):
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900}, locale="en-US")
+    page = ctx.new_page()
+    page.goto(SITE_URL, wait_until="load")
+    page.wait_for_selector("#list .row")
+    settle(page)
+    page.evaluate("o => { for (const k in o) qty[k] = o[k]; renderList(); renderEst(); }", ORDER)
+    page.fill("#loc", "Buduburam")
+    before = whatsapp_message(page)
+    assert "Note:" not in before and page.locator(".q-note").count() == 0
+    assert page.get_attribute("#enote", "maxlength") == "300"
+    page.fill("#enote", "Please call  before\ndelivery, gate is blue")
+    msg = whatsapp_message(page)
+    assert "*Drop-off location:* Buduburam\n*Note:* Please call before delivery, gate is blue\n" in msg
+    assert msg.replace("*Note:* Please call before delivery, gate is blue\n", "") == before, "only the note line is added"
+    assert "Please call before delivery, gate is blue" in page.text_content(".q-note")
+    page.fill("#enote", "")
+    assert whatsapp_message(page) == before, "cleared: exactly as before"
+    ctx.close()
+
+
+# N02: the reader puts an estimate's note into the draft's internal notes
+# (once, on the first save); Copy to note to customer fills the note to the
+# customer and leaves the internal note; after issue the button is gone, and
+# the invoice PDF prints the note to the customer, never internal notes.
+def test_n02_estimate_note_to_internal_notes_and_copy(browser):
+    page, errors = _desk(browser)
+    page.wait_for_selector("#tool:not([hidden])")
+    page.fill("#paste", _estimate_message(browser, ORDER, loc="Buduburam", note="Deliver after 2pm please"))
+    page.click("#readBtn")
+    page.wait_for_selector("#form:not([hidden])")
+    page.wait_for_selector("#nEst:not([hidden])")
+    assert "Deliver after 2pm please" in page.text_content("#nEst") and page.locator("#nNeedSave").is_visible()
+    page.fill("#cPhone", "0241234567"); page.dispatch_event("#cPhone", "change"); page.fill("#cName", "Ama Owusu")
+    page.check('input[name="dl"][value="pickup"]')
+    page.evaluate("__db.dropReply = 0")
+    page.click("#saveBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent.startsWith('Draft saved.')")
+    page.wait_for_selector("#nList .dk-note")
+    notes = page.evaluate("__db.notes")
+    assert len(notes) == 1 and notes[0]["body"] == "Deliver after 2pm please" and notes[0]["category"] == "general"
+    assert notes[0]["estimate_ref"] and notes[0]["estimate_ref"].startswith("TCP-")
+    assert "From estimate" in page.text_content("#nList") and not page.locator("#nEst").is_visible()
+    page.click("#saveBtn")
+    page.wait_for_function("document.querySelector('#sMsg').textContent.startsWith('Draft saved.')")
+    assert page.evaluate("__db.notes.length") == 1, "saving again never adds it twice"
+    # Copy to note to customer.
+    page.click("#nList [data-ncopy]")
+    assert page.input_value("#iNote") == "Deliver after 2pm please"
+    assert page.evaluate("__db.notes[0].body") == "Deliver after 2pm please", "the internal note stays"
+    _add_note(page, SECRET)
+    page.click("#issueBtn")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    page.wait_for_selector("#notesSec:not([hidden])")
+    assert page.locator("[data-ncopy]").count() == 0, "gone after issue"
+    texts, _ = _pdf(page)
+    whole = " ".join(texts)
+    assert "Deliver after 2pm please" in whole and "ZEBRAQUARTZ" not in whole
+    assert "ZEBRAQUARTZ" not in page.evaluate("TCPDesk.waText(TCPDesk.doc())") and "ZEBRAQUARTZ" not in page.url
+    assert not errors
+
+
+# N03: internal notes after issue: categories default to General; a double
+# tap and a lost reply give one note; who and when are shown.
+def test_n03_add_note_once_with_category(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/2")
+    page.wait_for_selector("#notesSec:not([hidden])")
+    assert page.is_checked('input[name="ncat"][value="general"]')
+    page.fill("#nBody", "Customer says the balance comes on Friday by MoMo.")
+    page.check('input[name="ncat"][value="follow_up"]')
+    page.evaluate("__db.dropReply = 1")
+    page.click("#nSave")
+    page.wait_for_function("document.querySelector('#nMsg').textContent.includes('no connection')")
+    assert page.evaluate("__db.notes.length") == 1, "the database did add it"
+    page.dblclick("#nSave")
+    page.wait_for_function("document.querySelector('#nMsg').textContent === 'Note saved.'")
+    assert page.evaluate("__db.notes.length") == 1, "the retry and the double tap returned the same note"
+    log = page.text_content("#nList")
+    assert "Follow-up" in log and "Test Owner" in log and "balance comes on Friday" in log
+    assert page.is_checked('input[name="ncat"][value="general"]'), "back to General for the next note"
+    # Saved but the answer lost, then the words changed: a different note,
+    # so a new request id (the database would refuse the old one for it).
+    page.fill("#nBody", "Typo in this one")
+    page.evaluate("__db.dropReply = 1")
+    page.click("#nSave")
+    page.wait_for_function("document.querySelector('#nMsg').textContent.includes('no connection')")
+    page.fill("#nBody", "Typo fixed in this one")
+    page.click("#nSave")
+    page.wait_for_function("document.querySelector('#nMsg').textContent === 'Note saved.'")
+    assert page.evaluate("__db.notes.map(n => n.body)")[1:] == ["Typo in this one", "Typo fixed in this one"]
+    assert not errors
+
+
+# N04: a payment with both notes: the receipt view shows both, the PDF only
+# the note to the customer, WhatsApp neither; the payment history and the
+# Payments tab (a note marker) show it too.
+def test_n04_payment_notes(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/2", perms=["clipboard-read", "clipboard-write"])
+    _open_pay(page)
+    page.fill("#pCustNote", "Thank you. Balance due by Friday.")
+    page.fill("#pIntNote", "Paid by his brother Kwame. " + SECRET)
+    _pay(page, "300", "cash")
+    _receipt_shown(page, "TCP-RCT-0003")
+    view = page.text_content("#rNotes")
+    assert "Thank you. Balance due by Friday." in view and "Paid by his brother Kwame" in view
+    t = " ".join(_receipt_pdf(page)[0])
+    assert "Thank you. Balance due by Friday." in t and "ZEBRAQUARTZ" not in t and "Kwame" not in t
+    msg = page.evaluate("TCPDesk.waReceiptText(TCPDesk.receipt())")
+    assert "Friday" not in msg and "ZEBRAQUARTZ" not in msg
+    page.click("#rInv")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert "Paid by his brother Kwame" in page.text_content("#payList")
+    page.evaluate("location.hash = '#/payments?period=all'")
+    page.wait_for_selector("#ledRows .dk-led")
+    assert page.locator("#ledRows .dk-led", has_text="TCP-RCT-0003").locator(".dk-note-led").count() == 1
+    assert page.locator("#ledRows .dk-led", has_text="TCP-RCT-0001").locator(".dk-note-led").count() == 0
+    assert "ZEBRAQUARTZ" not in page.url
+    assert not errors
+
+
+# N05: correcting an invoice note, then the correction: the original struck
+# through with its latest correction and "Corrected 2 times"; Correct this
+# note only on the latest; the same in the notes log and in search.
+def test_n05_correction_chain_on_invoice_notes(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/2", staff=NOTE_TEAM, users=[OWNER, FIN, SALES])
+    _add_note(page, "Paid by his brother Kwame.")
+    _correct(page, page.locator('#nList [data-note="1"] [data-ncorr]'), "It was his brother Kofi, not Kwame.")
+    first = page.locator('#nList [data-note="1"]')
+    assert "Corrected" in first.text_content() and "Corrected 1 time" in _latest(first)
+    assert first.locator(".dk-note-body").evaluate("e => getComputedStyle(e).textDecorationLine") == "line-through"
+    assert "Corrects Test Owner's note of" in page.text_content('#nList [data-note="2"]')
+    assert first.locator("[data-ncorr]").text_content() == "Correct the latest"
+    _correct(page, page.locator('#nList [data-note="2"] [data-ncorr]'), "Actually his cousin Kofi.")
+    first = page.locator('#nList [data-note="1"]')
+    log_latest = _latest(first)
+    assert "Corrected 2 times" in log_latest and "Actually his cousin Kofi." in log_latest
+    # Correct this note only on the latest (note 3); the others say "the latest".
+    assert page.locator('#nList [data-note="3"] [data-ncorr]').text_content() == "Correct this note"
+    assert page.locator('#nList [data-note="2"] [data-ncorr]').text_content() == "Correct the latest"
+    assert page.locator('#nList [data-note="2"] [data-ncorr]').get_attribute("data-nid") == "3"
+    mid_latest = _latest(page.locator('#nList [data-note="2"]'))
+    assert "Corrected 1 time" in mid_latest, "a correction that was corrected shows its own latest"
+    # Search shows each with the same latest correction as the log.
+    page.evaluate("location.hash = '#/notes?q=Kwame'")
+    page.wait_for_function("document.querySelector('#nsInfo').textContent.startsWith('2 notes')")
+    orig = page.locator("#nsRows .dk-nres", has_text="Paid by his brother Kwame.")
+    corr = page.locator("#nsRows .dk-nres", has_text="It was his brother Kofi, not Kwame.")
+    assert "Corrected" in orig.text_content() and _latest(orig) == log_latest
+    assert _latest(corr) == mid_latest and "Corrects Test Owner's note of" in corr.text_content()
+    assert not errors
+
+
+# N06: correcting a payment, refund and correction note: shown corrected in
+# the receipt view, the payment history and search, all alike; the receipt
+# and its amount unchanged.
+def test_n06_correcting_payment_refund_and_correction_notes(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/3", staff=NOTE_TEAM, users=[OWNER, FIN, SALES])
+    # The Correct form offers no note to the customer (a correction is
+    # internal); the Refund form does.
+    page.click('[data-fix="correction"][data-pid="1"]'); page.wait_for_selector("#fixForm:not([hidden])")
+    assert not page.locator("#fCustNote").is_visible() and page.locator("#fIntNote").is_visible()
+    page.click("#fCancel"); page.wait_for_selector("#issuedSec:not([hidden])")
+    page.click('[data-fix="refund"][data-pid="1"]'); page.wait_for_selector("#fixForm:not([hidden])")
+    assert page.locator("#fCustNote").is_visible()
+    page.click("#fCancel"); page.wait_for_selector("#issuedSec:not([hidden])")
+    _open_pay(page)
+    page.fill("#pIntNote", "Paid by his brother Kwame.")
+    _pay(page, "100", "cash")
+    _receipt_shown(page, "TCP-RCT-0003")
+    pdf_before = _receipt_pdf(page)[0]
+    _correct(page, page.locator("#rNotes [data-ncorr]"), "It was his brother Kofi.")
+    page.wait_for_selector("#rNotes .dk-note-latest")
+    receipt_latest = _latest(page.locator("#rNotes"))
+    assert "It was his brother Kofi." in receipt_latest and "Corrected 1 time" in receipt_latest
+    assert _receipt_pdf(page)[0] == pdf_before, "the receipt PDF never changes"
+    assert page.evaluate("__db.payments[2].internal_note") == "Paid by his brother Kwame."
+    page.click("#rInv")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    pay3 = page.locator("#payList .dk-pay", has_text="TCP-RCT-0003")
+    assert _latest(pay3) == receipt_latest
+    assert "Correction to the internal note on payment TCP-RCT-0003" in page.text_content("#nList")
+    # A refund and a correction record, each with an internal note.
+    page.evaluate("TCPDeskApi.refundPayment({p_payment_id: 3, p_amount: 20, p_method: 'cash', p_reason: 'Short', p_internal_note: 'Cash handed over at the depot.', p_request_id: crypto.randomUUID()})")
+    page.evaluate("TCPDeskApi.correctPayment({p_payment_id: 1, p_reason: 'Wrong invoice', p_internal_note: 'MoMo reversed by the network.', p_request_id: crypto.randomUUID()})")
+    for rid, no, word in [(4, "TCP-RCT-0004", "refund"), (5, "TCP-RCT-0005", "correction")]:
+        page.goto(BO + f"#/receipt/{rid}")
+        _receipt_shown(page, no)
+        assert ("Refund note" if word == "refund" else "Correction note") in page.text_content("#rNotes")
+        _correct(page, page.locator("#rNotes [data-ncorr]"), f"Fixed {word} note.")
+        page.wait_for_selector("#rNotes .dk-note-latest")
+        rl = _latest(page.locator("#rNotes"))
+        page.goto(BO + "#/invoice/3")
+        page.wait_for_selector("#issuedSec:not([hidden])")
+        assert _latest(page.locator("#payList .dk-pay", has_text=no)) == rl
+        assert f"Correction to the internal note on {word} {no}" in page.text_content("#nList")
+        page.evaluate(f"location.hash = '#/notes?cat=payment'")
+        page.wait_for_selector("#nsRows .dk-nres")
+        tag = "Refund note" if word == "refund" else "Correction note"
+        hit = page.locator("#nsRows .dk-nres").filter(has=page.locator("i.dk-note-tag", has_text=re.compile("^" + tag + "$"))).first
+        assert _latest(hit) == rl
+    assert not errors
+
+
+# N07: two people correcting the same note: the second is told, sees the
+# first's correction, and keeps their typed words in a box against the
+# latest. Only one correction of the original exists.
+def test_n07_competing_correction(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/2", staff=NOTE_TEAM, users=[OWNER, FIN, SALES])
+    _seed_note(page, 2, "Deliver on Monday.")
+    page.evaluate("TCPDeskApi.home()")   # any call keeps the seeded note
+    page.reload(); page.wait_for_selector('#nList [data-note="1"]')
+    page.click('#nList [data-note="1"] [data-ncorr]')
+    page.fill("#ncText", "Deliver on Tuesday, not Monday.")
+    # Meanwhile Test Sales corrects it on another phone.
+    _seed_note(page, 2, "Deliver on Wednesday.", corrects_note=1, at="2026-11-22T10:00:00.000Z")
+    page.click("#ncSave")
+    page.wait_for_function("document.querySelector('#ncMsg') && document.querySelector('#ncMsg').textContent.includes('was just corrected by')")
+    assert page.input_value("#ncText") == "Deliver on Tuesday, not Monday.", "nothing typed is lost"
+    assert "Deliver on Wednesday." in _latest(page.locator('#nList [data-note="1"]'))
+    # The box is now against the latest (note 2).
+    box_note = page.evaluate("document.querySelector('#ncBox').previousElementSibling.dataset.note")
+    assert box_note == "2"
+    assert page.evaluate("__db.notes.filter(n => n.corrects_note_id === 1).length") == 1
+    page.click("#ncSave")
+    page.wait_for_function("!document.querySelector('#ncBox')")
+    assert page.evaluate("__db.notes.map(n => n.corrects_note_id)") == [None, 1, 2]
+    assert not errors
+
+
+# N08: the Notes screen: 3 letters per word, filters, marked words, Leave
+# out corrected notes, links to the right record, and an address that holds
+# the typed words and filters only, never a note's text.
+def test_n08_notes_search(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/", staff=NOTE_TEAM, users=[OWNER, FIN, SALES])
+    assert page.locator('#homeV a[href="#/notes"]').is_visible()
+    page.evaluate("location.hash = '#/invoices'")
+    page.wait_for_selector("#listV:not([hidden])")
+    assert page.locator('#listV a[href="#/notes"]').is_visible()
+    _seed_note(page, 2, "Balance comes Friday " + SECRET, by="u-s", cat="payment", at="2026-11-20T09:00:00.000Z")
+    _seed_note(page, 3, "Complaint about broken bags on Friday", by="u-owner", cat="complaint", at="2026-11-21T09:00:00.000Z")
+    _seed_note(page, 3, "Bags replaced on Friday", by="u-owner", corrects_note=2, at="2026-11-21T10:00:00.000Z", cat="complaint")
+    page.evaluate("TCPDeskApi.home()")
+    page.click('#listV a[href="#/notes"]')
+    page.wait_for_selector("#notesV:not([hidden])")
+    page.fill("#nsq", "fr")
+    page.wait_for_function("document.querySelector('#nsInfo').textContent.includes('at least 3')")
+    page.fill("#nsq", "friday")
+    page.wait_for_function("document.querySelector('#nsInfo').textContent.startsWith('3 notes')")
+    assert page.locator("#nsRows mark").first.text_content() == "Friday"
+    assert "ZEBRAQUARTZ" not in page.url and "q=friday" in page.url
+    page.click('#nsCats [data-ncat="complaint"]')
+    page.wait_for_function("document.querySelector('#nsInfo').textContent.startsWith('2 notes')")
+    assert "cat=complaint" in page.url
+    page.check("#nsHide")
+    page.wait_for_function("document.querySelector('#nsInfo').textContent.startsWith('1 note')")
+    assert "Bags replaced" in page.text_content("#nsRows")
+    page.uncheck("#nsHide")
+    page.click('#nsCats [data-ncat="all"]')
+    page.select_option("#nsBy", "u-s")
+    page.wait_for_function("document.querySelector('#nsInfo').textContent.startsWith('1 note')")
+    assert "Sal ·" in page.text_content("#nsRows")
+    page.select_option("#nsBy", "")
+    page.fill("#nsFrom", "2026-11-21"); page.dispatch_event("#nsFrom", "change")
+    page.fill("#nsTo", "2026-11-21"); page.dispatch_event("#nsTo", "change")
+    page.wait_for_function("document.querySelector('#nsInfo').textContent.startsWith('2 notes')")
+    assert "from=2026-11-21" in page.url and "to=2026-11-21" in page.url
+    # A reload keeps the filters (from the address).
+    page.reload(); page.wait_for_selector("#nsRows .dk-nres")
+    assert page.input_value("#nsq") == "friday" and page.input_value("#nsFrom") == "2026-11-21"
+    # Tapping a result opens its invoice.
+    page.locator("#nsRows .dk-nres-rec").first.click()
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert page.url.endswith("#/invoice/3")
+    assert not errors
+
+
+# N09: a payment whose answer was lost, then the page reloaded: the phone
+# kept the operation but no note text; the retried form says notes were not
+# kept, and nothing is recorded twice.
+def test_n09_recovery_keeps_no_note_text(browser):
+    page, errors = _bo(browser, seed=MIX, route="#/invoice/2")
+    _open_pay(page)
+    page.fill("#pCustNote", "Thanks")
+    page.fill("#pIntNote", SECRET)
+    page.evaluate("__db.offlineOnce = 1")
+    _pay(page, "100", "cash")
+    page.wait_for_function("document.querySelector('#pMsg').textContent.includes('No connection')")
+    kept = page.evaluate("JSON.stringify(Object.assign({}, localStorage))")
+    assert "ZEBRAQUARTZ" not in kept and "Thanks" not in kept
+    page.reload()
+    page.wait_for_selector("#payForm:not([hidden])")
+    assert "Notes are not kept on this phone" in page.text_content("#pMsg")
+    assert page.input_value("#pIntNote") == ""
+    assert page.evaluate("__db.payments.length") == 2
+    assert not errors
+
+
+@pytest.mark.parametrize("width", [360, 390])
+def test_n10_notes_fit_a_phone(browser, width):
+    page, errors = _bo(browser, width=width, seed=MIX, route="#/invoice/3")
+    fits = lambda: page.evaluate("document.documentElement.scrollWidth") <= width
+    _add_note(page, "A long note " + "with many words " * 30)
+    _correct(page, page.locator('#nList [data-note="1"] [data-ncorr]'), "Shorter.")
+    assert fits()
+    _open_pay(page); assert fits()
+    page.evaluate("location.hash = '#/notes?q=many'"); page.wait_for_selector("#nsRows .dk-nres"); assert fits()
+    assert not errors
+
+
+# N11: the notes column's own lines (ChatGPT's review of PR #42): only the
+# exact lines the Back Office writes are read as delivery and the estimate
+# reference; a note to the customer starting "Estimate" stays a note, in
+# the form and on the PDF.
+def test_n11_customer_note_starting_estimate(browser):
+    notes = "Customer pickup\nEstimate TCP-261120-MEBLV2\nEstimate valid for 7 days"
+    page, errors = _bo(browser, seed=[{"name": "Ama Owusu", "phone": "+233241234567", "state": "draft", "notes": notes},
+                                      {"name": "Yaw Mensah", "phone": "+233552331234", "state": "issued", "due": FUTURE, "notes": notes}],
+                       route="#/invoice/1")
+    page.wait_for_selector("#form:not([hidden])")
+    assert page.input_value("#iNote") == "Estimate valid for 7 days"
+    assert page.evaluate("TCPDesk.state().ref") == "TCP-261120-MEBLV2"
+    assert page.get_attribute("#iNote", "maxlength") == "500"
+    page.evaluate("location.hash = '#/invoice/2'")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    whole = " ".join(_pdf(page)[0])
+    assert "Estimate valid for 7 days" in whole and "TCP-261120-MEBLV2" in whole
     assert not errors
