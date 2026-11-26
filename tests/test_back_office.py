@@ -168,6 +168,32 @@ Design, Notes from Estimate to Receipt (v1.6)"):
   N09  a lost payment reply then a reload: no note text kept on the phone,
        the form says notes were not kept, nothing recorded twice
   N10  notes, forms and search fit 360 px and 390 px phones
+
+Phase 2.3, credit notes ("TCP Back Office Phase 2.3: Credit Notes
+Implementation Specification (v1.4)"):
+  C01  issuing each kind: a quantity (returned / not supplied), a delivery,
+       an owner's price adjustment; the credit note view
+  C02  the form's live amounts match what the database issues (the GH₵290
+       rounding example: 96.67, 96.67, 96.66)
+  C03  the form's labels say which boxes are printed; the confirm step
+       gives the amounts after, and repeats what will be printed
+  C04  a double tap and a lost reply give one credit note
+  C05  recovery after a reload: only identifiers kept on the phone, never
+       the reason or notes; the form says to type them again
+  C06  a cap broken meanwhile is refused with the database's own message
+  C07  owner-only controls (adjustment, backdating, cancel, the switch)
+       hidden from finance and sales; sales cannot issue
+  C08  cancelling a credit note shows its consequence in GH₵ first
+  C09  "In credit" and "Credited in full", the In credit list filter, and
+       Home's in-credit figure apart from what is owed
+  C10  the refund form on an invoice in credit: both figures, the smaller
+       filled in
+  C11  Cancel invoice is replaced while a credit note is active, and comes
+       back once they are cancelled
+  C12  the PDF (no internal note, backdate reason or staff name; CANCELLED
+       stamp with the date only), the invoice PDF identical before and
+       after, the WhatsApp text, the switch (off: no Issue button, the owner
+       can still cancel), and 360 / 390 px phones
 """
 import base64
 import io
@@ -204,7 +230,8 @@ STANDIN = r"""
   const cfg = JSON.parse(%CFG%);
   const db = window.__db = {
     products: cfg.products, staff: cfg.staff, users: cfg.users,
-    customers: [], invoices: [], lines: [], payments: [], notes: [], counters: {customer: 0, invoice: 0, receipt: 0},
+    customers: [], invoices: [], lines: [], payments: [], notes: [], counters: {customer: 0, invoice: 0, receipt: 0, credit_note: 0},
+    credits: [], creditLines: [], creditCancels: [], creditSwitch: {on: false, changes: []},
     offline: false, offlineOnce: 0, dropReply: 0, expired: false, calls: [], session: null,
     signOutFns: [], inAuthCallback: false, lockViolations: [],
   };
@@ -216,8 +243,10 @@ STANDIN = r"""
   try { const s = sessionStorage.getItem("standin-session"); if (s) db.session = JSON.parse(s); } catch (e) {}
   try { const d = sessionStorage.getItem("standin-db"); if (d) Object.assign(db, JSON.parse(d), {calls: []}); } catch (e) {}
   const persist = () => { try { sessionStorage.setItem("standin-db", JSON.stringify(
-      {customers: db.customers, invoices: db.invoices, lines: db.lines, payments: db.payments, notes: db.notes, counters: db.counters, staff: db.staff, clock: db.clock})); } catch (e) {} };
+      {customers: db.customers, invoices: db.invoices, lines: db.lines, payments: db.payments, notes: db.notes, counters: db.counters, staff: db.staff, clock: db.clock,
+       credits: db.credits, creditLines: db.creditLines, creditCancels: db.creditCancels, creditSwitch: db.creditSwitch})); } catch (e) {} };
   const pad = n => String(n).padStart(4, "0");
+  const lineId = () => db.lines.reduce((m, l) => Math.max(m, l.id || 0), 0) + 1;
   const net = async (name, fn) => {
     if (db.inAuthCallback) db.lockViolations.push(name);
     db.calls.push(name);
@@ -244,8 +273,15 @@ STANDIN = r"""
   // are stored below zero), as invoice_summary works it out.
   const paidOf = id => Math.round(db.payments.filter(p => p.invoice_id === id).reduce((a, p) => a + Math.round(p.amount * 100), 0)) / 100;
   const pd = new Date(), today = pd.getFullYear() + "-" + String(pd.getMonth() + 1).padStart(2, "0") + "-" + String(pd.getDate()).padStart(2, "0");
-  const status = inv => inv.state === "draft" ? "draft" : inv.state === "cancelled" ? "cancelled"
-    : paidOf(inv.id) >= total(inv.id) ? "paid" : inv.due_date && inv.due_date < today ? "overdue" : paidOf(inv.id) > 0 ? "part_paid" : "unpaid";
+  // Phase 2.3: the sum of active (not cancelled) credit notes, and the
+  // balance and status as invoice_summary works them out.
+  const activeCredit = c => !db.creditCancels.some(x => x.credit_note_id === c.id);
+  const creditedOf = id => Math.round(db.credits.filter(c => c.invoice_id === id && activeCredit(c)).reduce((a, c) => a + Math.round(c.amount * 100), 0)) / 100;
+  const balOf = id => Math.round((total(id) - creditedOf(id) - paidOf(id)) * 100) / 100;
+  const status = inv => { const b = balOf(inv.id), cr = creditedOf(inv.id), p = paidOf(inv.id);
+    return inv.state === "draft" ? "draft" : inv.state === "cancelled" ? "cancelled" : b < 0 ? "in_credit"
+      : cr > 0 && Math.abs(total(inv.id) - cr) < 1e-9 && p === 0 ? "credited" : b <= 0 ? "paid"
+      : inv.due_date && inv.due_date < today ? "overdue" : p > 0 ? "part_paid" : "unpaid"; };
   let clock = 0;
   // The clock carries on across reloads (kept with the data), so a record
   // made after a reload is always later than the ones before it.
@@ -253,7 +289,7 @@ STANDIN = r"""
   // invoice_list, as the view builds it.
   const listRow = inv => { const c = db.customers.find(x => x.id === inv.customer_id), t = total(inv.id);
     return {id: inv.id, invoice_no: inv.invoice_no, state: inv.state, status: status(inv), issued_at: inv.issued_at || null,
-      created_at: inv.created_at, due_date: inv.due_date || null, total: t, balance: Math.round((t - paidOf(inv.id)) * 100) / 100,
+      created_at: inv.created_at, due_date: inv.due_date || null, total: t, balance: balOf(inv.id),
       billed_to_name: inv.invoice_no ? inv.billed_to_name : c.name, billed_to_phone: inv.invoice_no ? inv.billed_to_phone : c.phone}; };
   // PostgREST "ilike" with * as the wildcard.
   const ilike = (v, pat) => v != null && new RegExp("^" + pat.split("*").map(p => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$", "i").test(String(v));
@@ -264,8 +300,11 @@ STANDIN = r"""
     const inv = {id: db.invoices.length + 1, state: o.state || "draft", invoice_no: null, customer_id: c.id, due_date: o.due || null,
       created_at: o.created_at || stamp(), notes: o.notes || null, deliver_to_location: null};
     db.invoices.push(inv);
-    (o.lines || [{qty: o.qty || 10}]).forEach((l, k) => db.lines.push({invoice_id: inv.id, position: k + 1, kind: "product",
-      product_id: 1, description: "Supacem 32.5R", unit: "50 kg bag", quantity: l.qty, unit_price: l.price == null ? 75 : l.price}));
+    // (Phase 2.3: a line may also be a delivery or a discount, and every
+    // line has an id, as credit notes point at their invoice line.)
+    (o.lines || [{qty: o.qty || 10}]).forEach((l, k) => db.lines.push({id: lineId(), invoice_id: inv.id, position: k + 1, kind: l.kind || "product",
+      product_id: (l.kind || "product") === "product" ? 1 : null, description: l.desc || "Supacem 32.5R", unit: l.unit || "50 kg bag",
+      quantity: l.qty, unit_price: l.price == null ? 75 : l.price}));
     if (inv.state !== "draft" && !o.never_issued) Object.assign(inv, {invoice_no: "TCP-INV-" + pad(++db.counters.invoice),
       issued_at: inv.created_at, issued_by: "Test Owner", billed_to_name: c.name, billed_to_phone: c.phone});
     if (o.state === "cancelled") inv.cancel_reason = "seeded";
@@ -276,7 +315,7 @@ STANDIN = r"""
   function addPay(p) { const row = {id: db.payments.length + 1, receipt_no: "TCP-RCT-" + pad(++db.counters.receipt), reason: null,
       reverses_payment_id: null, request_id: null, customer_note: null, internal_note: null, recorded_at: stamp(),
       recorded_by_id: me() ? me().user_id : null, ...p};
-    db.payments.push(row); row.balance_after = Math.round((total(row.invoice_id) - paidOf(row.invoice_id)) * 100) / 100; persist(); return row; }
+    db.payments.push(row); row.balance_after = balOf(row.invoice_id); persist(); return row; }
   // tcp_private.repeat_of: the same request id gives back the first receipt;
   // a different request under that id is refused.
   // A database refusal (raise exception) carries a Postgres error code.
@@ -328,7 +367,7 @@ STANDIN = r"""
         deliver_to_phone: phone(a.p_deliver_to_phone), due_date: a.p_due_date, notes: a.p_notes});
       db.lines = db.lines.filter(l => l.invoice_id !== inv.id);
       a.p_lines.forEach((l, i) => { const p = db.products.find(x => x.id === l.product_id);
-        db.lines.push({invoice_id: inv.id, position: i + 1, kind: l.kind, product_id: l.product_id || null,
+        db.lines.push({id: lineId(), invoice_id: inv.id, position: i + 1, kind: l.kind, product_id: l.product_id || null,
           description: l.description || (p && p.name), unit: l.unit || (p && p.unit), quantity: +l.quantity,
           unit_price: l.unit_price != null ? +l.unit_price : p.current_price}); });
       return inv.id; }),
@@ -350,7 +389,11 @@ STANDIN = r"""
         billed_to_name: issued ? inv.billed_to_name : c.name, billed_to_phone: issued ? inv.billed_to_phone : c.phone,
         deliver_to_location: inv.deliver_to_location, deliver_to_contact: inv.deliver_to_contact, deliver_to_phone: inv.deliver_to_phone,
         lines: db.lines.filter(l => l.invoice_id === id).map(l => ({...l, line_total: Math.round(l.quantity * l.unit_price * 100) / 100})),
-        total: t, paid: paidOf(id), balance: Math.round((t - paidOf(id)) * 100) / 100, payments: db.payments.filter(p => p.invoice_id === id).map(p => ({...p,
+        total: t, paid: paidOf(id), balance: balOf(id), credited: creditedOf(id),
+        credit_notes: db.credits.filter(c => c.invoice_id === id).map(c => { const x = db.creditCancels.find(k => k.credit_note_id === c.id);
+          return {id: c.id, credit_note_no: c.credit_note_no, issued_on: c.issued_on, effective_on: c.effective_on, amount: c.amount,
+            cancelled: !!x, cancelled_on: x ? x.cancelled_on : null}; }),
+        payments: db.payments.filter(p => p.invoice_id === id).map(p => ({...p,
           reverses_receipt_no: p.reverses_payment_id ? db.payments.find(o => o.id === p.reverses_payment_id).receipt_no : null,
           corrected: p.kind === "payment" && db.payments.some(c => c.reverses_payment_id === p.id && c.kind === "correction"),
           refunded: p.kind === "payment" ? -db.payments.filter(r => r.reverses_payment_id === p.id && r.kind === "refund").reduce((a, r) => a + r.amount, 0) : null,
@@ -369,7 +412,7 @@ STANDIN = r"""
       if (!inv || inv.state !== "issued") throw dbErr("Payments can only be recorded against an issued invoice");
       if (!(a.p_amount > 0)) throw dbErr("A payment must be more than zero");
       if (!a.p_paid_on || a.p_paid_on > today) throw dbErr("A payment date cannot be in the future");
-      const owed = Math.round((total(inv.id) - paidOf(inv.id)) * 100) / 100;
+      const owed = balOf(inv.id);
       if (a.p_amount > owed) throw dbErr(`GH₵ ${a.p_amount.toFixed(2)} is more than the GH₵ ${owed.toFixed(2)} still owed`);
       return addPay({invoice_id: inv.id, kind: "payment", amount: Math.round(a.p_amount * 100) / 100, method: a.p_method, reference: a.p_reference || null,
         paid_on: a.p_paid_on, request_id: a.p_request_id, recorded_by: me().full_name,
@@ -405,7 +448,7 @@ STANDIN = r"""
     receipt: id => net("receipt", () => { staffOnly(); const p = db.payments.find(x => x.id === id);
       if (!p) throw new Error("No such receipt");
       const doc = window.TCPDeskApi.__doc(p.invoice_id), earlier = db.payments.filter(x => x.invoice_id === p.invoice_id && x.id < p.id);
-      ["payments", "paid", "balance", "status", "internal_notes"].forEach(k => delete doc[k]);
+      ["payments", "paid", "balance", "status", "internal_notes", "credited", "credit_notes"].forEach(k => delete doc[k]);
       return {receipt_no: p.receipt_no, kind: p.kind, amount: p.amount, method: p.method, reference: p.reference, paid_on: p.paid_on,
         reason: p.reason || null, reverses_receipt_no: p.reverses_payment_id ? db.payments.find(o => o.id === p.reverses_payment_id).receipt_no : null,
         balance_after: p.balance_after, recorded_by: p.recorded_by, payments_before: earlier.length, ...payNotes(p),
@@ -414,6 +457,7 @@ STANDIN = r"""
       if (!reason || !reason.trim()) throw new Error("A reason is needed to cancel an invoice");
       const inv = db.invoices.find(i => i.id === id);
       if (!inv || inv.state === "cancelled") throw dbErr("Only a draft or issued invoice can be cancelled");
+      if (db.credits.some(c => c.invoice_id === id && activeCredit(c))) throw dbErr("This invoice has active credit notes. Cancel them before cancelling the invoice.");
       const held = paidOf(id);
       if (held !== 0) throw dbErr(`This invoice still holds GH₵ ${held.toFixed(2)} in payments; correct or refund them first`);
       Object.assign(inv, {state: "cancelled", cancel_reason: reason.trim(), cancelled_at: stamp(), cancelled_by: me().full_name}); }),
@@ -457,7 +501,8 @@ STANDIN = r"""
     // back_office_home (runs with the caller's rights: zeros for non-staff).
     home: () => net("home", () => { const rows = me() ? db.invoices.map(listRow) : [], n = s => rows.filter(r => r.status === s).length;
       return {owed: rows.filter(r => ["unpaid", "part_paid", "overdue"].includes(r.status)).reduce((a, r) => a + r.balance, 0),
-        unpaid: n("unpaid"), part_paid: n("part_paid"), overdue: n("overdue"), drafts: n("draft")}; }),
+        unpaid: n("unpaid"), part_paid: n("part_paid"), overdue: n("overdue"), drafts: n("draft"),
+        in_credit: -rows.filter(r => r.status === "in_credit").reduce((a, r) => a + r.balance, 0), in_credit_count: n("in_credit")}; }),
     // Phase 2.2: add_invoice_note, with the database's rules (a correction
     // corrects one note once; the same request id gives the first note).
     addNote: a => net("addNote", () => { staffOnly("owner", "sales", "finance");
@@ -512,13 +557,134 @@ STANDIN = r"""
           cn = db.notes.find(n => n.id === h.corrects_note_id), cp = db.payments.find(x => x.id === h.corrects_payment_id);
         return {kind: h.kind, category: h.category, note_id: h.note_id || null, payment_id: h.payment_id || null, record_kind: p ? p.kind : null,
           receipt_no: p ? p.receipt_no : null, invoice_id: inv.id, invoice_no: inv.invoice_no, invoice_state: inv.state,
-          customer: inv.invoice_no ? inv.billed_to_name : c.name, status: status(inv), balance: Math.round((t - paidOf(inv.id)) * 100) / 100,
+          customer: inv.invoice_no ? inv.billed_to_name : c.name, status: status(inv), balance: balOf(inv.id),
           body: h.body, by: staffName(h.author), at: h.at, corrected: h.corrected,
           chain: h.corrected ? noteChain(h.note_id, h.kind === "payment_note" ? h.payment_id : null) : null,
           corrects_note_id: h.corrects_note_id || null, corrects_payment_id: h.corrects_payment_id || null,
           corrects_by: cn ? staffName(cn.created_by) : null, corrects_at: cn ? cn.created_at : null,
           corrects_receipt_no: cp ? cp.receipt_no : null, corrects_record_kind: cp ? cp.kind : null}; });
       return {count, rows}; }),
+    // Phase 2.3: credit notes, with the database's rules (credit_note_options,
+    // issue_credit_note, cancel_credit_note, credit_note_document,
+    // credit_note_print, set_credit_notes_switch). Amounts in pesewas inside.
+    __creditable: id => { const ls = db.lines.filter(l => l.invoice_id === id).map(l => ({...l, lt: Math.round(l.quantity * l.unit_price * 100)}));
+      const gross = ls.filter(l => l.kind !== "discount").reduce((a, l) => a + l.lt, 0), tot = ls.reduce((a, l) => a + l.lt, 0);
+      const out = ls.filter(l => l.kind !== "discount").map(l => ({l, net: gross ? Math.round(l.lt * tot / gross) : 0}));
+      if (out.length) { const big = out.slice().sort((x, y) => y.l.lt - x.l.lt || x.l.position - y.l.position)[0];
+        big.net += tot - out.reduce((a, o) => a + o.net, 0); }
+      return out.map(({l, net}) => { const used = db.creditLines.filter(c => c.invoice_line_id === l.id && activeCredit(db.credits.find(n => n.id === c.credit_note_id)));
+        const q = used.reduce((a, c) => a + (c.quantity || 0), 0), v = used.reduce((a, c) => a + Math.round(c.amount * 100), 0);
+        return {invoice_line_id: l.id, position: l.position, kind: l.kind, description: l.description, unit: l.unit, quantity: l.quantity,
+          gross: l.lt / 100, net_value: net / 100, credited_quantity: q, credited_value: v / 100,
+          quantity_left: l.kind === "product" ? Math.round((l.quantity - q) * 1000) / 1000 : null, value_left: (net - v) / 100}; }); },
+    __switch: () => { const c = db.creditSwitch.changes[db.creditSwitch.changes.length - 1];
+      return {on: db.creditSwitch.on, changed_at: c ? c.at : null, changed_by: c ? c.by : null, reason: c ? c.reason : null}; },
+    creditOptions: a => net("creditOptions", () => { staffOnly("owner", "sales", "finance");
+      if (a.p_invoice_id == null) return {switch: window.TCPDeskApi.__switch()};
+      const inv = db.invoices.find(i => i.id === a.p_invoice_id); if (!inv) throw dbErr("No such invoice");
+      const t = total(inv.id), cr = creditedOf(inv.id);
+      return {switch: window.TCPDeskApi.__switch(), invoice_id: inv.id, invoice_no: inv.invoice_no, state: inv.state, status: status(inv),
+        issued_on: (inv.issued_at || "").slice(0, 10) || null, today, total: t, credited: cr, value: Math.round((t - cr) * 100) / 100,
+        paid: paidOf(inv.id), balance: balOf(inv.id), invoice_left: Math.round((t - cr) * 100) / 100, lines: window.TCPDeskApi.__creditable(inv.id)}; }),
+    issueCredit: a => net("issueCredit", () => { staffOnly("owner", "finance"); const role = me().role;
+      if (!a.p_request_id) throw dbErr("A request id is needed");
+      if (!Array.isArray(a.p_lines) || !a.p_lines.length) throw dbErr("A credit note needs at least one line");
+      const trim = v => v == null ? "" : String(v).trim();
+      const fp = JSON.stringify({inv: a.p_invoice_id, lines: a.p_lines.map(l => ({id: l.invoice_line_id == null ? null : l.invoice_line_id, k: l.kind, w: l.why,
+          q: l.quantity == null ? null : Math.round(l.quantity * 1000) / 1000, a: l.kind === "adjustment" ? Math.round(l.amount * 100) / 100 : null}))
+          .sort((x, y) => (x.id == null) - (y.id == null) || (x.id || 0) - (y.id || 0) || String(x.k).localeCompare(y.k) || String(x.w).localeCompare(y.w)),
+        r: trim(a.p_reason), c: trim(a.p_customer_note), i: trim(a.p_internal_note), e: a.p_effective_on || "", b: trim(a.p_backdate_reason)});
+      const again = db.credits.find(c => c.request_id === a.p_request_id);
+      if (again) { if (again.fp !== fp) throw dbErr("This request id was already used for a different credit note"); return again; }
+      if (!db.creditSwitch.on) throw dbErr("Credit notes are not switched on");
+      const inv = db.invoices.find(i => i.id === a.p_invoice_id); if (!inv) throw dbErr("No such invoice");
+      if (inv.state !== "issued") throw dbErr("Only an issued invoice can be credited");
+      if (!trim(a.p_reason)) throw dbErr("A reason is needed; it is printed on the credit note");
+      if (trim(a.p_reason).length > 300) throw dbErr("The reason can be at most 300 characters");
+      const opts = window.TCPDeskApi.__creditable(inv.id), plan = []; let sum = 0, adj = false;
+      a.p_lines.forEach(l => {
+        if (l.kind === "adjustment") { if (role !== "owner") throw dbErr("Only the owner can make an adjustment credit");
+          if (adj) throw dbErr("A credit note can have only one adjustment line"); adj = true;
+          const amt = Math.round(l.amount * 100); if (!(amt > 0)) throw dbErr("An adjustment credit must be more than zero");
+          plan.push({invoice_line_id: null, kind: "adjustment", why: "price_adjustment", quantity: null, amount: amt}); sum += amt; return; }
+        const c = opts.find(o => o.invoice_line_id === l.invoice_line_id); if (!c) throw dbErr("That line is not on this invoice");
+        if (plan.some(p => p.invoice_line_id === c.invoice_line_id)) throw dbErr("Each invoice line can appear only once in a credit note");
+        const left = Math.round(c.value_left * 100); let amt;
+        if (l.kind === "quantity") { if (c.kind !== "product") throw dbErr("Only a product line can be credited by quantity");
+          if (!["not_supplied", "returned"].includes(l.why)) throw dbErr("Say whether the goods were not supplied or returned");
+          const q = Math.round(l.quantity * 1000) / 1000; if (!(q > 0)) throw dbErr("The quantity to credit must be more than zero");
+          if (q > c.quantity_left + 1e-9) { const w = String(c.unit).trim().split(/\s+/).pop();
+            throw dbErr(`Only ${c.quantity_left} ${c.quantity_left === 1 || w.endsWith("s") ? w : w + "s"} are left to credit`); }
+          if (left <= 0) throw dbErr(`Only GH₵${(Math.max(left, 0) / 100).toFixed(2)} of this line is left to credit`);
+          amt = Math.abs(q - c.quantity_left) < 1e-9 ? left : Math.min(Math.round(q * Math.round(c.net_value * 100) / c.quantity), left);
+        } else if (l.kind === "delivery") { if (c.kind !== "delivery") throw dbErr("Only a delivery line can be credited as a delivery");
+          if (l.quantity != null) throw dbErr("A delivery credit has no quantity: it credits the whole delivery charge left");
+          amt = left; if (amt <= 0) throw dbErr(`Only GH₵${(Math.max(left, 0) / 100).toFixed(2)} of this line is left to credit`);
+        } else throw dbErr("A credit note line must be a quantity, delivery or adjustment credit");
+        plan.push({invoice_line_id: c.invoice_line_id, kind: l.kind, why: l.why, quantity: l.kind === "quantity" ? Math.round(l.quantity * 1000) / 1000 : null, amount: amt});
+        sum += amt; });
+      const t = Math.round(total(inv.id) * 100), cr = Math.round(creditedOf(inv.id) * 100);
+      if (cr + sum > t) throw dbErr("This would credit more than the invoice is worth");
+      const eff = a.p_effective_on || today;
+      if (eff > today || eff < (inv.issued_at || "").slice(0, 10)) throw dbErr("A credit note cannot take effect before the invoice was issued, or in the future");
+      if (eff !== today && (role !== "owner" || !trim(a.p_backdate_reason))) throw dbErr("Only the owner can backdate a credit note, and a reason is needed");
+      const owedBefore = Math.round(balOf(inv.id) * 100);
+      const cn = {id: db.credits.length + 1, credit_note_no: "TCP-CN-" + pad(++db.counters.credit_note), invoice_id: inv.id, issued_on: today, effective_on: eff,
+        backdate_reason: eff !== today ? trim(a.p_backdate_reason) : null, reason: trim(a.p_reason), customer_note: trim(a.p_customer_note) || null,
+        internal_note: trim(a.p_internal_note) || null, amount: sum / 100, value_after: (t - cr - sum) / 100, owed_after: (owedBefore - sum) / 100,
+        recorded_at: stamp(), recorded_by: me().full_name, request_id: a.p_request_id, fp};
+      db.credits.push(cn);
+      plan.forEach(p => db.creditLines.push({...p, credit_note_id: cn.id, amount: p.amount / 100}));
+      return cn; }),
+    cancelCredit: a => net("cancelCredit", () => { staffOnly("owner");
+      if (!a.p_request_id) throw dbErr("A request id is needed");
+      const cn = db.credits.find(c => c.id === a.p_credit_note_id); if (!cn) throw dbErr("No such credit note");
+      const fp = JSON.stringify([a.p_credit_note_id, String(a.p_reason || "").trim()]);
+      let x = db.creditCancels.find(k => k.request_id === a.p_request_id);
+      if (x) { if (x.fp !== fp) throw dbErr("This request id was already used for a different cancellation"); }
+      else { if (db.creditCancels.some(k => k.credit_note_id === cn.id)) throw dbErr("This credit note is already cancelled");
+        if (!String(a.p_reason || "").trim()) throw dbErr("A reason is needed to cancel a credit note");
+        x = {id: db.creditCancels.length + 1, credit_note_id: cn.id, cancelled_on: today, reason: a.p_reason.trim(), recorded_at: stamp(),
+          recorded_by: me().full_name, request_id: a.p_request_id, fp}; db.creditCancels.push(x); }
+      const inv = db.invoices.find(i => i.id === cn.invoice_id);
+      return {id: x.id, credit_note_id: cn.id, credit_note_no: cn.credit_note_no, invoice_id: cn.invoice_id, cancelled_on: x.cancelled_on,
+        balance: balOf(cn.invoice_id), status: status(inv)}; }),
+    __creditLines: cn => db.creditLines.filter(l => l.credit_note_id === cn.id).map(l => { const il = db.lines.find(x => x.id === l.invoice_line_id);
+      return {...l, description: il ? il.description : "Price adjustment", unit: il ? il.unit : null, position: il ? il.position : 1e9}; })
+      .sort((x, y) => x.position - y.position),
+    creditDoc: a => net("creditDoc", () => { staffOnly("owner", "sales", "finance");
+      const cn = db.credits.find(c => c.id === a.p_credit_note_id); if (!cn) throw dbErr("No such credit note");
+      const inv = db.invoices.find(i => i.id === cn.invoice_id), x = db.creditCancels.find(k => k.credit_note_id === cn.id);
+      return {id: cn.id, credit_note_no: cn.credit_note_no, invoice_id: inv.id, invoice_no: inv.invoice_no, invoice_issued_on: (inv.issued_at || "").slice(0, 10),
+        billed_to_name: inv.billed_to_name, billed_to_phone: inv.billed_to_phone, issued_on: cn.issued_on, effective_on: cn.effective_on,
+        backdate_reason: cn.backdate_reason, reason: cn.reason, customer_note: cn.customer_note, internal_note: cn.internal_note, amount: cn.amount,
+        value_after: cn.value_after, owed_after: cn.owed_after, recorded_at: cn.recorded_at, recorded_by: cn.recorded_by,
+        lines: window.TCPDeskApi.__creditLines(cn).map(l => ({kind: l.kind, why: l.why, quantity: l.quantity, amount: l.amount, invoice_line_id: l.invoice_line_id,
+          description: l.description, unit: l.unit})),
+        cancelled: !!x, cancelled_on: x ? x.cancelled_on : null, cancel_reason: x ? x.reason : null, cancelled_at: x ? x.recorded_at : null,
+        cancelled_by: x ? x.recorded_by : null, invoice_balance: balOf(inv.id), invoice_status: status(inv)}; }),
+    creditPrint: a => net("creditPrint", () => { staffOnly("owner", "sales", "finance");
+      const cn = db.credits.find(c => c.id === a.p_credit_note_id); if (!cn) throw dbErr("No such credit note");
+      const inv = db.invoices.find(i => i.id === cn.invoice_id), x = db.creditCancels.find(k => k.credit_note_id === cn.id);
+      const W = {not_supplied: "Not supplied", returned: "Returned", delivery_not_made: "Delivery not made", price_adjustment: "Price adjustment"};
+      return {credit_note_no: cn.credit_note_no, issued_on: cn.issued_on, effective_on: cn.effective_on !== cn.issued_on ? cn.effective_on : null,
+        invoice_no: inv.invoice_no, invoice_issued_on: (inv.issued_at || "").slice(0, 10), billed_to_name: inv.billed_to_name, billed_to_phone: inv.billed_to_phone,
+        lines: window.TCPDeskApi.__creditLines(cn).map(l => ({description: l.description, quantity: l.quantity, unit: l.unit, why: W[l.why], amount: l.amount})),
+        amount: cn.amount, value_before: Math.round((cn.value_after + cn.amount) * 100) / 100, value_after: cn.value_after, owed_after: cn.owed_after,
+        reason: cn.reason, customer_note: cn.customer_note, cancelled_on: x ? x.cancelled_on : null}; }),
+    setCreditSwitch: a => net("setCreditSwitch", () => { staffOnly("owner");
+      if (!a.p_request_id) throw dbErr("A request id is needed");
+      const why = String(a.p_reason || "").trim(); if (!why) throw dbErr("A reason is needed to switch credit notes on or off");
+      const sw = db.creditSwitch, e = sw.changes.find(c => c.request_id === a.p_request_id);
+      if (e) { if (e.on !== a.p_on || e.reason !== why) throw dbErr("This request id was already used for a different switch change");
+        return {on: e.on, changed: true, message: e.on ? "Credit notes are switched on" : "Credit notes are switched off", switch: window.TCPDeskApi.__switch()}; }
+      if (sw.on === a.p_on) return {on: sw.on, changed: false, message: sw.on ? "Credit notes are already on" : "Credit notes are already off", switch: window.TCPDeskApi.__switch()};
+      sw.changes.push({on: a.p_on, reason: why, at: stamp(), by: me().full_name, request_id: a.p_request_id}); sw.on = a.p_on;
+      return {on: sw.on, changed: true, message: sw.on ? "Credit notes are switched on" : "Credit notes are switched off", switch: window.TCPDeskApi.__switch()}; }),
+    // A plain read of credit_notes by request id (row-level security:
+    // nothing for non-staff).
+    creditByRequest: req => net("creditByRequest", () => { const c = me() && db.credits.find(x => x.request_id === req);
+      return c ? {id: c.id, credit_note_no: c.credit_note_no, invoice_id: c.invoice_id, amount: c.amount} : null; }),
     // invoice_list with the desk's filters, newest first then id, paged.
     list: ({status: st, terms, offset, limit}) => net("list", () => {
       let rows = rlsRead(db.invoices.map(listRow));
@@ -545,7 +711,10 @@ STANDIN = r"""
 ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
 RPC_PASS_THROUGH = {  # Back Office api method -> database function (sb.rpc(name, a))
     "saveDraft": "save_draft_invoice", "recordPayment": "record_payment", "correctPayment": "correct_payment",
-    "refundPayment": "refund_payment", "addNote": "add_invoice_note", "searchNotes": "search_notes"}
+    "refundPayment": "refund_payment", "addNote": "add_invoice_note", "searchNotes": "search_notes",
+    # Phase 2.3: every credit note call the screens make.
+    "creditOptions": "credit_note_options", "issueCredit": "issue_credit_note", "cancelCredit": "cancel_credit_note",
+    "creditDoc": "credit_note_document", "creditPrint": "credit_note_print", "setCreditSwitch": "set_credit_notes_switch"}
 
 
 def _rpc_inputs():
@@ -2705,4 +2874,440 @@ def test_n11_customer_note_starting_estimate(browser):
     page.wait_for_selector("#issuedSec:not([hidden])")
     whole = " ".join(_pdf(page)[0])
     assert "Estimate valid for 7 days" in whole and "TCP-261120-MEBLV2" in whole
+    assert not errors
+
+
+
+# ---- Phase 2.3: credit notes ----------------------------------------------------
+# CREDIT: invoice 1 = TCP-INV-0001 Ama, 100 bags at GH₵100 less GH₵1,000 =
+# GH₵9,000, unpaid (the design's 10 + 20 + 70 example); 2 = TCP-INV-0002
+# Yaw, 10 bags at GH₵75 + delivery GH₵200 = GH₵950, paid in full
+# (TCP-RCT-0001); 3 = TCP-INV-0003 Efua, 3 bags at GH₵100 less GH₵10 =
+# GH₵290 (the rounding example); 4 = TCP-INV-0004 Kojo, GH₵750 unpaid.
+CREDIT = [
+    {"name": "Ama Mensah", "phone": "+233241234567", "state": "issued", "due": FUTURE,
+     "lines": [{"qty": 100, "price": 100}, {"kind": "discount", "qty": 1, "price": -1000, "desc": "Builder discount", "unit": "each"}]},
+    {"name": "Yaw Boateng", "phone": "+233552331234", "state": "issued", "due": FUTURE, "paid": 950,
+     "lines": [{"qty": 10, "price": 75}, {"kind": "delivery", "qty": 1, "price": 200, "desc": "Delivery to Kasoa", "unit": "trip"}]},
+    {"name": "Efua Owusu", "phone": "+233271112223", "state": "issued", "due": FUTURE,
+     "lines": [{"qty": 3, "price": 100}, {"kind": "discount", "qty": 1, "price": -10, "desc": "Discount", "unit": "each"}]},
+    {"name": "Kojo Asante", "phone": "+233501234000", "state": "issued", "due": FUTURE},
+]
+
+
+def _cn(browser, route="#/", who=None, switch_on=True, width=390, **kw):
+    page, errors = _bo(browser, width=width, seed=CREDIT, route=route, staff=TEAM, users=[OWNER, FIN, SALES], who=who, **kw)
+    if switch_on:
+        # Straight into the stand-in's data (any call saves it for the reload).
+        page.evaluate("async () => { __db.creditSwitch.on = true; await TCPDeskApi.home(); }")
+        page.evaluate("location.reload()")
+        page.wait_for_selector("#tool:not([hidden])")
+    return page, errors
+
+
+def _cn_line_ids(page, inv):
+    return page.evaluate(f"__db.lines.filter(l => l.invoice_id === {inv}).map(l => l.id)")
+
+
+def _open_credit_form(page, inv):
+    page.evaluate(f"location.hash = '#/invoice/{inv}'")
+    page.wait_for_selector("#cnBtn:not([hidden])")
+    page.click("#cnBtn")
+    page.wait_for_selector("#cnFields:not([hidden])")
+
+
+def _credit_qty(page, line, qty, why="returned"):
+    page.fill(f"#cnQ{line}", str(qty))
+    page.check(f'input[name="cnw{line}"][value="{why}"]')
+
+
+def _issue(page, reason="Bags returned", cust="", internal=""):
+    page.fill("#cnWhy", reason)
+    page.fill("#cnCust", cust)
+    page.fill("#cnInt", internal)
+    page.click("#cnNext")
+    page.wait_for_selector("#cnConfirm:not([hidden])")
+    page.click("#cnYes")
+
+
+def _credit_shown(page, no):
+    page.wait_for_selector("#cnSec:not([hidden])")
+    page.wait_for_function(f"document.querySelector('#cvTitle').textContent.includes('{no}')")
+    return {r.locator("span").first.text_content(): r.locator("b").first.text_content() for r in page.locator("#cv .dk-sum > div").all()}
+
+
+def _credit_pdf(page):
+    b64 = page.evaluate("""async () => { const p = await TCPDeskApi.creditPrint({p_credit_note_id: TCPDesk.credit().id});
+        return (await TCPDesk.makeCreditPdf(p)).output('datauristring').split(',')[1]; }""")
+    reader = PdfReader(io.BytesIO(base64.b64decode(b64)))
+    # One line of words: the PDF wraps long sentences.
+    return " ".join(" ".join(tidy_pdf_text(p.extract_text()) for p in reader.pages).split()), len(reader.pages)
+
+
+def test_c01_issuing_each_kind(browser):
+    page, errors = _cn(browser, route="#/invoice/1")
+    a1, _ = _cn_line_ids(page, 1)
+    _open_credit_form(page, 1)
+    _credit_qty(page, a1, 10)
+    assert page.text_content(f"#cnAmt{a1}") == "GH₵900.00", "10 of 100 bags after the discount"
+    _issue(page, "Ten bags returned unused", "Thank you", "Driver brought them back")
+    rows = _credit_shown(page, "TCP-CN-0001")
+    assert rows["Amount credited"] == "GH₵900.00" and rows["Invoice value after"] == "GH₵8,100.00" and rows["Owed after"] == "GH₵8,100.00"
+    assert "Credit note issued." in page.text_content("#cvMsg")
+    lines = page.text_content("#cvLines")
+    assert "10 bags" in lines and "Returned" in lines
+    notes = page.text_content("#cvNotes")
+    assert "Ten bags returned unused" in notes and "Thank you" in notes and "Driver brought them back" in notes
+    # Not supplied, then the owner's price adjustment, on the same invoice.
+    _open_credit_form(page, 1)
+    _credit_qty(page, a1, 20, "not_supplied")
+    page.click("#cnOwner summary")
+    page.fill("#cnAdj", "50")
+    assert "Credit GH₵1,850.00" in page.text_content("#cnTotal")
+    _issue(page, "Twenty bags short; price agreed")
+    rows = _credit_shown(page, "TCP-CN-0002")
+    assert rows["Amount credited"] == "GH₵1,850.00"
+    assert "Price adjustment" in page.text_content("#cvLines") and "Not supplied" in page.text_content("#cvLines")
+    # A delivery not made: the whole delivery charge, no quantity.
+    _, d2 = _cn_line_ids(page, 2)
+    _open_credit_form(page, 2)
+    page.check(f'[data-cntick="{d2}"]')
+    assert page.text_content(f"#cnAmt{d2}") == "GH₵200.00"
+    _issue(page, "Customer collected")
+    rows = _credit_shown(page, "TCP-CN-0003")
+    assert rows["Amount credited"] == "GH₵200.00" and rows["In credit after (TCP owed)"] == "GH₵200.00"
+    assert "Delivery not made" in page.text_content("#cvLines")
+    # The invoice lists its credit notes, with the money block.
+    page.click("#cvInv")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert "TCP-CN-0003" in page.text_content("#cnList")
+    sumtext = page.text_content("#issued")
+    assert "Credited" in sumtext and "In credit" in sumtext and "GH₵200.00 (TCP owes the customer)" in sumtext
+    assert not errors
+
+
+def test_c02_live_amounts_match_the_database(browser):
+    page, errors = _cn(browser, route="#/invoice/3")
+    b1, _ = _cn_line_ids(page, 3)
+    for n, want in [(1, "96.67"), (2, "96.67"), (3, "96.66")]:
+        _open_credit_form(page, 3)
+        _credit_qty(page, b1, 1)
+        assert page.text_content(f"#cnAmt{b1}") == f"GH₵{want}", (n, page.text_content(f"#cnAmt{b1}"))
+        _issue(page, f"Bag {n} returned")
+        rows = _credit_shown(page, f"TCP-CN-000{n}")
+        assert rows["Amount credited"] == f"GH₵{want}", n
+    assert page.evaluate("TCPDeskApi.__doc(3).status") == "credited"
+    page.click("#cvInv")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert "Credited in full" in page.text_content("#issued")
+    assert not page.locator("#cnBtn").is_visible(), "nothing left to credit"
+    assert not errors
+
+
+def test_c03_labels_and_the_confirm_step(browser):
+    page, errors = _cn(browser, route="#/invoice/2")
+    a, _ = _cn_line_ids(page, 2)
+    _open_credit_form(page, 2)
+    labels = {l: page.text_content(f'label[for="{l}"]') for l in ["cnWhy", "cnCust", "cnInt"]}
+    assert labels == {"cnWhy": "Reason (required, printed on the credit note)",
+                      "cnCust": "Note to the customer (optional, also printed)",
+                      "cnInt": "Internal note (staff only, never printed)"}, labels
+    page.click("#cnNext")
+    assert "Choose what to credit" in page.text_content("#cnErr") and "Give the reason" in page.text_content("#cnErr")
+    _credit_qty(page, a, 4)
+    page.fill("#cnWhy", "Four bags returned")
+    page.fill("#cnCust", "Your refund follows")
+    page.fill("#cnInt", "Kept at the depot")
+    page.click("#cnNext")
+    page.wait_for_selector("#cnConfirm:not([hidden])")
+    summary = page.text_content("#cnSummary")
+    assert "Credit GH₵300.00 against TCP-INV-0002. Value after: GH₵650.00. TCP will owe the customer GH₵300.00." in summary, summary
+    printed = page.text_content("#cnPrinted")
+    assert '"Four bags returned"' in printed and '"Your refund follows"' in printed and "Kept at the depot" not in printed
+    assert "internal note is never printed" in printed
+    assert page.evaluate("__db.credits.length") == 0, "nothing is issued before the confirm step"
+    assert not errors
+
+
+def test_c04_double_tap_and_lost_reply_give_one_credit_note(browser):
+    page, errors = _cn(browser, route="#/invoice/1")
+    a1, _ = _cn_line_ids(page, 1)
+    _open_credit_form(page, 1)
+    _credit_qty(page, a1, 5)
+    page.fill("#cnWhy", "Five bags returned")
+    page.click("#cnNext")
+    page.wait_for_selector("#cnConfirm:not([hidden])")
+    # The database issues it, but the answer is lost.
+    page.evaluate("__db.dropReply = 1")
+    page.click("#cnYes")
+    page.wait_for_function("document.querySelector('#cnMsg').textContent.includes('never issued twice')")
+    assert page.evaluate("__db.credits.length") == 1
+    req = page.evaluate("TCPDesk.creditForm().req")
+    # Tap again (twice, quickly): checked first, the same credit note shown.
+    page.evaluate("document.querySelector('#cnYes').click(); document.querySelector('#cnYes').click();")
+    _credit_shown(page, "TCP-CN-0001")
+    assert "already issued" in page.text_content("#cvMsg")
+    assert page.evaluate("__db.credits.length") == 1 and page.evaluate("__db.credits[0].request_id") == req
+    assert page.evaluate("TCPDesk.cnOp()") is None, "nothing left on the phone"
+    assert not errors
+
+
+def test_c05_recovery_after_reload_keeps_no_text(browser):
+    page, errors = _cn(browser, route="#/invoice/1")
+    a1, _ = _cn_line_ids(page, 1)
+    _open_credit_form(page, 1)
+    _credit_qty(page, a1, 5)
+    page.fill("#cnWhy", "Secret-ish reason text")
+    page.fill("#cnInt", "Internal words")
+    page.click("#cnNext")
+    page.wait_for_selector("#cnConfirm:not([hidden])")
+    page.evaluate("__db.offlineFor = ['issueCredit']")
+    page.click("#cnYes")
+    page.wait_for_function("document.querySelector('#cnMsg').textContent.includes('No connection')")
+    kept = page.evaluate("Object.keys(localStorage).filter(k => k.startsWith('tcp-desk-cn-')).map(k => localStorage.getItem(k))")
+    assert len(kept) == 1 and set(json.loads(kept[0])) == {"user", "at", "invoiceId", "req"}, kept
+    assert "Secret" not in kept[0] and "Internal" not in kept[0]
+    req = json.loads(kept[0])["req"]
+    page.evaluate("__db.offlineFor = []")
+    page.evaluate("location.hash = '#/'; location.reload()")
+    # After the reload: checked by request id (not issued), the form again
+    # with the same request id and empty notes.
+    page.wait_for_selector("#cnFields:not([hidden])")
+    assert "type them again" in page.text_content("#cnMsg")
+    assert page.evaluate("TCPDesk.creditForm().req") == req
+    assert page.input_value("#cnWhy") == "" and page.input_value("#cnInt") == ""
+    _credit_qty(page, a1, 5)
+    _issue(page, "Five bags returned")
+    _credit_shown(page, "TCP-CN-0001")
+    assert page.evaluate("__db.credits.length") == 1 and page.evaluate("__db.credits[0].request_id") == req
+    assert not errors
+
+
+def test_c06_cap_refused_with_the_database_message(browser):
+    page, errors = _cn(browser, route="#/invoice/1")
+    a1, _ = _cn_line_ids(page, 1)
+    _open_credit_form(page, 1)
+    _credit_qty(page, a1, 100)
+    page.fill("#cnWhy", "All returned")
+    page.click("#cnNext")
+    page.wait_for_selector("#cnConfirm:not([hidden])")
+    # Meanwhile, someone else credits 10 bags.
+    page.evaluate(f"""TCPDeskApi.issueCredit({{p_invoice_id: 1, p_lines: [{{invoice_line_id: {a1}, kind: 'quantity', why: 'returned', quantity: 10}}],
+        p_reason: 'Elsewhere', p_request_id: crypto.randomUUID()}})""")
+    page.click("#cnYes")
+    page.wait_for_function("document.querySelector('#cnMsg').textContent.includes('Not issued')")
+    assert page.text_content("#cnMsg") == "Not issued: Only 90 bags are left to credit"
+    assert page.evaluate("__db.credits.length") == 1
+    # The form itself refuses more than is left.
+    _open_credit_form(page, 1)
+    _credit_qty(page, a1, 91)
+    page.fill("#cnWhy", "x")
+    page.click("#cnNext")
+    assert "Only 90 bags left to credit." in page.text_content(f"#cnE{a1}")
+    assert not errors
+
+
+@pytest.mark.parametrize("who", ["finance", "sales"])
+def test_c07_owner_only_controls(browser, who):
+    page, errors = _cn(browser, route="#/invoice/1", who=FIN if who == "finance" else SALES)
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    page.wait_for_timeout(300)
+    if who == "sales":
+        assert not page.locator("#cnBtn").is_visible(), "sales cannot issue"
+        err = page.evaluate("""() => TCPDeskApi.issueCredit({p_invoice_id: 1, p_lines: [], p_reason: 'x', p_request_id: crypto.randomUUID()})
+            .then(() => 'done', e => e.message)""")
+        assert "sales role cannot do this" in err
+    else:
+        _open_credit_form(page, 1)
+        assert not page.locator("#cnOwner").is_visible(), "no adjustment or backdating for finance"
+        a1, _ = _cn_line_ids(page, 1)
+        _credit_qty(page, a1, 1)
+        _issue(page, "One bag")
+        _credit_shown(page, "TCP-CN-0001")
+    # Somebody's credit note to look at: no Cancel for either.
+    if who == "sales":
+        page.evaluate("__db.credits.push({id: 1, credit_note_no: 'TCP-CN-0001', invoice_id: 1, issued_on: '2026-11-26', effective_on: '2026-11-26', reason: 'x', amount: 90, value_after: 8910, owed_after: 8910, recorded_at: '2026-11-26T10:00:00Z', recorded_by: 'Test Owner'})")
+        page.evaluate("location.hash = '#/credit/1'")
+        _credit_shown(page, "TCP-CN-0001")
+    assert not page.locator("#ccBox").is_visible(), "only the owner cancels"
+    err = page.evaluate("() => TCPDeskApi.cancelCredit({p_credit_note_id: 1, p_reason: 'x', p_request_id: crypto.randomUUID()}).then(() => 'done', e => e.message)")
+    assert "role cannot do this" in err
+    page.evaluate("location.hash = '#/'")
+    page.wait_for_function("document.querySelector('#hOwed').textContent !== '—'")
+    page.wait_for_timeout(200)
+    assert not page.locator("#cnSwitch").is_visible(), "only the owner sees the switch"
+    assert not errors
+
+
+def test_c08_cancelling_shows_the_consequence(browser):
+    page, errors = _cn(browser, route="#/invoice/1")
+    a1, _ = _cn_line_ids(page, 1)
+    _open_credit_form(page, 1)
+    _credit_qty(page, a1, 10)
+    _issue(page, "Ten bags")
+    _credit_shown(page, "TCP-CN-0001")
+    page.click("#ccOpen")
+    page.click("#ccNext")
+    assert "Give a reason" in page.text_content("#ccErr")
+    page.fill("#ccWhy", "Bags were not returned after all")
+    page.click("#ccNext")
+    page.wait_for_selector("#ccConfirm:not([hidden])")
+    summary = page.text_content("#ccSummary")
+    assert "Cancel TCP-CN-0001 (GH₵900.00) on TCP-INV-0001?" in summary and "the customer will owe GH₵9,000.00" in summary, summary
+    assert page.evaluate("__db.creditCancels.length") == 0, "nothing before the confirm"
+    page.click("#ccYes")
+    page.wait_for_function("document.querySelector('#cvMsg').textContent.includes('cancelled')")
+    rows = _credit_shown(page, "TCP-CN-0001")
+    assert page.locator(".dk-stamp").is_visible() and "Bags were not returned after all" in rows["Cancelled because"]
+    assert not page.locator("#ccBox").is_visible() and not page.locator("#cvShare").is_visible()
+    assert page.evaluate("TCPDeskApi.__doc(1).balance") == 9000
+    assert not errors
+
+
+def test_c09_statuses_filter_and_home(browser):
+    page, errors = _cn(browser, route="#/invoice/2")
+    a, _ = _cn_line_ids(page, 2)
+    _open_credit_form(page, 2)
+    _credit_qty(page, a, 4)
+    _issue(page, "Four bags returned")
+    _credit_shown(page, "TCP-CN-0001")
+    b1, _ = _cn_line_ids(page, 3)
+    page.evaluate(f"""TCPDeskApi.issueCredit({{p_invoice_id: 3, p_lines: [{{invoice_line_id: {b1}, kind: 'quantity', why: 'not_supplied', quantity: 3}}],
+        p_reason: 'None supplied', p_request_id: crypto.randomUUID()}})""")
+    page.evaluate("location.hash = '#/'")
+    page.wait_for_selector("#hCreditLink:not([hidden])")
+    assert page.text_content("#hCredit") == "GH₵300.00" and "TCP owes 1 customer" in page.text_content("#hCreditWhat")
+    assert page.text_content("#hOwed") == "GH₵9,750.00", "owed: 9,000 + 750, the credit not netted into it"
+    page.click("#hCreditLink")
+    page.wait_for_function("document.querySelector('#listInfo').textContent.includes('1 invoice')")
+    assert "TCP-INV-0002" in page.text_content("#rows") and "In credit" in page.text_content("#rows")
+    assert "TCP owes GH₵300.00" in page.text_content("#rows")
+    assert page.locator('#filters [data-status="in_credit"]').get_attribute("class") == "on"
+    page.evaluate("location.hash = '#/invoices'")
+    page.wait_for_function("document.querySelector('#listInfo').textContent.includes('4 invoices')")
+    assert "Credited in full" in page.text_content("#rows")
+    assert not errors
+
+
+def test_c10_refund_form_in_credit(browser):
+    page, errors = _cn(browser, route="#/invoice/2")
+    a, _ = _cn_line_ids(page, 2)
+    page.evaluate(f"""TCPDeskApi.issueCredit({{p_invoice_id: 2, p_lines: [{{invoice_line_id: {a}, kind: 'quantity', why: 'returned', quantity: 4}}],
+        p_reason: 'Four bags', p_request_id: crypto.randomUUID()}})""")
+    page.evaluate("location.reload()")
+    page.wait_for_selector('[data-fix="refund"][data-pid="1"]')
+    assert "In credit GH₵300.00" in page.text_content("#paySum")
+    page.click('[data-fix="refund"][data-pid="1"]')
+    page.wait_for_selector("#fixForm:not([hidden])")
+    t = page.text_content("#fixFor")
+    assert "In credit on this invoice: GH₵300.00" in t and "Still refundable from this payment (TCP-RCT-0001): GH₵950.00" in t, t
+    assert page.input_value("#fAmt") == "300.00", "the smaller of the two, filled in"
+    page.check('input[name="fm"][value="cash"]')
+    page.fill("#fWhy", "Credit for four bags paid back")
+    page.click("#fNext")
+    page.wait_for_selector("#fConfirm:not([hidden])")
+    page.click("#fYes")
+    rows = _receipt_shown(page, "TCP-RCT-0002")
+    assert rows["Balance after"] == "GH₵0.00"
+    assert page.evaluate("TCPDeskApi.__doc(2).status") == "paid"
+    assert not errors
+
+
+def test_c11_cancel_invoice_replaced_while_credit_notes_are_active(browser):
+    page, errors = _cn(browser, route="#/invoice/4")
+    k, = _cn_line_ids(page, 4)
+    page.wait_for_selector("#cxOpen:not([hidden])")
+    page.evaluate(f"""TCPDeskApi.issueCredit({{p_invoice_id: 4, p_lines: [{{invoice_line_id: {k}, kind: 'quantity', why: 'returned', quantity: 1}}],
+        p_reason: 'One bag', p_request_id: crypto.randomUUID()}})""")
+    page.evaluate("location.reload()")
+    page.wait_for_selector("#cxBox:not([hidden])")
+    assert not page.locator("#cxOpen").is_visible()
+    assert "Cancel its credit notes first" in page.text_content("#cxHeld")
+    err = page.evaluate("() => TCPDeskApi.cancel(4, 'x').then(() => 'done', e => e.message)")
+    assert err == "This invoice has active credit notes. Cancel them before cancelling the invoice."
+    page.evaluate("location.hash = '#/credit/1'")
+    _credit_shown(page, "TCP-CN-0001")
+    page.click("#ccOpen"); page.fill("#ccWhy", "Cancelling the invoice instead"); page.click("#ccNext"); page.click("#ccYes")
+    page.wait_for_selector(".dk-stamp")
+    page.click("#cvInv")
+    page.wait_for_selector("#cxOpen:not([hidden])")
+    page.click("#cxOpen"); page.fill("#cxWhy", "Order called off"); page.click("#cxNext"); page.click("#cxYes")
+    page.wait_for_function("document.querySelector('#iMsg').textContent === 'Invoice cancelled.'")
+    assert "TCP-CN-0001" in page.text_content("#cnList"), "the cancelled credit note stays in the history"
+    assert not errors
+
+
+def test_c12_pdf_whatsapp_and_the_switch(browser):
+    page, errors = _cn(browser, route="#/invoice/1", perms=["clipboard-read", "clipboard-write"])
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    invoice_pdf_before = _pdf(page)[0]
+    a1, _ = _cn_line_ids(page, 1)
+    _open_credit_form(page, 1)
+    _credit_qty(page, a1, 10)
+    page.click("#cnOwner summary")
+    page.fill("#cnEff", page.evaluate("new Date().toLocaleDateString('en-CA')"))
+    _issue(page, "Ten bags returned unused", "Thank you, Ama", "Driver Kwesi said they were wet")
+    _credit_shown(page, "TCP-CN-0001")
+    text, pages = _credit_pdf(page)
+    for want in ["CREDIT NOTE", "TCP-CN-0001", "TCP-INV-0001", "Ama Mensah", "Returned", "GH₵900.00",
+                 "Amount credited", "Ten bags returned unused", "Thank you, Ama",
+                 "invoice value GH₵9,000.00 to GH₵8,100.00; amount owed GH₵8,100.00"]:
+        assert want in text, (want, text)
+    for never in ["Driver Kwesi", "wet", "Test Owner", "CANCELLED"]:
+        assert never not in text, never
+    assert pages == 1
+    # The invoice PDF is the same as before the credit note.
+    page.click("#cvInv")
+    page.wait_for_selector("#issuedSec:not([hidden])")
+    assert _pdf(page)[0] == invoice_pdf_before, "the invoice PDF does not change"
+    # WhatsApp: the PDF only; the message names the credit note and invoice.
+    page.evaluate("location.hash = '#/credit/1'")
+    _credit_shown(page, "TCP-CN-0001")
+    _fake_share(page)
+    page.click("#cvShare")
+    page.wait_for_function("window.__shared.length === 1")
+    shared = page.evaluate("window.__shared[0]")
+    assert shared["files"] == ["TCP Credit Note TCP-CN-0001.pdf"] and "text" not in shared["keys"], shared
+    assert page.evaluate("navigator.clipboard.readText()") == \
+        "Hello Ama, here is credit note TCP-CN-0001 for invoice TCP-INV-0001 from The Cement People."
+    # The owner switches credit notes off (with a reason): no Issue button;
+    # the owner can still cancel a wrong one; the PDF is then stamped.
+    page.evaluate("location.hash = '#/'")
+    page.wait_for_selector("#cnSwitch:not([hidden])")
+    page.wait_for_function("document.querySelector('#swOpen').textContent === 'Switch off credit notes'")
+    page.click("#swOpen"); page.click("#swYes")
+    assert "Give a reason" in page.text_content("#swErr")
+    page.fill("#swWhy", "Checking the figures")
+    page.click("#swYes")
+    page.wait_for_function("document.querySelector('#swMsg').textContent === 'Credit notes are switched off.'")
+    assert "switched off" in page.text_content("#swState") and "Checking the figures" in page.text_content("#swState")
+    assert page.evaluate("__db.creditSwitch.changes.length") == 1
+    page.evaluate("location.hash = '#/invoice/1'")
+    page.wait_for_selector("#cnOff:not([hidden])")
+    assert not page.locator("#cnBtn").is_visible()
+    page.evaluate("location.hash = '#/credit/1'")
+    _credit_shown(page, "TCP-CN-0001")
+    page.click("#ccOpen"); page.fill("#ccWhy", "Wrong bags"); page.click("#ccNext"); page.click("#ccYes")
+    page.wait_for_selector(".dk-stamp")
+    text, _ = _credit_pdf(page)
+    assert "CANCELLED on" in text and "Wrong bags" not in text, text
+    assert not errors
+
+
+@pytest.mark.parametrize("width", [360, 390])
+def test_c13_credit_screens_fit_a_phone(browser, width):
+    page, errors = _cn(browser, route="#/invoice/2", width=width)
+    fits = lambda: page.evaluate("document.documentElement.scrollWidth") <= width
+    a, d = _cn_line_ids(page, 2)
+    _open_credit_form(page, 2); assert fits()
+    page.click("#cnOwner summary"); assert fits()
+    for sel in [f"#cnQ{a}", "#cnNext", "#cnCancel", "#cnOwner summary", f'label:has([data-cntick="{d}"])']:
+        assert page.locator(sel).bounding_box()["height"] >= 44, sel
+    _credit_qty(page, a, 2)
+    page.fill("#cnWhy", "Two bags")
+    page.click("#cnNext"); page.wait_for_selector("#cnConfirm:not([hidden])"); assert fits()
+    page.click("#cnYes"); _credit_shown(page, "TCP-CN-0001"); assert fits()
+    page.click("#ccOpen"); page.fill("#ccWhy", "x"); page.click("#ccNext"); assert fits()
+    page.click("#cvInv"); page.wait_for_selector("#issuedSec:not([hidden])"); assert fits()
+    page.evaluate("location.hash = '#/'"); page.wait_for_selector("#cnSwitch:not([hidden])"); assert fits()
     assert not errors

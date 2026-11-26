@@ -83,10 +83,11 @@ done
 
 # ---------------------------------------------- 5. the same documents after
 # The new keys are taken out of the new documents (and checked empty); what
-# is left must be exactly the old document.
+# is left must be exactly the old document. (Phase 2.3 adds two more keys to
+# the invoice document, credited and credit_notes; test 26 checks those.)
 strip() {
   run "select 'inv $1 ' || (public.invoice_document($1)
-         #- '{internal_notes}'
+         #- '{internal_notes}' #- '{credited}' #- '{credit_notes}'
          || jsonb_build_object('payments', coalesce((select jsonb_agg(p - 'customer_note' - 'internal_note' - 'recorded_at' - 'internal_note_chain')
                                                       from jsonb_array_elements(public.invoice_document($1)->'payments') p), '[]'::jsonb)))::text;"
 }
