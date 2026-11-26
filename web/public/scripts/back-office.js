@@ -132,7 +132,20 @@ function supabaseApi(){
       return q.then(r=>{if(r.error)throw r.error;return{rows:r.data||[],count:r.count||0};});
     },
     // The Home figures, worked out by the database (back_office_home).
-    home:()=>sb.from("back_office_home").select("owed,unpaid,part_paid,overdue,drafts").single().then(out),
+    home:()=>sb.from("back_office_home").select("owed,unpaid,part_paid,overdue,drafts,in_credit,in_credit_count").single().then(out),
+    // Phase 2.3: credit notes. issue_credit_note and cancel_credit_note take
+    // a request id, made once when the form opens and kept for every retry,
+    // so the database never issues (or cancels) twice. credit_note_options
+    // with no invoice gives just the switch; credit_note_print is the only
+    // data the credit note PDF is drawn from.
+    creditOptions:a=>sb.rpc("credit_note_options",a).then(out),
+    issueCredit:a=>sb.rpc("issue_credit_note",a).then(out),
+    cancelCredit:a=>sb.rpc("cancel_credit_note",a).then(out),
+    creditDoc:a=>sb.rpc("credit_note_document",a).then(out),
+    creditPrint:a=>sb.rpc("credit_note_print",a).then(out),
+    setCreditSwitch:a=>sb.rpc("set_credit_notes_switch",a).then(out),
+    // Was this credit note issued? The credit note, or null.
+    creditByRequest:req=>sb.from("credit_notes").select("id,credit_note_no,invoice_id,amount").eq("request_id",req).maybeSingle().then(out),
     // A page of the Invoices list (invoice_list). Order: newest first, then
     // the id, so two invoices started at the same moment always keep the same
     // order and paging never skips or repeats one. terms: see searchTerms().
@@ -206,7 +219,7 @@ async function enter(){
   }
   if(!st){
     // Not (or no longer) staff: nothing of TCP's stays on this phone.
-    try{localStorage.removeItem("tcp-desk-work-"+u.id);localStorage.removeItem("tcp-desk-op-"+u.id)}catch(e){}
+    try{localStorage.removeItem("tcp-desk-work-"+u.id);localStorage.removeItem("tcp-desk-op-"+u.id);localStorage.removeItem("tcp-desk-cn-"+u.id)}catch(e){}
     ME=null;screen("noaccess");$("#noEmail").textContent=u.email||"";return;
   }
   ME={id:u.id,name:st.full_name,role:st.role};
@@ -219,7 +232,7 @@ async function enter(){
   fillAdd();screen("tool");restore();
   // An operation left unconfirmed (e.g. the sign-in ran out while it was
   // being recorded): go straight to its invoice, where it is checked.
-  const op=pendingOp();
+  const op=pendingOp()||pendingCn();
   if(op)history.replaceState(null,"",location.pathname+location.search+"#/invoice/"+op.invoiceId);
   await route();
 }
@@ -232,7 +245,7 @@ async function stillStaff(){await api.myStaff();}
 // (Design v2.1, point C).
 async function revoke(why){
   const key=draftKey();
-  try{localStorage.removeItem(key);dropOp()}catch(e){}
+  try{localStorage.removeItem(key);dropOp();dropCn()}catch(e){}
   await leave(why||"You have been signed out.");
 }
 // The sign-in ran out (not the same as access removed): the unsaved work
@@ -250,7 +263,9 @@ async function leave(why){
   ["#hOwed","#hUnpaid","#hPart","#hOverdue","#hDrafts","#hToday","#tNet","#tRec","#tRef","#tCount"].forEach(s=>{$(s).textContent="—";});
   ["#ledRows","#tRecBy","#tRefBy"].forEach(s=>{$(s).innerHTML="";});
   ["#guard","#discardBox","#copyBox","#rCopyBox"].forEach(s=>show(s,false));
-  PAY=null;FIX=null;RDOC=null;show("#soBox",false);["#payList","#rcpt"].forEach(s=>{$(s).innerHTML="";});
+  PAY=null;FIX=null;RDOC=null;CN=null;CDOC=null;CC=null;SWITCH=null;show("#soBox",false);
+  ["#payList","#rcpt","#cnList","#cnLines","#cv","#cvLines","#cvNotes"].forEach(s=>{$(s).innerHTML="";});
+  ["#cvCopyBox","#cnSwitch"].forEach(s=>show(s,false));
   ["#paste","#cName","#cPhone"].forEach(s=>{const el=$(s);if(el)el.value="";});
   screen("signin");$("#signMsg").textContent=why;
   try{await api.signOut();}catch(e){}
@@ -644,7 +659,9 @@ async function openInvoice(id){
     NDOC=doc;showForm();return;}
   showView(doc);
 }
-const STATUS={draft:"Draft",unpaid:"Unpaid",part_paid:"Part paid",overdue:"Overdue",paid:"Paid",cancelled:"Cancelled"};
+const STATUS={draft:"Draft",unpaid:"Unpaid",part_paid:"Part paid",overdue:"Overdue",paid:"Paid",cancelled:"Cancelled",
+  // Phase 2.3: TCP owes the customer; credited in full (value and money both zero).
+  in_credit:"In credit",credited:"Credited in full"};
 function showView(doc){
   DOC=doc;
   // An invoice just issued (or discarded) is no longer work in progress.
@@ -667,7 +684,7 @@ function showView(doc){
     ${row("Delivery",dlv)}
     ${row("Cancelled",doc.state==="cancelled"&&doc.cancelled_at?dateText(doc.cancelled_at)+(doc.cancelled_by?" by "+doc.cancelled_by:""):"")}
     ${row("Cancelled because",doc.state==="cancelled"?doc.cancel_reason||"":"")}
-    <div class="dk-total"><span>Total</span><b>${money(toP(doc.total))}</b></div></div>`;
+    <div class="dk-total"><span>Total</span><b>${money(toP(doc.total))}</b></div>${moneyBlock(doc)}</div>`;
   $("#viewLines").innerHTML=(doc.lines||[]).map((l,i)=>`<div class="dk-vline"><span>${i+1}. ${esc(l.description)}<small>${fmtQ(l.quantity)} ${esc(UNIT_WORD(l.unit,l.quantity)||l.unit||"")} × ${money(toP(l.unit_price))}</small></span><b>${+l.unit_price===0&&l.kind==="product"?"Free item":money(toP(l.line_total))}</b></div>`).join("");
   $("#iMsg").textContent="";show("#copyBox",false);
   // A cancelled invoice keeps its PDF, marked CANCELLED, for TCP's records
@@ -675,10 +692,19 @@ function showView(doc){
   const cancelled=doc.state==="cancelled"&&!!doc.invoice_no;
   show("#shareRow",issued||cancelled);show("#shareHelp",issued);show("#shareBtn",issued);
   showPayments(doc);
+  showCredits(doc);
   $("#shareBtn").disabled=!issued;$("#pdfBtn").disabled=!(issued||cancelled);
   showCancel(doc);
   renderNotes(doc,false);
 }
+// Phase 2.3: once an invoice has credit notes, its money reads
+// Total · Credited · Value · Paid · Owed (or "In credit", when TCP owes the
+// customer). Every figure is the database's.
+function moneyBlock(doc){
+  if(!(doc.credit_notes||[]).length)return"";
+  const bal=toP(doc.balance),r=(k,v)=>`<div><span>${k}</span><b>${v}</b></div>`;
+  return r("Credited","−"+money(toP(doc.credited||0)))+r("Value",money(toP(doc.total)-toP(doc.credited||0)))
+    +r("Paid",money(toP(doc.paid)))+(bal<0?r("In credit",`${money(-bal)} (TCP owes the customer)`):r("Owed",money(bal)));}
 function fromDraft(doc){
   const items=doc.lines.filter(l=>l.kind==="product").map(l=>{const p=PRODUCTS.find(x=>x.id===l.product_id);
     return{kind:"product",pid:l.product_id,name:l.description,unit:l.unit,qty:+l.quantity,price:toP(l.unit_price),list:p?toP(p.current_price):null,quoted:null};});
@@ -989,7 +1015,7 @@ function showPayments(doc){
       <span class="dk-pay-top"><b>${esc(p.receipt_no)}</b><b class="${amt<0?"neg":""}">${smoney(amt)}</b></span>
       <span class="dk-pay-bot"><small>${what} · ${shortDate(p.paid_on)} · ${esc(METHOD[p.method]||p.method)}${p.reference?" · ref "+esc(p.reference):""}</small><small>left ${money(toP(p.balance_after))}</small></span>
       ${flag?`<span class="dk-pay-flag">${flag}</span>`:""}</a>${acts}${payNotesHTML(p,(RECORD_WORD[p.kind]||"payment").replace(/^./,c=>c.toUpperCase())+" note")}</div>`;}).join(""):`<p class="dk-help">No payments yet.</p>`;
-  $("#paySum").innerHTML=issued||pays.length?`<span>Paid ${money(toP(doc.paid))}</span><span>Left ${money(toP(doc.balance))}</span>`:"";
+  $("#paySum").innerHTML=issued||pays.length?`<span>Paid ${money(toP(doc.paid))}</span><span>${toP(doc.balance)<0?"In credit "+money(-toP(doc.balance)):"Left "+money(toP(doc.balance))}</span>`:"";
   // While an operation's outcome is unknown, nothing new can be started.
   show("#payBtn",issued&&toP(doc.balance)>0&&canPay()&&!op);
   show("#opBox",!!op);show("#opCheck",false);show("#opOpen",false);
@@ -1125,6 +1151,13 @@ function openFix(kindName,pay,kept){
   $("#fixFor").textContent=kindName==="correction"
     ?`Reverses all of ${pay.receipt_no} (${money(toP(pay.amount))} by ${METHOD[pay.method]}). Use it when the payment was recorded wrongly; then record the right payment.`
     :`From ${pay.receipt_no} (${money(toP(pay.amount))} by ${METHOD[pay.method]}). Up to ${money(left)} can be refunded.`;
+  // Phase 2.3: an invoice in credit (TCP owes the customer). Both figures,
+  // and the smaller one filled in (it can be changed). The database's
+  // refund rule is unchanged: never more than the payment's unrefunded amount.
+  const inCredit=-toP(DOC.balance);
+  if(kindName==="refund"&&inCredit>0){
+    $("#fixFor").textContent=`In credit on this invoice: ${money(inCredit)}. Still refundable from this payment (${pay.receipt_no}): ${money(left)}.`;
+    if(!kept)FIX.amt=(Math.min(inCredit,left)/100).toFixed(2);}
   show("#fixMoney",kindName==="refund");
   // A correction is internal: no note to the customer.
   show("#fCustNoteBox",kindName==="refund");
@@ -1661,13 +1694,16 @@ $("#nsHide").addEventListener("change",()=>notesSearch({hide:$("#nsHide").checke
 function showCancel(doc){
   const own=!!ME&&ME.role==="owner"&&doc.state==="issued";
   show("#cxBox",own);if(!own)return;
-  const held=toP(doc.paid);
+  const held=toP(doc.paid),credits=(doc.credit_notes||[]).filter(c=>!c.cancelled).length;
   ["#cxErr","#cxMsg"].forEach(e=>{$(e).textContent="";});
   show("#cxFields",false);show("#cxConfirm",false);$("#cxWhy").value="";
-  $("#cxHeld").textContent=held!==0
+  // Phase 2.3: while a credit note on it is active, the button is replaced.
+  $("#cxHeld").textContent=credits
+    ?`Cancel its credit notes first: this invoice has ${credits} active credit ${credits===1?"note":"notes"}. Once they are cancelled, the invoice can be cancelled.`
+    :held!==0
     ?`This invoice holds ${smoney(held)} in payments. Refund or correct them first, then cancel.`
     :"Cancelling keeps the invoice, its number and its history, marked Cancelled with your reason. It cannot be undone.";
-  show("#cxOpen",held===0);
+  show("#cxOpen",held===0&&!credits);
 }
 $("#cxOpen").addEventListener("click",()=>{show("#cxOpen",false);show("#cxFields",true);$("#cxWhy").focus();});
 $("#cxBack").addEventListener("click",()=>{if(DOC)showCancel(DOC);});
@@ -1691,6 +1727,385 @@ $("#cxYes").addEventListener("click",async()=>{
   finally{busy(btn,false);}
 });
 
+// ---- 8d. Credit notes (Phase 2.3) -------------------------------------------
+// "TCP Back Office Phase 2.3: Credit Notes Implementation Specification
+// (v1.4)", approved by ChatGPT and Daniel on 26 Nov 2026. A credit note
+// lowers what an issued invoice is worth; it moves no money (money goes
+// back with a refund). The database does all the work: it works out every
+// amount again, checks every cap (quantity and value per line, the invoice
+// total), numbers the credit note (TCP-CN-0001) and keeps it forever; a
+// wrong one is cancelled by the owner, never edited. This section only
+// asks, previews and shows what the database says.
+//   Who: the owner and finance issue; only the owner adjusts a price,
+//   backdates, or cancels. Credit notes can be switched off by the owner:
+//   then no new one can be issued, but a wrong one can still be cancelled.
+const WHY_WORD={not_supplied:"Not supplied",returned:"Returned",delivery_not_made:"Delivery not made",price_adjustment:"Price adjustment"};
+const canCredit=()=>!!ME&&(ME.role==="owner"||ME.role==="finance");
+const isOwner=()=>!!ME&&ME.role==="owner";
+let CN=null,CDOC=null,CC=null,SWITCH=null,CVNOTE="";
+// -- The unfinished credit note kept on this phone (as payments, "Option B").
+// Only its identifiers are kept: the invoice and the request id. Never the
+// reason or the notes (they are typed again after a reload). Removed on
+// success, Cancel, sign-out, removed access, or after 24 hours.
+const cnKey=()=>"tcp-desk-cn-"+(ME?ME.id:"");
+function pendingCn(){if(!ME)return null;let o=null;
+  try{o=JSON.parse(localStorage.getItem(cnKey())||"null")}catch(e){}
+  if(o&&(o.user!==ME.id||!(Date.now()-o.at<OP_TTL))){dropCn();return null;}
+  return o;}
+function keepCn(o){if(!ME)return;try{localStorage.setItem(cnKey(),JSON.stringify({user:ME.id,at:Date.now(),invoiceId:o.invoiceId,req:o.req}))}catch(e){}}
+function dropCn(){try{localStorage.removeItem(cnKey())}catch(e){}}
+// Was this credit note issued? Asked of the database by its request id.
+async function cnIssued(req){return await api.creditByRequest(req);}
+
+// The switch, as staff see it (read-only), from the database.
+async function switchState(){const o=await api.creditOptions({p_invoice_id:null});SWITCH=o.switch;return SWITCH;}
+
+// -- The invoice's credit notes (under its payments)
+function showCredits(doc){
+  const list=doc.credit_notes||[],issued=doc.state==="issued",value=toP(doc.total)-toP(doc.credited||0);
+  show("#cnBox",issued||list.length>0);
+  $("#cnList").innerHTML=list.length?list.map(c=>`<a class="dk-cn${c.cancelled?" off":""}" href="#/credit/${c.id}">
+      <span><span>${esc(c.credit_note_no)}</span><small>Issued ${shortDate(c.issued_on)}${c.effective_on!==c.issued_on?" · effective "+shortDate(c.effective_on):""}${c.cancelled?" · Cancelled "+shortDate(c.cancelled_on):""}</small></span>
+      <b>−${money(toP(c.amount))}</b></a>`).join(""):`<p class="dk-help">No credit notes.</p>`;
+  show("#cnBtn",false);show("#cnOff",false);
+  $("#cnBtn").href=`#/invoice/${doc.id}/credit`;
+  const op=pendingCn();show("#cnOp",false);
+  if(op&&op.invoiceId===doc.id)return checkCn(op);
+  if(!(issued&&value>0&&canCredit()&&!op))return;
+  // "Issue credit note" only while credit notes are switched on.
+  switchState().then(sw=>{if(DOC!==doc)return;show("#cnBtn",!!sw.on);show("#cnOff",!sw.on);})
+    .catch(err=>readFailed(err,"#iMsg"));
+}
+// A credit note left unconfirmed on this phone: was it issued?
+async function checkCn(op){
+  show("#cnOp",true);show("#cnOpCheck",false);$("#cnOpMsg").textContent="Checking whether the credit note was issued…";
+  let r;
+  try{r=await cnIssued(op.req);}
+  catch(err){const k=kind(err);
+    if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+    if(k==="expired")return expire();
+    $("#cnOpMsg").textContent=`Could not check whether the credit note was issued${k==="offline"?": no connection":""}. No new credit note can be issued on this invoice until it is checked.`;
+    show("#cnOpCheck",true);return;}
+  if(r){dropCn();CVNOTE="This credit note was already issued. Here it is.";return go("#/credit/"+r.id);}
+  // Not issued: open the form again with the same request id.
+  show("#cnOp",false);
+  return go(`#/invoice/${op.invoiceId}/credit`);
+}
+$("#cnOpCheck").addEventListener("click",()=>{const op=pendingCn();if(op)checkCn(op);else if(DOC)showView(DOC);});
+
+// -- The form (#/invoice/<id>/credit)
+async function openCredit(id){
+  showOnly("#cnForm");$("#cnMsg").textContent="";$("#cnErr").textContent="";$("#cnLines").innerHTML="";$("#cnFor").textContent="";
+  show("#cnFields",false);show("#cnConfirm",false);
+  if(!canCredit())return go("#/invoice/"+id);
+  let o;try{o=await api.creditOptions({p_invoice_id:id});}catch(err){return readFailed(err,"#cnMsg");}
+  if(!o.switch.on){$("#cnMsg").textContent="Credit notes are switched off. The owner can switch them on from Home.";return;}
+  if(o.state!=="issued"){$("#cnMsg").textContent="Only an issued invoice can be credited.";return;}
+  const kept=pendingCn();
+  CN={opt:o,req:kept&&kept.invoiceId===id?kept.req:newId(),sent:false,lines:{}};
+  (o.lines||[]).forEach(l=>{CN.lines[l.invoice_line_id]={qty:"",why:"",tick:false};});
+  $("#cnFor").textContent=`${o.invoice_no} · value ${money(toP(o.value))} · ${toP(o.balance)<0?"TCP owes the customer "+money(-toP(o.balance)):"owed "+money(toP(o.balance))}`;
+  ["#cnWhy","#cnCust","#cnInt","#cnAdj","#cnEff","#cnEffWhy"].forEach(s=>{$(s).value="";});
+  $("#cnEff").max=o.today;$("#cnEff").min=o.issued_on;
+  show("#cnOwner",isOwner());$("#cnOwner").open=false;
+  $("#cnLines").innerHTML=(o.lines||[]).map(cnLineHTML).join("");
+  show("#cnFields",true);
+  $("#cnMsg").textContent=kept&&kept.invoiceId===id?"This credit note was not issued. Check it, then tap Continue and Issue. The reason and notes are not kept on this phone: type them again.":"";
+  cnRefresh();window.scrollTo(0,0);
+}
+function cnLineHTML(l){const id=l.invoice_line_id,left=toP(l.value_left);
+  const head=`<div class="dk-cnl-top"><span>${esc(l.description)}<small>${l.kind==="product"
+      ?`${fmtQ(l.quantity_left)} of ${fmtQ(l.quantity)} ${esc(UNIT_WORD(l.unit,l.quantity)||l.unit)} left · ${money(left)} left to credit`
+      :`Delivery charge · ${money(left)} left to credit`}</small></span><b id="cnAmt${id}">${money(0)}</b></div>`;
+  if(left<=0)return`<div class="dk-cnl">${head}<p class="dk-help">Nothing left to credit on this line.</p></div>`;
+  if(l.kind==="delivery")return`<div class="dk-cnl" data-cnl="${id}">${head}
+      <label class="dk-check"><input type="checkbox" data-cntick="${id}"> Delivery not made: credit the whole charge left</label></div>`;
+  return`<div class="dk-cnl" data-cnl="${id}">${head}<div class="dk-row">
+      <label for="cnQ${id}" class="sr">Quantity to credit</label>
+      <input id="cnQ${id}" type="text" inputmode="decimal" autocomplete="off" placeholder="Qty" data-cnq="${id}">
+      <fieldset class="dk-methods"><legend class="sr">Why</legend>
+        <label><input type="radio" name="cnw${id}" value="not_supplied" data-cnw="${id}"> Not supplied</label>
+        <label><input type="radio" name="cnw${id}" value="returned" data-cnw="${id}"> Returned</label></fieldset></div>
+      <p class="dk-lerr" id="cnE${id}" role="alert"></p></div>`;}
+// What one line would credit, worked out as the database does (the
+// database works it out again when the credit note is issued).
+function cnLineAmount(l,v){
+  if(l.kind==="delivery")return v.tick?toP(l.value_left):0;
+  const q=typedNum(v.qty);if(!String(v.qty).trim()||isNaN(q)||q<=0)return 0;
+  if(Math.round(q*1000)===Math.round(+l.quantity_left*1000))return toP(l.value_left);
+  return Math.min(Math.round(q*toP(l.net_value)/+l.quantity),toP(l.value_left));}
+function cnPlan(){const o=CN.opt,errs=[],lines=[];let total=0;
+  (o.lines||[]).forEach(l=>{const v=CN.lines[l.invoice_line_id];if(!v)return;let e="";
+    if(l.kind==="product"&&String(v.qty).trim()){const q=typedNum(v.qty);
+      if(isNaN(q))e="Enter a number.";else if(q<=0)e="The quantity must be more than 0.";
+      else if(q>+l.quantity_left)e=`Only ${fmtQ(l.quantity_left)} ${UNIT_WORD(l.unit,l.quantity_left)||l.unit} left to credit.`;
+      else if(!v.why)e="Say whether they were not supplied or returned.";
+      if(!e)lines.push({invoice_line_id:l.invoice_line_id,kind:"quantity",why:v.why,quantity:Math.round(q*1000)/1000});}
+    if(l.kind==="delivery"&&v.tick)lines.push({invoice_line_id:l.invoice_line_id,kind:"delivery",why:"delivery_not_made"});
+    const a=e?0:cnLineAmount(l,v);total+=a;const el=$("#cnAmt"+l.invoice_line_id);if(el)el.textContent=money(a);
+    const er=$("#cnE"+l.invoice_line_id);if(er)er.textContent=e;
+    const row=document.querySelector(`[data-cnl="${l.invoice_line_id}"]`);if(row)row.classList.toggle("bad",!!e);
+    if(e)errs.push(e);});
+  let adj=0;const at=$("#cnAdj").value.trim();
+  if(isOwner()&&at){const v=typedNum(at);if(isNaN(v)||v<=0)errs.push("The price adjustment must be an amount above GH₵0.00.");
+    else{adj=toP(v);lines.push({kind:"adjustment",why:"price_adjustment",amount:adj/100});total+=adj;}}
+  return{lines,total,errs};}
+function cnRefresh(){if(!CN)return;const{total}=cnPlan(),o=CN.opt;
+  $("#cnTotal").textContent=total?`Credit ${money(total)}. Value after: ${money(toP(o.value)-total)}.`:"";}
+document.addEventListener("input",e=>{if(!CN)return;const t=e.target;
+  if(t.dataset.cnq){CN.lines[t.dataset.cnq].qty=t.value;$("#cnErr").textContent="";cnRefresh();}
+  else if(t.id==="cnAdj"){$("#cnErr").textContent="";cnRefresh();}});
+document.addEventListener("change",e=>{if(!CN)return;const t=e.target;
+  if(t.dataset.cnw){CN.lines[t.dataset.cnw].why=t.value;cnRefresh();}
+  else if(t.dataset.cntick){CN.lines[t.dataset.cntick].tick=t.checked;cnRefresh();}});
+function cnProblems(){const{lines,total,errs}=cnPlan(),o=CN.opt,out=[...errs];
+  if(!lines.length&&!errs.length)out.push("Choose what to credit: a quantity on a line, a delivery, or (owner) a price adjustment.");
+  if(total>toP(o.invoice_left))out.push(`That is more than the ${money(toP(o.invoice_left))} left on the invoice.`);
+  const why=$("#cnWhy").value.trim(),eff=$("#cnEff").value,effWhy=$("#cnEffWhy").value.trim();
+  if(!why)out.push("Give the reason: it is printed on the credit note.");
+  if(isOwner()&&eff&&eff!==o.today){
+    if(eff>o.today||eff<o.issued_on)out.push("A credit note cannot take effect before the invoice was issued, or in the future.");
+    else if(!effWhy)out.push("Say why it is backdated.");}
+  return{out,lines,total,why,eff:isOwner()&&eff&&eff!==o.today?eff:null,effWhy};}
+$("#cnNext").addEventListener("click",()=>{if(!CN)return;const p=cnProblems();$("#cnErr").textContent=p.out.join(" ");if(p.out.length)return;
+  const o=CN.opt,owed=toP(o.balance)-p.total;
+  // Confirm before issuing: a credit note number is permanent.
+  $("#cnSummary").textContent=`Credit ${money(p.total)} against ${o.invoice_no}. Value after: ${money(toP(o.value)-p.total)}. `
+    +(owed<0?`TCP will owe the customer ${money(-owed)}.`:`Owed after: ${money(owed)}.`)
+    +(p.eff?` Takes effect from ${shortDate(p.eff)} (backdated: ${p.effWhy}).`:"");
+  const cust=$("#cnCust").value.trim(),int=$("#cnInt").value.trim();
+  $("#cnPrinted").textContent=`Printed on the credit note: "${p.why}"`+(cust?` and the note "${cust}"`:"")+"."+(int?" The internal note is never printed.":"");
+  show("#cnFields",false);show("#cnConfirm",true);$("#cnMsg").textContent="";});
+$("#cnChange").addEventListener("click",()=>{show("#cnConfirm",false);show("#cnFields",true);});
+$("#cnCancel").addEventListener("click",async()=>{if(!CN)return;const st=CN;
+  // Sent with no answer yet: check first, so nothing is abandoned unseen.
+  if(st.sent){let r;try{r=await cnIssued(st.req);}catch(err){const k=kind(err);
+      if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");if(k==="expired")return expire();
+      $("#cnMsg").textContent="Can't cancel yet: it could not be checked whether this credit note was issued. Try again when you have signal.";return;}
+    if(r){dropCn();CN=null;CVNOTE="This credit note was already issued. Here it is.";return go("#/credit/"+r.id);}}
+  const id=st.opt.invoice_id;dropCn();CN=null;go("#/invoice/"+id);});
+$("#cnYes").addEventListener("click",async()=>{
+  const btn=$("#cnYes");if(btn.disabled||!CN)return;const st=CN,p=cnProblems();if(p.out.length)return;
+  busy(btn,true,"Issuing…");$("#cnMsg").textContent="";
+  try{
+    // A retry of one whose outcome is unknown asks the database first.
+    if(st.sent){const r=await cnIssued(st.req);if(r){dropCn();CN=null;CVNOTE="This credit note was already issued. Here it is.";return go("#/credit/"+r.id);}}
+    keepCn({invoiceId:st.opt.invoice_id,req:st.req});st.sent=true;
+    const r=await api.issueCredit({p_invoice_id:st.opt.invoice_id,p_lines:p.lines,p_reason:p.why,
+      p_customer_note:$("#cnCust").value.trim()||null,p_internal_note:$("#cnInt").value.trim()||null,
+      p_effective_on:p.eff,p_backdate_reason:p.eff?p.effWhy:null,p_request_id:st.req});
+    dropCn();CN=null;CVNOTE="Credit note issued.";await go("#/credit/"+r.id);
+  }catch(err){const k=kind(err);
+    if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+    if(k==="expired")return expire();
+    if(definite(err)){dropCn();st.sent=false;$("#cnMsg").textContent="Not issued: "+String(err.message||err);return;}
+    $("#cnMsg").textContent=k==="offline"
+      ?"No connection: it may or may not have been issued. Tap Issue credit note again when you have signal: it is checked first, and never issued twice."
+      :"Could not confirm it was issued. Tap Issue credit note again: it is checked first, and never issued twice.";}
+  finally{busy(btn,false);}
+});
+
+// -- One credit note (#/credit/<id>): the staff view
+async function showCredit(id){
+  showOnly("#cnSec");["#cv","#cvLines","#cvNotes"].forEach(s=>{$(s).innerHTML="";});$("#cvMsg").textContent="";show("#cvCopyBox",false);
+  const note=CVNOTE;CVNOTE="";
+  let d;try{d=await api.creditDoc({p_credit_note_id:id});}catch(err){return readFailed(err,"#cvMsg");}
+  CDOC=d;$("#cvMsg").textContent=note;
+  $("#cvTitle").textContent=`Credit note ${d.credit_note_no}`;
+  const row=(k,v)=>v?`<div><span>${k}</span><b>${esc(v)}</b></div>`:"";
+  const owedAfter=toP(d.owed_after);
+  $("#cv").innerHTML=`${d.cancelled?`<span class="dk-stamp">CANCELLED</span>`:""}<div class="dk-sum">
+    ${row("Invoice",d.invoice_no)}
+    ${row("Customer",[d.billed_to_name,d.billed_to_phone].filter(Boolean).join(" · "))}
+    ${row("Issued",dateText(d.issued_on))}
+    ${row("Takes effect from",d.effective_on!==d.issued_on?dateText(d.effective_on):"")}
+    ${row("Why backdated (staff only)",d.backdate_reason||"")}
+    ${row("Recorded",noteTime(d.recorded_at))}
+    ${row("Issued by",d.recorded_by||"")}
+    ${row("Invoice value after",money(toP(d.value_after)))}
+    ${row(owedAfter<0?"In credit after (TCP owed)":"Owed after",money(Math.abs(owedAfter)))}
+    ${row("Cancelled",d.cancelled?dateText(d.cancelled_on)+(d.cancelled_by?" by "+d.cancelled_by:""):"")}
+    ${row("Cancelled because",d.cancelled?d.cancel_reason||"":"")}
+    <div class="dk-total"><span>Amount credited</span><b>${money(toP(d.amount))}</b></div></div>`;
+  $("#cvLines").innerHTML=(d.lines||[]).map((l,i)=>`<div class="dk-vline"><span>${i+1}. ${esc(l.description)}<small>${l.quantity!=null?`${fmtQ(l.quantity)} ${esc(UNIT_WORD(l.unit,l.quantity)||l.unit||"")} · `:""}${esc(WHY_WORD[l.why]||l.why)}</small></span><b>${money(toP(l.amount))}</b></div>`).join("");
+  $("#cvNotes").innerHTML=`<div class="dk-sum">${row("Reason (printed)",d.reason)}${row("Note to the customer (printed)",d.customer_note||"")}${row("Internal note (staff only)",d.internal_note||"")}</div>`;
+  // A cancelled credit note keeps its PDF, stamped, for TCP's records, but
+  // is not shared.
+  show("#cvShare",!d.cancelled);
+  $("#cvInv").href="#/invoice/"+d.invoice_id;
+  showCreditCancel(d);
+}
+// What the customer's WhatsApp message says: no amounts, no notes.
+function waCreditText(p){const first=String(p.billed_to_name||"").trim().split(/\s+/)[0]||"";
+  return`Hello${first?" "+first:""}, here is credit note ${p.credit_note_no} for invoice ${p.invoice_no} from ${B.name}.`;}
+const creditFileName=p=>`TCP Credit Note ${p.credit_note_no}${p.cancelled_on?" CANCELLED":""}.pdf`;
+// Read again before every PDF: the print data (credit_note_print) is the
+// only thing the PDF is drawn from, and it holds no private field.
+async function creditFile(){const p=await api.creditPrint({p_credit_note_id:CDOC.id});const pdf=await makeCreditPdf(p);
+  return{p,file:new File([pdf.output("blob")],creditFileName(p),{type:"application/pdf"})};}
+$("#cvCopyBtn").addEventListener("click",async()=>{const ta=$("#cvCopyText");ta.select();
+  let ok=await copyText(ta.value);if(!ok){try{ok=document.execCommand("copy");}catch(e){}}
+  $("#cvMsg").textContent=ok?"Message copied. Paste it in WhatsApp.":"Select the message above and copy it.";});
+$("#cvShare").addEventListener("click",async()=>{
+  const btn=$("#cvShare"),m=$("#cvMsg");show("#cvCopyBox",false);m.textContent="";if(!CDOC||CDOC.cancelled)return;
+  const copied=copyText(waCreditText(CDOC));
+  busy(btn,true,"Preparing PDF…");
+  try{const{p,file}=await creditFile(),text=waCreditText(p);
+    let note;
+    if(await copied)note="Message copied. In WhatsApp, paste it as the caption before sending.";
+    else{$("#cvCopyText").value=text;show("#cvCopyBox",true);note="Copy the message below, then paste it in WhatsApp as the caption.";}
+    if(navigator.canShare&&navigator.canShare({files:[file]})){m.textContent=note;
+      // The PDF only, as for invoices and receipts: the message is pasted once.
+      try{await navigator.share({files:[file],title:file.name});}catch(e){if(e.name!=="AbortError")throw e;}
+    }else{download(file);const to=waNumber(p.billed_to_phone);
+      if(to)window.open("https://wa.me/"+to+"?text="+encodeURIComponent(text),"_blank","noopener");
+      m.textContent="This browser cannot share files: the PDF was downloaded. Attach it in the WhatsApp chat. "+note;}
+  }catch(e){kind(e)==="refused"?(m.textContent="Could not prepare the credit note: "+(e.message||e)):failed(e,"#cvMsg");}
+  finally{busy(btn,false);}});
+$("#cvPdf").addEventListener("click",async()=>{const btn=$("#cvPdf"),m=$("#cvMsg");busy(btn,true,"Preparing PDF…");
+  try{download((await creditFile()).file);m.textContent="Credit note PDF downloaded.";}
+  catch(e){kind(e)==="refused"?(m.textContent="Could not prepare the credit note: "+(e.message||e)):failed(e,"#cvMsg");}
+  finally{busy(btn,false);}});
+
+// -- Cancelling a credit note (owner only; allowed even while switched off).
+//    The consequence is shown in GH₵ before confirming.
+function showCreditCancel(d){
+  const own=isOwner()&&!d.cancelled;show("#ccBox",own);if(!own)return;
+  CC={req:newId(),sent:false};["#ccErr","#ccMsg"].forEach(e=>{$(e).textContent="";});$("#ccWhy").value="";
+  show("#ccOpen",true);show("#ccFields",false);show("#ccConfirm",false);}
+$("#ccOpen").addEventListener("click",()=>{show("#ccOpen",false);show("#ccFields",true);$("#ccWhy").focus();});
+$("#ccBack").addEventListener("click",()=>{if(CDOC)showCreditCancel(CDOC);});
+$("#ccKeep").addEventListener("click",()=>{if(CDOC)showCreditCancel(CDOC);});
+$("#ccNext").addEventListener("click",()=>{const why=$("#ccWhy").value.trim(),d=CDOC;
+  if(!why){$("#ccErr").textContent="Give a reason: it is kept with the credit note.";return;}
+  $("#ccErr").textContent="";
+  const after=toP(d.invoice_balance)+toP(d.amount);
+  $("#ccSummary").textContent=`Cancel ${d.credit_note_no} (${money(toP(d.amount))}) on ${d.invoice_no}? The invoice's value goes back up by ${money(toP(d.amount))}: `
+    +(after<0?`TCP will still owe the customer ${money(-after)}.`:`the customer will owe ${money(after)}.`)
+    +` Reason: "${why}". This cannot be undone.`;
+  show("#ccFields",false);show("#ccConfirm",true);});
+$("#ccYes").addEventListener("click",async()=>{
+  const btn=$("#ccYes");if(btn.disabled||!CDOC||!CC)return;const id=CDOC.id,why=$("#ccWhy").value.trim(),st=CC;
+  busy(btn,true,"Cancelling…");$("#ccMsg").textContent="";
+  try{st.sent=true;await api.cancelCredit({p_credit_note_id:id,p_reason:why,p_request_id:st.req});
+    CVNOTE="Credit note cancelled.";await showCredit(id);}
+  catch(err){const k=kind(err);
+    if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+    if(k==="expired")return expire();
+    // Whatever happened, show the credit note as the database has it now:
+    // a cancel whose answer was lost shows as cancelled, not as an error.
+    try{const d=await api.creditDoc({p_credit_note_id:id});if(d.cancelled){CVNOTE="Credit note cancelled.";return showCredit(id);}}catch(e){}
+    $("#ccMsg").textContent=k==="offline"?"Not cancelled: no connection. Try again when you have signal.":"Not cancelled: "+String(err&&err.message||err);}
+  finally{busy(btn,false);}
+});
+
+// -- The owner's switch (Home, "Settings")
+let SW=null;
+async function showSwitch(){
+  show("#cnSwitch",isOwner());if(!isOwner())return;
+  SW={req:newId()};show("#swFields",false);["#swErr","#swMsg"].forEach(e=>{$(e).textContent="";});$("#swWhy").value="";
+  let s;try{s=await switchState();}catch(err){return readFailed(err,"#swMsg");}
+  $("#swState").textContent=(s.on?"Credit notes are switched on.":"Credit notes are switched off: no new credit note can be issued.")
+    +(s.changed_at?` Last changed ${noteTime(s.changed_at)}${s.changed_by?" by "+s.changed_by:""}: ${s.reason}`:"");
+  $("#swOpen").textContent=s.on?"Switch off credit notes":"Switch on credit notes";
+  $("#swYes").textContent=s.on?"Switch off":"Switch on";
+  show("#swOpen",true);}
+$("#swOpen").addEventListener("click",()=>{show("#swOpen",false);show("#swFields",true);$("#swWhy").focus();});
+$("#swNo").addEventListener("click",()=>showSwitch());
+$("#swYes").addEventListener("click",async()=>{
+  const btn=$("#swYes");if(btn.disabled||!SW||!SWITCH)return;const why=$("#swWhy").value.trim();
+  if(!why){$("#swErr").textContent="Give a reason: it is kept in the switch's history.";return;}
+  busy(btn,true,"Saving…");$("#swErr").textContent="";
+  // The same request id for every retry: the switch never flips twice.
+  try{const r=await api.setCreditSwitch({p_on:!SWITCH.on,p_reason:why,p_request_id:SW.req});
+    await showSwitch();$("#swMsg").textContent=r.message+".";}
+  catch(err){const k=kind(err);
+    if(k==="revoked")return revoke("Your access has ended. Ask the owner if this is a mistake.");
+    if(k==="expired")return expire();
+    $("#swMsg").textContent=k==="offline"?"Not changed: no connection. Try again when you have signal (it is never changed twice).":"Not changed: "+String(err&&err.message||err);}
+  finally{busy(btn,false);}
+});
+
+// -- The credit note PDF (A4), in the invoice's look. Drawn ONLY from
+//    credit_note_print, which holds no internal note, backdate reason or
+//    staff name. The figures are the snapshots taken when it was issued, so
+//    a reprint always matches the original.
+async function makeCreditPdf(p){
+  const{jsPDF,logo}=await pdfKit(),F=window.TCP_PDF_FONTS;
+  const pdf=new jsPDF({unit:"mm",format:"a4",compress:true});
+  [["r","normal"],["s","semibold"],["x","bold"]].forEach(([k,st])=>{pdf.addFileToVFS(`M-${k}.ttf`,F[k]);pdf.addFont(`M-${k}.ttf`,"Montserrat",st);});
+  pdf.setProperties({title:`${B.name} Credit Note ${p.credit_note_no}`,author:B.name,creator:"TCP Back Office"});
+  const INK="#131514",MUTE="#5a5a5a",LINE="#dcdcdc",OCHRE="#ff9802",BAND="#f4f4f4",RED="#b3261e";
+  const L=14,R=196,W=R-L,TOP=16,BOTTOM=282,pt=n=>n*0.3528;
+  const font=(st,size,col)=>{pdf.setFont("Montserrat",st);pdf.setFontSize(size);pdf.setTextColor(col||INK);};
+  const txt=(str,x,y,o={})=>{const sp=o.sp||0,w=pdf.getTextWidth(str)+sp*Math.max(0,str.length-1);
+    pdf.text(str,o.right?x-w:x,y,{baseline:"top",charSpace:sp});return w;};
+  const wrap=(str,w)=>pdf.splitTextToSize(str,w);
+  const short=iso=>{const[y,m,d]=String(iso).slice(0,10).split("-").map(Number);return new Date(y,m-1,d).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});};
+  // -- Header
+  pdf.addImage(logo,"PNG",L,TOP,13*5.92329,13);
+  font("bold",17);txt("CREDIT NOTE",R,TOP,{right:1,sp:pt(17)*.08});
+  const dl=[["Credit note no.",p.credit_note_no],["Issued",dateText(p.issued_on)]]
+    .concat(p.effective_on?[["Effective from",dateText(p.effective_on)]]:[]).concat([["Invoice no.",p.invoice_no]]);
+  font("bold",9);const vw=Math.max(...dl.map(r=>pdf.getTextWidth(r[1])));
+  let y=TOP+8.5;
+  dl.forEach(([k,v])=>{font("bold",9);txt(v,R,y,{right:1});font("normal",9,MUTE);txt(k,R-vw-4,y,{right:1});y+=4.3;});
+  y=Math.max(TOP+13,y)+4.5;
+  pdf.setFillColor(INK);pdf.rect(L,y,W,.8,"F");pdf.setFillColor(OCHRE);pdf.rect(L,y,28,.8,"F");y+=.8+4.5;
+  // -- Grey band: the customer (as on the invoice), the invoice, from
+  const cols=[["Customer",[p.billed_to_name,p.billed_to_phone].filter(Boolean).join("\n")],
+    ["Against invoice",`${p.invoice_no}\nIssued ${dateText(p.invoice_issued_on)}`],["From",`${B.name}\n${B.phone} (call or WhatsApp)\n${B.website}\n${B.town}`]];
+  const inner=W-.8-7,gap=6,unitW=(inner-2*gap)/3.7,cw=[1.5,1,1.2].map(r=>r*unitW);
+  font("semibold",8.5);const lh=pt(8.5)*1.45;
+  const lines=cols.map((c,i)=>c[1].split("\n").flatMap(l=>wrap(l,cw[i])));
+  const bandH=3+pt(7)*1.2+.6+Math.max(...lines.map(l=>l.length))*lh+3;
+  pdf.setFillColor(BAND);pdf.rect(L,y,W,bandH,"F");pdf.setFillColor(OCHRE);pdf.rect(L,y,.8,bandH,"F");
+  let x=L+.8+3.5;
+  cols.forEach((c,i)=>{font("bold",7,MUTE);txt(c[0].toUpperCase(),x,y+3,{sp:pt(7)*.1});
+    font("semibold",8.5);lines[i].forEach((l,j)=>txt(l,x,y+3+pt(7)*1.2+.6+j*lh));x+=cw[i]+gap;});
+  y+=bandH+4.5;
+  // -- Lines: description, quantity, reason in words, amount
+  const C={n:L+2.5,d:L+8+2.5,q:R-30-34-2.5,w:R-30-30,a:R-2.5},dW=C.q-22-C.d;
+  const head=()=>{pdf.setFillColor(INK);pdf.rect(L,y,W,7,"F");font("bold",7.5,"#ffffff");const sp=pt(7.5)*.08,ty=y+2.2;
+    txt("#",C.n,ty,{sp});txt("DESCRIPTION",C.d,ty,{sp});txt("QTY",C.q,ty,{right:1,sp});txt("REASON",C.w,ty,{sp});txt("AMOUNT",C.a,ty,{right:1,sp});y+=7;};
+  head();const rlh=pt(9.5)*1.45;
+  (p.lines||[]).forEach((l,i)=>{font("semibold",9.5);const nameLines=wrap(l.description,dW),h=1.7*2+nameLines.length*rlh;
+    if(y+h>BOTTOM){pdf.addPage();y=TOP;head();}
+    const ty=y+1.7;txt(String(i+1),C.n,ty);nameLines.forEach((n,j)=>txt(n,C.d,ty+j*rlh));
+    font("normal",9.5);if(l.quantity!=null)txt(`${fmtQ(l.quantity)} ${UNIT_WORD(l.unit,l.quantity)||""}`.trim(),C.q,ty,{right:1});
+    txt(l.why,C.w,ty);txt(money(toP(l.amount)),C.a,ty,{right:1});
+    y+=h;pdf.setDrawColor(LINE);pdf.setLineWidth(.25);pdf.line(L,y,R,y);});
+  // -- Totals right: the amount, and what it did, as at the moment of issue
+  const TW=98,LW=W-TW-8,tlh=pt(7.5)*1.4,owed=toP(p.owed_after);
+  const effect=`When this credit note was issued on ${short(p.issued_on)}: invoice value ${money(toP(p.value_before))} to ${money(toP(p.value_after))}; `
+    +(owed<0?`TCP owed you ${money(-owed)}.`:`amount owed ${money(owed)}.`);
+  const nb=[["Reason",p.reason]];if(p.customer_note)nb.push(["Note",p.customer_note]);
+  nb.push(["Questions",`WhatsApp or call ${B.phone} and quote credit note ${p.credit_note_no}.`]);
+  nb.push(["Terms","All amounts are in Ghana cedis (GH₵). A credit note is not a refund: money paid back is shown on a refund receipt."]);
+  font("normal",7.5);const noteLines=nb.map(([h,b])=>[h,String(b).split("\n").flatMap(l=>wrap(l,LW))]);
+  const notesH=noteLines.reduce((a,[,b])=>a+tlh+1.5+b.length*tlh+3,0);
+  font("normal",8);const effLines=wrap(effect,TW-5);
+  const gh=3*2+pt(11)*1.45,sumH=.5+1.5+gh+3+effLines.length*pt(8)*1.45;
+  if(y+4+Math.max(notesH,sumH)>BOTTOM){pdf.addPage();y=TOP;}else y+=4;
+  let ny=y;
+  noteLines.forEach(([h,b])=>{font("bold",7.5,MUTE);txt(h.toUpperCase(),L,ny,{sp:pt(7.5)*.1});ny+=tlh+1.5;
+    font("normal",7.5,"#333333");b.forEach(l=>{txt(l,L,ny);ny+=tlh;});ny+=3;});
+  const sx=R-TW;let sy=y;
+  pdf.setFillColor(INK);pdf.rect(sx,sy,TW,.5,"F");sy+=.5+1.5;
+  pdf.setFillColor(INK);pdf.rect(sx,sy,TW,gh,"F");pdf.setFillColor(OCHRE);pdf.rect(sx,sy,1.5,gh,"F");
+  font("bold",11,"#ffffff");txt("Amount credited",sx+1.5+2.5,sy+3);txt(money(toP(p.amount)),R-2.5,sy+3,{right:1});
+  sy+=gh+3;font("normal",8,"#333333");effLines.forEach((l,i)=>txt(l,sx+2.5,sy+i*pt(8)*1.45));
+  // -- Every page: footer; a cancelled credit note is stamped (date only,
+  //    never the reason: decision 2).
+  const n=pdf.getNumberOfPages();
+  for(let pg=1;pg<=n;pg++){pdf.setPage(pg);
+    font("normal",7,MUTE);txt(`${B.website}  ·  ${B.phone}`,L,289);txt(`Page ${pg} of ${n}`,R,289,{right:1});
+    if(p.cancelled_on){pdf.saveGraphicsState();pdf.setGState(new pdf.GState({opacity:0.14}));
+      font("bold",64,RED);pdf.text("CANCELLED",38,205,{angle:35});pdf.restoreGraphicsState();
+      font("bold",8,RED);txt(`CANCELLED on ${dateText(p.cancelled_on)}. This credit note no longer counts.`,L,284);}}
+  return pdf;
+}
+
 // ---- 9. Screens and the address -----------------------------------------------
 // One page, four screens, picked by the part of the address after "#/":
 //   #/  Home · #/invoices  the list · #/invoice/<id>  one invoice · #/new
@@ -1701,7 +2116,7 @@ const canEdit=()=>!!ME&&(ME.role==="owner"||ME.role==="sales");
 function view(name,tab){VIEWS.forEach(v=>show(v,v===name));
   document.querySelectorAll("#tabs a").forEach(a=>a.classList.toggle("on",a.dataset.tab===tab));window.scrollTo(0,0);}
 // Inside the invoice screen: the estimate box, the form, or the read-only view.
-function showOnly(part){["#start","#form","#issuedSec","#discardBox","#payForm","#fixForm","#rcptSec"].forEach(p=>show(p,p===part));
+function showOnly(part){["#start","#form","#issuedSec","#discardBox","#payForm","#fixForm","#rcptSec","#cnForm","#cnSec"].forEach(p=>show(p,p===part));
   // The notes panel is shown again by the form or the view that wants it;
   // an open correction box goes with the screen it was on.
   show("#notesSec",false);CORR=null;const b=$("#ncBox");if(b)b.remove();}
@@ -1712,7 +2127,9 @@ function parseRoute(){
   if(parts[0]==="invoices")return{name:"invoices",params};
   if(parts[0]==="payments")return{name:"payments",params};
   if(parts[0]==="notes")return{name:"notes",params};
+  if(parts[0]==="invoice"&&/^\d+$/.test(parts[1]||"")&&parts[2]==="credit")return{name:"credit-form",id:+parts[1],params};
   if(parts[0]==="invoice"&&/^\d+$/.test(parts[1]||""))return{name:"invoice",id:+parts[1],params};
+  if(parts[0]==="credit"&&/^\d+$/.test(parts[1]||""))return{name:"credit",id:+parts[1],params};
   if(parts[0]==="new")return{name:"new",params};
   if(parts[0]==="receipt"&&/^\d+$/.test(parts[1]||""))return{name:"receipt",id:+parts[1],params};
   return{name:"home",params};
@@ -1738,6 +2155,8 @@ async function route(){
   if(r.name==="payments")return showLedger(r.params);
   if(r.name==="notes")return showNotes(r.params);
   if(r.name==="receipt"){view("#invV","invoices");return showReceipt(r.id);}
+  if(r.name==="credit-form"){view("#invV","invoices");return openCredit(r.id);}
+  if(r.name==="credit"){view("#invV","invoices");CN=null;return showCredit(r.id);}
   view("#invV",r.name==="new"?"new":"invoices");
   if(r.name==="new"){
     if(S.items.length||S.name||S.phone||S.dirty)return showForm();
@@ -1792,7 +2211,7 @@ function rowHTML(r){
   return`<a class="dk-inv" href="#/invoice/${r.id}" data-id="${r.id}">
     <span class="dk-inv-top"><b>${draft?"Draft":esc(r.invoice_no||"")}</b><i class="dk-badge s-${esc(r.status)}">${esc(STATUS[r.status]||r.status)}</i></span>
     <span class="dk-inv-who">${esc(r.billed_to_name||"(no name)")}${r.billed_to_phone?" · "+esc(r.billed_to_phone):""}</span>
-    <span class="dk-inv-bot"><small>${esc(when)}</small><b>${money(toP(r.total))}${owes?`<small class="dk-left">${money(toP(r.balance))} left</small>`:""}</b></span>
+    <span class="dk-inv-bot"><small>${esc(when)}</small><b>${money(toP(r.total))}${owes?`<small class="dk-left">${toP(r.balance)<0?`TCP owes ${money(-toP(r.balance))}`:`${money(toP(r.balance))} left`}</small>`:""}</b></span>
   </a>`;}
 
 // Home: the figures are the database's own (back_office_home); nothing is
@@ -1809,8 +2228,13 @@ async function showHome(){
     $("#hToday").textContent=smoney(toP(today.net));
     $("#hUnpaid").textContent=h.unpaid;$("#hPart").textContent=h.part_paid;
     $("#hOverdue").textContent=h.overdue;$("#hDrafts").textContent=h.drafts;
+    // Phase 2.3 (decision 1): money in credit, apart from what is owed.
+    show("#hCreditLink",+h.in_credit_count>0);
+    $("#hCreditWhat").textContent=`In credit: TCP owes ${h.in_credit_count} ${+h.in_credit_count===1?"customer":"customers"}`;
+    $("#hCredit").textContent=money(toP(h.in_credit||0));
     $("#recent").innerHTML=recent.rows.length?recent.rows.map(rowHTML).join(""):`<p class="dk-help">No invoices yet.</p>`;
   }catch(err){readFailed(err,"#homeMsg");}
+  showSwitch();
 }
 
 // Search: by number, part of a name, or a phone number in any Ghana format.
@@ -1895,5 +2319,5 @@ else{
 }
 
 // For the tests (and nothing else): the desk's own functions.
-window.TCPDesk={parseEstimate,num,totals,problems,waNumber,waText,makePdf,makeReceiptPdf,waReceiptText,linesForDb,searchTerms,ledgerTerms,state:()=>S,doc:()=>DOC,receipt:()=>RDOC,pay:()=>PAY,fix:()=>FIX,op:()=>pendingOp()};
+window.TCPDesk={makeCreditPdf,waCreditText,credit:()=>CDOC,creditForm:()=>CN,cnOp:()=>pendingCn(),parseEstimate,num,totals,problems,waNumber,waText,makePdf,makeReceiptPdf,waReceiptText,linesForDb,searchTerms,ledgerTerms,state:()=>S,doc:()=>DOC,receipt:()=>RDOC,pay:()=>PAY,fix:()=>FIX,op:()=>pendingOp()};
 })();

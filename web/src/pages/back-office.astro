@@ -156,9 +156,29 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
         </div>
         <!-- Phase 2.1 (decision 1): money received today, net of refunds -->
         <a id="hTodayLink" class="dk-today" href="#/payments?period=today"><span>Received today</span><b id="hToday">—</b></a>
+        <!-- Phase 2.3 (decision 1): what TCP owes customers on invoices in
+             credit, shown apart from "Owed to TCP", never netted into it -->
+        <a id="hCreditLink" class="dk-today" href="#/invoices?status=in_credit" hidden><span id="hCreditWhat">In credit</span><b id="hCredit">—</b></a>
         <a id="hNew" class="dk-btn primary dk-wide" href="#/new">New invoice</a>
         <a class="dk-btn ghost dk-wide" href="#/notes">Search notes</a>
         <p id="homeMsg" class="dk-msg" role="alert"></p>
+      </div>
+      <!-- Phase 2.3: the credit notes switch (owner only). Off = no new
+           credit notes; the owner can still cancel a wrong one. -->
+      <div id="cnSwitch" class="dk-card" hidden>
+        <h2>Settings</h2>
+        <p id="swState" class="dk-help" role="status"></p>
+        <button type="button" id="swOpen" class="dk-btn"></button>
+        <div id="swFields" hidden>
+          <label for="swWhy">Reason (kept in the switch's history)</label>
+          <input id="swWhy" autocomplete="off" maxlength="300">
+          <p id="swErr" class="dk-lerr" role="alert"></p>
+          <div class="dk-row">
+            <button type="button" id="swYes" class="dk-btn primary"></button>
+            <button type="button" id="swNo" class="dk-btn ghost">Don't change</button>
+          </div>
+        </div>
+        <p id="swMsg" class="dk-msg" role="alert"></p>
       </div>
       <div class="dk-card">
         <h2>Latest invoices</h2>
@@ -182,6 +202,7 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
         <button type="button" data-status="part_paid">Part paid</button>
         <button type="button" data-status="overdue">Overdue</button>
         <button type="button" data-status="paid">Paid</button>
+        <button type="button" data-status="in_credit">In credit</button>
         <button type="button" data-status="cancelled">Cancelled</button>
       </div>
       <p id="listInfo" class="dk-help" role="status"></p>
@@ -456,6 +477,93 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
       <a id="rInv" class="dk-btn ghost dk-wide" href="#/invoices">Back to the invoice</a>
     </section>
 
+    <!-- Phase 2.3: issuing a credit note (owner and finance). Fill in,
+         confirm, issue, as for payments. The database works out every
+         amount again and checks every cap. -->
+    <section id="cnForm" class="dk-card" hidden>
+      <h2>Issue credit note</h2>
+      <p id="cnFor" class="dk-help"></p>
+      <div id="cnFields">
+        <p class="dk-help">A credit note lowers what the invoice is worth. It moves no money: give money back with a refund.</p>
+        <div id="cnLines"></div>
+        <details id="cnOwner" class="dk-more" hidden>
+          <summary>Owner only: price adjustment, backdating</summary>
+          <label for="cnAdj">Price adjustment (GH₵, optional)</label>
+          <input id="cnAdj" type="text" inputmode="decimal" autocomplete="off">
+          <p class="dk-help">An amount off the invoice as a whole, not tied to a line (for example a price agreed after delivery).</p>
+          <label for="cnEff">Takes effect from (leave empty for today)</label>
+          <input id="cnEff" type="date">
+          <label for="cnEffWhy">Why it is backdated (kept for staff, never printed)</label>
+          <input id="cnEffWhy" autocomplete="off" maxlength="300">
+        </details>
+        <label for="cnWhy">Reason (required, printed on the credit note)</label>
+        <textarea id="cnWhy" rows="2" maxlength="300" placeholder="e.g. 10 bags returned unused on 24 Nov."></textarea>
+        <label for="cnCust">Note to the customer (optional, also printed)</label>
+        <textarea id="cnCust" rows="2" maxlength="300" placeholder="e.g. Thank you. The balance is now due by Friday."></textarea>
+        <label for="cnInt">Internal note (staff only, never printed)</label>
+        <textarea id="cnInt" rows="2" maxlength="500" placeholder="e.g. Driver brought the bags back to the depot."></textarea>
+        <p id="cnTotal" class="dk-paysum" role="status"></p>
+        <p id="cnErr" class="dk-lerr" role="alert"></p>
+        <div class="dk-row">
+          <button type="button" id="cnNext" class="dk-btn primary">Continue</button>
+          <button type="button" id="cnCancel" class="dk-btn ghost">Cancel</button>
+        </div>
+      </div>
+      <div id="cnConfirm" class="dk-confirm" hidden>
+        <p id="cnSummary"></p>
+        <p id="cnPrinted" class="dk-help"></p>
+        <div class="dk-row">
+          <button type="button" id="cnYes" class="dk-btn primary">Issue credit note</button>
+          <button type="button" id="cnChange" class="dk-btn">Change</button>
+        </div>
+      </div>
+      <p id="cnMsg" class="dk-msg" role="alert"></p>
+    </section>
+
+    <!-- Phase 2.3: one credit note (staff view: everything, the internal
+         note included; the PDF prints only what the customer may see) -->
+    <section id="cnSec" class="dk-card" hidden>
+      <h2 id="cvTitle">Credit note</h2>
+      <div id="cv"></div>
+      <div id="cvLines" class="dk-vlines"></div>
+      <div id="cvNotes"></div>
+      <p id="cvMsg" class="dk-msg" role="status"></p>
+      <div id="cvCopyBox" class="dk-copy" hidden>
+        <label for="cvCopyText">Message for the customer</label>
+        <textarea id="cvCopyText" rows="2" readonly></textarea>
+        <button type="button" id="cvCopyBtn" class="dk-btn">Copy</button>
+      </div>
+      <div class="dk-row">
+        <button type="button" id="cvShare" class="dk-btn primary">Share credit note</button>
+        <button type="button" id="cvPdf" class="dk-btn">Download PDF</button>
+      </div>
+      <!-- Owner only: cancelling a wrong credit note (works even while
+           credit notes are switched off) -->
+      <div id="ccBox" class="dk-danger" hidden>
+        <h3>Cancel credit note</h3>
+        <p class="dk-help">The credit note stays on record, marked Cancelled. The invoice's value goes back up from today. It cannot be undone.</p>
+        <button type="button" id="ccOpen" class="dk-btn">Cancel this credit note…</button>
+        <div id="ccFields" hidden>
+          <label for="ccWhy">Reason (kept with the credit note)</label>
+          <input id="ccWhy" autocomplete="off" maxlength="300">
+          <p id="ccErr" class="dk-lerr" role="alert"></p>
+          <div class="dk-row">
+            <button type="button" id="ccNext" class="dk-btn">Continue</button>
+            <button type="button" id="ccBack" class="dk-btn ghost">Don't cancel</button>
+          </div>
+        </div>
+        <div id="ccConfirm" class="dk-confirm" hidden>
+          <p id="ccSummary"></p>
+          <div class="dk-row">
+            <button type="button" id="ccYes" class="dk-btn danger">Cancel the credit note</button>
+            <button type="button" id="ccKeep" class="dk-btn">Keep it</button>
+          </div>
+        </div>
+        <p id="ccMsg" class="dk-msg" role="alert"></p>
+      </div>
+      <a id="cvInv" class="dk-btn ghost dk-wide" href="#/invoices">Back to the invoice</a>
+    </section>
+
     <!-- An invoice from the database, read-only: issued, cancelled, or a
          draft seen by finance -->
     <section id="issuedSec" class="dk-card" hidden>
@@ -474,6 +582,15 @@ const deskJson = JSON.stringify(deskData).replace(/</g, "\\u003c");
         <div id="payList"></div>
         <p id="paySum" class="dk-paysum"></p>
         <button type="button" id="payBtn" class="dk-btn primary dk-wide" hidden>Record payment</button>
+      </div>
+      <!-- Phase 2.3: the invoice's credit notes, and Issue credit note -->
+      <div id="cnBox" class="dk-pays" hidden>
+        <h3>Credit notes</h3>
+        <div id="cnOp" class="dk-confirm" role="status" hidden><p id="cnOpMsg"></p>
+          <button type="button" id="cnOpCheck" class="dk-btn" hidden>Check again</button></div>
+        <div id="cnList"></div>
+        <a id="cnBtn" class="dk-btn dk-wide" href="#/" hidden>Issue credit note</a>
+        <p id="cnOff" class="dk-help" hidden>Credit notes are switched off.</p>
       </div>
       <p id="iMsg" class="dk-msg" role="status"></p>
       <div id="copyBox" class="dk-copy" hidden>

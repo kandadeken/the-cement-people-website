@@ -13,6 +13,8 @@
 #
 # How to run it (from the top folder of the repository)
 #   bash supabase/run-tests.sh
+#   bash supabase/run-tests.sh 24_credit_notes.sql 25_credit_note_race.sh
+#     (only the named test files; used by mutation-checks.sh)
 #   Needs Postgres 15 or newer installed (the same family Supabase uses).
 #
 # Exit code 0 = everything passed. Anything else = something failed.
@@ -27,7 +29,7 @@ if [ "$(id -u)" = "0" ]; then
   COPY="$(mktemp -d)"
   cp -r "$HERE" "$COPY/supabase"
   chown -R postgres "$COPY"
-  exec runuser -u postgres -- bash "$COPY/supabase/run-tests.sh"
+  exec runuser -u postgres -- bash "$COPY/supabase/run-tests.sh" "$@"
 fi
 
 # Find the Postgres programs (initdb, pg_ctl), newest version first.
@@ -69,6 +71,8 @@ failed=0
 n=0
 for test in "$HERE"/tests/*.sql "$HERE"/tests/*.sh; do
   [ -e "$test" ] || continue
+  # Named files only, when names were given.
+  if [ "$#" -gt 0 ] && [[ " $* " != *" $(basename "$test") "* ]]; then continue; fi
   n=$((n + 1))
   db="tcp_test_$n"
   createdb -T tcp_template "$db"

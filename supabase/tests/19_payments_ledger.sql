@@ -14,6 +14,8 @@
 --   F. Cancelling: owner only, reason needed, refused while money is held,
 --      allowed after a full refund or a correction (with different
 --      histories), leaves Owed, and a second cancel is refused.
+--   G. (Phase 2.3) A credit note, and its cancellation, change nothing in
+--      the ledger or the Payments tab totals: a credit note is not money.
 \set QUIET on
 
 -- ------------------------------------------------ the records (as sales)
@@ -211,3 +213,33 @@ select tcp_test.ok(coalesce(public.invoice_document(:inv5) ->> 'cancelled_by', '
 select tcp_test.ok((public.invoice_document(:inv1) -> 'cancelled_at') = 'null'::jsonb,
                    'an invoice that is not cancelled has no cancelled date');
 reset role;
+
+-- ------------------------------------------------ G. credit notes (Phase 2.3)
+-- A credit note is not money: the Payments tab's ledger and every total are
+-- exactly the same after one is issued (and after it is cancelled).
+create temp table ledger_before as
+select (select jsonb_agg(to_jsonb(l) order by l.id) from public.payment_ledger l) as ledger,
+       public.payment_totals('all') as t_all, public.payment_totals('today') as t_today,
+       public.payment_totals('month') as t_month;
+set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';  -- owner
+set role authenticated;
+select public.set_credit_notes_switch(true, 'Ledger test', gen_random_uuid()) \gset
+select (public.issue_credit_note(p_invoice_id => :inv1,
+  p_lines => format('[{"invoice_line_id":%s,"kind":"quantity","why":"returned","quantity":2}]',
+                    (select id from public.invoice_lines where invoice_id = :inv1))::jsonb,
+  p_reason => 'Two bags returned', p_request_id => gen_random_uuid())).id as cn \gset
+reset role;
+select tcp_test.ok((select ledger from ledger_before) = (select jsonb_agg(to_jsonb(l) order by l.id) from public.payment_ledger l),
+                   'the ledger is unchanged by a credit note');
+select tcp_test.ok((select t_all = public.payment_totals('all') and t_today = public.payment_totals('today')
+                           and t_month = public.payment_totals('month') from ledger_before),
+                   'the Payments tab totals are unchanged by a credit note');
+select tcp_test.ok((select balance from public.invoice_summary where id = :inv1) = 280,
+                   'but the invoice owes 220 less (500 - 220)');
+set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+set role authenticated;
+select public.cancel_credit_note(:cn, 'Bags were not returned', gen_random_uuid()) \gset
+reset role;
+select tcp_test.ok((select ledger from ledger_before) = (select jsonb_agg(to_jsonb(l) order by l.id) from public.payment_ledger l)
+                   and (select t_all from ledger_before) = public.payment_totals('all'),
+                   'and unchanged after the credit note is cancelled');
